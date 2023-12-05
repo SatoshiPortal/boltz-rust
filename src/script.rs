@@ -1,4 +1,4 @@
-use bitcoin::{blockdata::script::{Script, Instruction}, opcodes::{all::{OP_HASH160, OP_EQUALVERIFY, OP_DROP}, OP_0}};
+use bitcoin::{blockdata::script::{Script, Instruction}, opcodes::{all::{OP_HASH160, OP_EQUALVERIFY, OP_DROP, OP_ELSE, OP_IF}, OP_0}, Address};
 
 fn bytes_to_u32(bytes: &[u8]) -> u32 {
     let mut result = 0u32;
@@ -8,15 +8,17 @@ fn bytes_to_u32(bytes: &[u8]) -> u32 {
     result
 }
 
-pub struct DecodedSwapRedeemScript {
+#[derive(Debug)]
+pub struct DecodedNormalBTCSwapRedeemScript {
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
+    pub address: String,
 }
 
-pub fn decode_swap_redeem_script(script_str: String)->Option<DecodedSwapRedeemScript>{
-    let script_bytes = hex::decode(script_str).unwrap().to_owned();
+pub fn decode_normal_btc_swap_script(redeem_script_str: String)->Option<DecodedNormalBTCSwapRedeemScript>{
+    let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
     let script = Script::from_bytes(&script_bytes);
     let instructions = script.instructions();
     let mut last_op = OP_0;
@@ -34,16 +36,15 @@ pub fn decode_swap_redeem_script(script_str: String)->Option<DecodedSwapRedeemSc
                 if last_op == OP_HASH160 {
                     hashlock = Some(hex::encode(bytes.as_bytes()));
                 }
-                if last_op == OP_EQUALVERIFY {
+                if last_op == OP_IF {
                     reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
-                    
+                }
+                if last_op == OP_ELSE {
+                    timelock = Some(bytes_to_u32(&bytes.as_bytes()));
                 }
                 if last_op == OP_DROP {
-                    if bytes.as_bytes().len() == 3 {
-                        timelock = Some(bytes_to_u32(&bytes.as_bytes()));
-                    } else {
-                        sender_pubkey = Some(hex::encode(bytes.as_bytes()));
-                    }
+                    sender_pubkey = Some(hex::encode(bytes.as_bytes()));
+                    
                 }
 
             },
@@ -52,11 +53,14 @@ pub fn decode_swap_redeem_script(script_str: String)->Option<DecodedSwapRedeemSc
     }
 
     if hashlock.is_some() && sender_pubkey.is_some() && timelock.is_some() && sender_pubkey.is_some() {
-        Some(DecodedSwapRedeemScript{
+        let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
+        println!("ADDRESS: {:?}",address);
+        Some(DecodedNormalBTCSwapRedeemScript{
             hashlock: hashlock.unwrap(),
             reciever_pubkey: reciever_pubkey.unwrap(),
             timelock: timelock.unwrap(),
-            sender_pubkey: sender_pubkey.unwrap()
+            sender_pubkey: sender_pubkey.unwrap(),
+            address: address.to_string(),
         })
     }
     else {
@@ -68,15 +72,16 @@ pub fn decode_swap_redeem_script(script_str: String)->Option<DecodedSwapRedeemSc
 mod tests {
 
     use super::*;
+
     #[test]
     fn test_decode_script() {
-        let script_str = "8201208763a914be1abd8e8d7ef7e64a9c6e1e2f498f3a92e078a2882103b76c1fe14bab50e52a026f35287fda75b9304bcf311ee85b4d32482400a436f5677503dbf40eb175210330fd4cfd53b5c20886415c1b67d2daa87bce2761b9be009e9d1f9eec4419ba5968ac".to_string();
+        let script_str = "a914e1db6d8de42a72420d408695ab393407a28bc341876321036e36d8f4c8ccf8776828fe6962b87024bf786a42b8127a0e7a8b92c2bfc5c8e5670358c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
         let script_bytes = hex::decode(script_str).unwrap().to_owned();
         let script = Script::from_bytes(&script_bytes);
         println!("is p2pk: {}",script.is_p2pk());
         println!("is p2sh: {}",script.is_p2sh());
-        println!("is p2sh: {}",script.is_p2pkh());
-        println!("is p2sh: {}",script.is_v0_p2wpkh());
+        println!("is p2pkh: {}",script.is_p2pkh());
+        println!("is v0_p2wpkh: {}",script.is_v0_p2wpkh());
         println!("is v0_p2wsh: {}",script.is_v0_p2wsh());
         println!("is p2tr: {}",script.is_v1_p2tr());
         println!("is opreturn: {}",script.is_op_return());
@@ -113,4 +118,12 @@ mod tests {
         }
     }
     
+    #[test]
+    fn test_decode_swap_redeem_script(){
+        let redeem_script_str = "a914e1db6d8de42a72420d408695ab393407a28bc341876321036e36d8f4c8ccf8776828fe6962b87024bf786a42b8127a0e7a8b92c2bfc5c8e5670358c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
+        let expected_address = "2NBQJYfU4VrTuNb4rcWySMT9tGB8o8rfGAM";
+        let decoded = decode_normal_btc_swap_script(redeem_script_str).unwrap();
+        println!("{:?}", decoded);
+        assert!(decoded.address == expected_address);
+    }
 }

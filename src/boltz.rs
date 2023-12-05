@@ -451,7 +451,7 @@ mod tests {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
-        let invoice = "lntb560u1pjka0aypp59wmr35slav63cjnt22c2uu4mqyld483jumjjw4m6dj9sdqv9hy5qdpgxguzq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp5qerwpp78lepyejnmn7vm9jp3899vy34xnfp9vdyh2afvwwguntysz38gzprptss3y5w85z548y4mgjpfaghfqe0uxtqvl9gypv64alrky8wc76hfhm55uk8gdr4rlvct67fgxjzmavgc86aunfsw0xfn3sqpcgctl8".to_string();
+        let invoice = "lntb30m1pjk7g2mpp5ff29rzzuahtxyhmkskrfq2v32c2aqevcwjn0xu39967tgxy94ntsdpyxysysctvvcsxzgz5dahzqmmxyppk7enxv4jsxqrrsscqp79qy9qsqsp5twju09kunw8tn85ejap8hkxc0ktan333gnlfh73uymxvgpn4sy8s9ljvvhr6mrac7stx8r40k5lyj5x8fkdle5uvza6nczx9t4a4fda574207vt5yujgg5mhuvw562u980h2h4pz4vxgqt3y4kmrdywjnnqpasy8h9".to_string();
         let pair_hash = "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
         let request = CreateSwapRequest::new(SwapType::Submarine, PairId::Btc_Btc, OrderSide::Sell, invoice, pair_hash, Some(refund_key_pair.pubkey),None, None, None,None,None);
         let response = client.create_swap(request).await;

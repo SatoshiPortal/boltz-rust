@@ -11,7 +11,7 @@ A bitcoin rnd repo, currently using:
 cargo test -- --nocapture
 ```
 
-`test_*_swap` is ignored by default, always push commits with them ignored. 
+`test_*_swap` is ignored by default, always keep them ignored and run the test manually. 
 
 To run `test_normal_swap`, make sure to upadate the `invoice`.
 
