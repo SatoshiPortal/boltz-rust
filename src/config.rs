@@ -175,16 +175,7 @@ pub struct WalletConfig {
       // })
     }
   
-    pub fn new_offline(descriptor: &str, db_path: Option<String>) -> Result<Self, S5Error> {
-      let deposit_desc: &str = &descriptor.replace("/*", "/0/*");
-      let change_desc: &str = &descriptor.replace("/*", "/1/*");
-      let network = if <&str>::clone(&descriptor).contains("xpub")
-        || <&str>::clone(&descriptor).contains("xprv")
-      {
-        Network::Bitcoin
-      } else {
-        Network::Testnet
-      };
+    pub fn new_offline(network: Network, deposit_desc: &str,change_desc: &str, db_path: Option<String>) -> Result<Self, S5Error> {
   
       Ok(WalletConfig {
         deposit_desc: deposit_desc.to_string(),

@@ -2,8 +2,8 @@ use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
 use serde::Serializer;
 use std::str::FromStr;
-
-
+use lightning::offers::invoice_request::InvoiceRequest;
+use lightning::offers::invoice::Bolt12Invoice;
 pub struct BoltzApiClient {
     client: Client,
     base_url: String,
@@ -381,7 +381,7 @@ pub struct ChannelDetails {
     inbound_liquidity: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSwapResponse {
     id: String,
@@ -398,6 +398,33 @@ pub struct CreateSwapResponse {
     private_key: Option<String>,
     refund_address: Option<String>,
     refund_public_key: Option<String>,
+}
+
+impl CreateSwapResponse {
+    pub fn validate_preimage(&self)->bool{
+        let preimage_hash = match &self.preimage_hash {
+            Some(result)=>result,
+            None=>return false
+        };
+        match &self.invoice {
+            Some(invoice_str)=>{
+                let bytes = hex::decode(invoice_str).unwrap();
+                let invoice = match Bolt12Invoice::try_from(bytes){
+                    Ok(invoice)=>{
+                        invoice
+                    },
+                    Err(_)=>return false
+                };
+                if &invoice.payment_hash().to_string() == preimage_hash {
+                    return true
+                }
+                false
+            },
+            None=>{
+                false
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -451,13 +478,13 @@ mod tests {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
-        let invoice = "lntb30m1pjk7g2mpp5ff29rzzuahtxyhmkskrfq2v32c2aqevcwjn0xu39967tgxy94ntsdpyxysysctvvcsxzgz5dahzqmmxyppk7enxv4jsxqrrsscqp79qy9qsqsp5twju09kunw8tn85ejap8hkxc0ktan333gnlfh73uymxvgpn4sy8s9ljvvhr6mrac7stx8r40k5lyj5x8fkdle5uvza6nczx9t4a4fda574207vt5yujgg5mhuvw562u980h2h4pz4vxgqt3y4kmrdywjnnqpasy8h9".to_string();
+        let invoice = "lntb540u1pjk7jp5pp5l080mxfqdhmf2r327z07usmqfaxcf27w8zu94r4vcnhqaqcw5w9qdpgxgmjq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp5xu2pu2g39h28adauz6f2tv7w9ej92q2nn0nn2kngfp27c4gn2w4sy926l3069an8xs76eq9496cyq0p9c3alwll57jv9mvq9cfne2lcj8ucrh7922t6eylmzeapx8vnefglx7jtx2kznw9uz0avzag5scxcpggn4nk".to_string();
         let pair_hash = "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
         let request = CreateSwapRequest::new(SwapType::Submarine, PairId::Btc_Btc, OrderSide::Sell, invoice, pair_hash, Some(refund_key_pair.pubkey),None, None, None,None,None);
         let response = client.create_swap(request).await;
         assert!(response.is_ok());
+        assert!(response.as_ref().unwrap().validate_preimage());
         let id = response.unwrap().id;
-        // let id = "Nh7Y1J".to_string();
         let request = SwapStatusRequest{id: id};
         let response = client.swap_status(request).await;
         assert!(response.is_ok());

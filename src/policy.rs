@@ -7,6 +7,7 @@ use bdk::miniscript::policy::Concrete;
 use bdk::KeychainKind;
 use bdk::Wallet;
 use serde::{Deserialize, Serialize};
+use miniscript;
 // use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fmt::Debug;
@@ -70,7 +71,7 @@ impl ScriptType {
 pub fn compile(policy: &str, script_type: ScriptType) -> Result<String, S5Error> {
     let x_policy = match Concrete::<String>::from_str(policy) {
         Ok(result) => result,
-        Err(_) => return Err(S5Error::new(ErrorKind::Input, "Invalid Policy")),
+        Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
     };
     let legacy_policy: Miniscript<String, Legacy> = match x_policy.compile() {
         Ok(result) => result,
@@ -194,6 +195,7 @@ pub fn id(config: WalletConfig) -> Result<(bool, String), S5Error> {
 }
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::config::{WalletConfig, DEFAULT_TESTNET_NODE};
     // use bdk::descriptor::policy::BuildSatisfaction;
@@ -244,12 +246,30 @@ mod tests {
     }
 
     #[test]
-    fn test_taproot_policy() {
-        let hash = "".to_string();
-        let mykey = "".to_string();
-        let boltzkey = "".to_string();
-        let timeout = "".to_string();
-        let swap_policy_example = format!("or(and(hash160({}), pk({}), and(pk({}), after({})",hash,mykey,boltzkey,timeout);        
+    fn test_swap_miniscript() {
+        let hash = "e1db6d8de42a72420d408695ab393407a28bc341".to_string();
+        let reciever_key = "036e36d8f4c8ccf8776828fe6962b87024bf786a42b8127a0e7a8b92c2bfc5c8e5".to_string();
+        let sender_key = "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string();
+        let timeout = "5818662".to_string();
+        // let swap_policy_example = format!("andor(hash160({}),pk({}),and(after({}),pk({})))",hash,reciever_key,timeout,sender_key);
+        // let descriptor = compile(&swap_policy_example, ScriptType::SHWSH);       
+        // println!("{:?}", descriptor);
+        // use std::str::FromStr;
+
+        // let desc = format!("\
+        //     sh(wsh(andor(\
+        //     hash160({}),\
+        //     or_i(pk({}),and)\
+        //     )))\
+        //     ").to_stsring();
+
+        // // Derive the P2SH address.
+        // assert_eq!(
+        //     desc.address(bitcoin::Network::Testnet).unwrap().to_string(),
+        //     "2NBQJYfU4VrTuNb4rcWySMT9tGB8o8rfGAM"
+        // );
+
+
     }
      
 }

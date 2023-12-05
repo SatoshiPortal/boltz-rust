@@ -71,6 +71,8 @@ pub fn decode_normal_btc_swap_script(redeem_script_str: String)->Option<DecodedN
 #[cfg(test)]
 mod tests {
 
+    use crate::ec::XOnlyPair;
+
     use super::*;
 
     #[test]
@@ -122,8 +124,14 @@ mod tests {
     fn test_decode_swap_redeem_script(){
         let redeem_script_str = "a914e1db6d8de42a72420d408695ab393407a28bc341876321036e36d8f4c8ccf8776828fe6962b87024bf786a42b8127a0e7a8b92c2bfc5c8e5670358c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
         let expected_address = "2NBQJYfU4VrTuNb4rcWySMT9tGB8o8rfGAM";
+        let sender_key_pair = XOnlyPair {
+            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
+            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
+        };
         let decoded = decode_normal_btc_swap_script(redeem_script_str).unwrap();
         println!("{:?}", decoded);
         assert!(decoded.address == expected_address);
+        assert!(decoded.sender_pubkey == sender_key_pair.pubkey);
+
     }
 }
