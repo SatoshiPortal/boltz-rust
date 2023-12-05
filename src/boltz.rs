@@ -426,14 +426,6 @@ impl CreateSwapResponse {
 
         match &self.invoice {
             Some(invoice_str)=>{
-                let (_, data, _) = match decode(invoice_str){
-                    Ok(result)=>result,
-                    Err(_)=>{
-                        println!("Invalid Bech32 string");
-                        return false;
-                    }
-                };
-
                 let invoice = match Bolt11Invoice::from_str(&invoice_str){
                     Ok(invoice)=>{
                         invoice
