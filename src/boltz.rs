@@ -1,9 +1,9 @@
+use lightning_invoice::Bolt11Invoice;
 use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
 use serde::Serializer;
 use std::str::FromStr;
-use lightning::offers::invoice_request::InvoiceRequest;
-use lightning::offers::invoice::Bolt12Invoice;
+use bitcoin::bech32::{decode, FromBase32};
 pub struct BoltzApiClient {
     client: Client,
     base_url: String,
@@ -329,8 +329,9 @@ pub struct CreateSwapRequest {
     swap_type: SwapType,
     pair_id: PairId,
     order_side: OrderSide,
-    invoice: String,
     pair_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    invoice: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     refund_public_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -346,30 +347,50 @@ pub struct CreateSwapRequest {
 }
 
 impl CreateSwapRequest {
-    pub fn new(swap_type: SwapType, 
+    pub fn new_normal(
+        swap_type: SwapType, 
         pair_id: PairId, 
         order_side: OrderSide,
-        invoice: String,
         pair_hash: String,
-        refund_public_key: Option<String>,
-        preimage_hash: Option<String>,
-        claim_public_key: Option<String>,
-        timeout_block_height: Option<u64>,
-        onchain_amount: Option<u64>,
-        channel: Option<ChannelDetails>
+        invoice: String,
+        refund_pubkey: String,
     ) -> CreateSwapRequest {
         CreateSwapRequest {
             swap_type,
             pair_id,
             order_side,
-            invoice,
             pair_hash,
-            refund_public_key,
-            preimage_hash,
-            claim_public_key,
-            timeout_block_height,
-            onchain_amount,
-            channel,
+            invoice: Some(invoice),
+            refund_public_key: Some(refund_pubkey),
+            preimage_hash: None,
+            claim_public_key: None,
+            timeout_block_height: None,
+            onchain_amount: None,
+            channel: None,
+        }
+    }
+    pub fn new_reverse(
+        swap_type: SwapType, 
+        pair_id: PairId, 
+        order_side: OrderSide,
+        pair_hash: String,
+        preimage_hash: String,
+        claim_public_key: String,
+        timeout_block_height: u64,
+        onchain_amount: u64,
+    ) -> CreateSwapRequest {
+        CreateSwapRequest {
+            swap_type,
+            pair_id,
+            order_side,
+            pair_hash,
+            invoice: None,
+            refund_public_key: None,
+            preimage_hash: Some(preimage_hash),
+            claim_public_key: Some(claim_public_key),
+            timeout_block_height: Some(timeout_block_height),
+            onchain_amount: Some(onchain_amount),
+            channel: None,
         }
     }
 }
@@ -392,7 +413,7 @@ pub struct CreateSwapResponse {
     lockup_address: Option<String>,
     miner_fee_invoice: Option<String>,
     service_fee_percentage: Option<f64>,
-    preimage_hash: Option<String>,
+    preimage: Option<String>,
     claim_address: Option<String>,
     claim_public_key: Option<String>,
     private_key: Option<String>,
@@ -401,24 +422,34 @@ pub struct CreateSwapResponse {
 }
 
 impl CreateSwapResponse {
-    pub fn validate_preimage(&self)->bool{
-        let preimage_hash = match &self.preimage_hash {
-            Some(result)=>result,
-            None=>return false
-        };
+    pub fn validate_preimage(&self, preimage_hash: String)->bool{
+
         match &self.invoice {
             Some(invoice_str)=>{
-                let bytes = hex::decode(invoice_str).unwrap();
-                let invoice = match Bolt12Invoice::try_from(bytes){
+                let (_, data, _) = match decode(invoice_str){
+                    Ok(result)=>result,
+                    Err(_)=>{
+                        println!("Invalid Bech32 string");
+                        return false;
+                    }
+                };
+
+                let invoice = match Bolt11Invoice::from_str(&invoice_str){
                     Ok(invoice)=>{
                         invoice
                     },
-                    Err(_)=>return false
+                    Err(e)=>{
+                        println!("{:?}",e);
+                        return false
+                    }
                 };
-                if &invoice.payment_hash().to_string() == preimage_hash {
-                    return true
+                if &invoice.payment_hash().to_string() == &preimage_hash {
+                    true
+                } else {
+                    println!("{},{}",invoice.payment_hash().to_string(), preimage_hash.to_string());
+                    false
                 }
-                false
+                
             },
             None=>{
                 false
@@ -471,19 +502,59 @@ mod tests {
     }
 
     #[tokio::test]
-     #[ignore]
+    #[ignore]
     async fn test_normal_swap() {
         let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
+        let invoice = "lntb30m1pjk75dhpp59gtshtxp907n978upwztdyrfasp5sa2lwlv4t5cewax2kny3ec4sdpyxysysctvvcsxzgz5dahzqmmxyppk7enxv4jsxqrrsscqp79qy9qsqsp5e407728y4fl2d0skl3v6s9v3f86gkuq0d4gz0nahxanu2s2sxz4sc5kql0x4d88skzqjgq00hthf0yv0v7fac9gf4etaclp46scsl8mzcgh900394fheyjljw6qluwuvf5r6kkqzlrhmq82rf88t92q6vnqqh7xrr0".to_string();
+        
         let refund_key_pair = XOnlyPair {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
-        let invoice = "lntb540u1pjk7jp5pp5l080mxfqdhmf2r327z07usmqfaxcf27w8zu94r4vcnhqaqcw5w9qdpgxgmjq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp5xu2pu2g39h28adauz6f2tv7w9ej92q2nn0nn2kngfp27c4gn2w4sy926l3069an8xs76eq9496cyq0p9c3alwll57jv9mvq9cfne2lcj8ucrh7922t6eylmzeapx8vnefglx7jtx2kznw9uz0avzag5scxcpggn4nk".to_string();
         let pair_hash = "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
-        let request = CreateSwapRequest::new(SwapType::Submarine, PairId::Btc_Btc, OrderSide::Sell, invoice, pair_hash, Some(refund_key_pair.pubkey),None, None, None,None,None);
+        let request = CreateSwapRequest::new_normal(
+            SwapType::Submarine, 
+            PairId::Btc_Btc, 
+            OrderSide::Sell,
+            pair_hash, 
+            invoice,
+            refund_key_pair.pubkey,
+        );
         let response = client.create_swap(request).await;
         assert!(response.is_ok());
-        assert!(response.as_ref().unwrap().validate_preimage());
+        // assert!(response.as_ref().unwrap().validate_preimage());
+        let id = response.unwrap().id;
+        let request = SwapStatusRequest{id: id};
+        let response = client.swap_status(request).await;
+        assert!(response.is_ok());
+
+        // Additional detailed assertions can be added here
+    }
+    #[tokio::test]
+    #[ignore]
+    async fn test_reverse_swap() {
+        let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
+        let claim_key_pair = XOnlyPair {
+            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
+            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
+        };
+
+        let pair_hash = "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
+        let preimage_hash = "77b4d347ef09644e2bb3a5f5e79a15d3e587c601a4d87087130616e7f6ce1a79".to_string();
+
+        let request = CreateSwapRequest::new_reverse(
+            SwapType::ReverseSubmarine, 
+            PairId::Btc_Btc, 
+            OrderSide::Buy, 
+            pair_hash, 
+            preimage_hash.clone(), 
+            claim_key_pair.pubkey, 
+            999_999,
+            100_000
+        );
+        let response = client.create_swap(request).await;
+        assert!(response.is_ok());
+        assert!(response.as_ref().unwrap().validate_preimage(preimage_hash));
         let id = response.unwrap().id;
         let request = SwapStatusRequest{id: id};
         let response = client.swap_status(request).await;

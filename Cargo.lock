@@ -262,7 +262,7 @@ dependencies = [
  "bitcoin 0.30.2",
  "elements",
  "hex 0.4.3",
- "lightning",
+ "lightning-invoice",
  "miniscript 0.10.0",
  "rand_core 0.6.4",
  "reqwest",
@@ -839,6 +839,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lightning-invoice"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3eb24878b0f4ef75f020976c886d9ad1503867802329cc963e0ab4623ea3b25c"
+dependencies = [
+ "bech32 0.9.1",
+ "bitcoin 0.29.2",
+ "bitcoin_hashes 0.11.0",
+ "lightning",
+ "num-traits",
+ "secp256k1 0.24.3",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -937,6 +951,15 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "tempfile",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
+dependencies = [
+ "autocfg 1.1.0",
 ]
 
 [[package]]
