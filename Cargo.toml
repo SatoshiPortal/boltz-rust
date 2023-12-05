@@ -1,0 +1,24 @@
+[package]
+name = "bullbitcoin-rnd"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+base32 = "0.4.0"
+base64 = "0.13.0"
+bdk = {version = "0.20.0", features = ["compiler", "rpc", "electrum", "sqlite"]}
+bip39 = "1.0.1"
+bitcoin = {version = "0.28.1", features = ["rand", "base64"]}
+hex = "0.4.3"
+secp256k1 = {version = "0.22.0", features = ["rand", "bitcoin_hashes", "global-context", "rand-std"]}
+serde_derive = "1.0.0"
+sha-1 = "0.10.0"
+
+[lib]
+doctest = false
