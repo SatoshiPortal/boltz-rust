@@ -80,6 +80,7 @@ pub struct WalletConfig {
           retry: 1,
           timeout: Some(5),
           stop_gap: 1000,
+          validate_domain: true,
           }
         }else{
           ElectrumBlockchainConfig{
@@ -88,6 +89,7 @@ pub struct WalletConfig {
             retry: 1,
             timeout: None,
             stop_gap: 1000,
+            validate_domain: true,
           }
         };
         let client = match create_blockchain_client(AnyBlockchainConfig::Electrum(config)) {
@@ -126,7 +128,7 @@ pub struct WalletConfig {
           auth,
           network,
           wallet_name,
-          skip_blocks: None,
+          sync_params: None,
         };
         let client = match create_blockchain_client(AnyBlockchainConfig::Rpc(config)) {
           Ok(client) => client,
@@ -237,6 +239,7 @@ pub struct WalletConfig {
         retry: 1,
         timeout: Some(5),
         stop_gap: 1000,
+        validate_domain: true,
       };
       match create_blockchain_client(AnyBlockchainConfig::Electrum(config)) {
         Ok(client) => client,
@@ -257,7 +260,7 @@ pub struct WalletConfig {
         auth,
         network,
         wallet_name: "ping".to_string(),
-        skip_blocks: None,
+        sync_params: None,
       };
   
       match create_blockchain_client(AnyBlockchainConfig::Rpc(config)) {
@@ -286,7 +289,7 @@ pub struct WalletConfig {
       match config.client.unwrap() {
         AnyBlockchain::Electrum(client) => {
           let fee = client.estimate_fee(8);
-          assert_eq!((fee.unwrap().as_sat_vb() > 0.0), true);
+          assert_eq!((fee.unwrap().as_sat_per_vb() > 0.0), true);
         }
         _ => println!("Should not reach."),
       };

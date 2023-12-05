@@ -4,6 +4,64 @@ use serde::Serializer;
 use std::str::FromStr;
 
 
+pub struct BoltzApiClient {
+    client: Client,
+    base_url: String,
+}
+
+impl BoltzApiClient {
+    pub fn new(base_url: &str) -> Self {
+        BoltzApiClient {
+            client: Client::new(),
+            base_url: base_url.to_string(),
+        }
+    }
+
+    pub async fn get_pairs(&self) -> Result<GetPairsResponse, Error> {
+        let url = format!("{}/getpairs", self.base_url);
+        let response = self.client.get(url).send().await?;
+        let body = response.text().await?; // Get the response body as a string
+        println!("{}",body);
+        let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap(); // Deserialize the string into your Rust struct
+        Ok(get_pairs_response)
+    }
+
+    pub async fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, reqwest::Error> {
+        let url = format!("{}/getfeeestimation", self.base_url);
+        let response = self.client.get(url).send().await?;
+        let body = response.text().await?;
+        println!("{}",body);
+        let get_fee_estimation_response: GetFeeEstimationResponse = serde_json::from_str(&body).unwrap();
+        Ok(get_fee_estimation_response)
+    }
+
+    pub async fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, Error> {
+        let url = format!("{}/createswap", self.base_url);
+        let response = self.client.post(url)
+            .json(&request)
+            .send()
+            .await?;
+        let body = response.text().await?;
+        println!("{}",body);
+
+        let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
+        Ok(create_swap_response)
+    }
+
+    pub async fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, Error> {
+        let url = format!("{}/swapstatus", self.base_url);
+        let response = self.client.post(url)
+            .json(&request)
+            .send()
+            .await?;
+        let body = response.text().await?;
+        println!("{}",body);
+
+        let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
+        Ok(swap_status_response)
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub enum PairId {
     Btc_Btc,
@@ -351,7 +409,8 @@ pub struct SwapStatusRequest {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SwapStatusResponse {
-    zero_conf_rejected: bool,
+    status: String,
+    zero_conf_rejected: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -362,68 +421,11 @@ pub struct GetFeeEstimationResponse {
     lbtc: f64,
 }
 
-pub struct BoltzApiClient {
-    client: Client,
-    base_url: String,
-}
-
-impl BoltzApiClient {
-    pub fn new(base_url: &str) -> Self {
-        BoltzApiClient {
-            client: Client::new(),
-            base_url: base_url.to_string(),
-        }
-    }
-
-    pub async fn get_pairs(&self) -> Result<GetPairsResponse, Error> {
-        let url = format!("{}/getpairs", self.base_url);
-        let response = self.client.get(url).send().await?;
-        let body = response.text().await?; // Get the response body as a string
-        println!("{}",body);
-        let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap(); // Deserialize the string into your Rust struct
-        Ok(get_pairs_response)
-    }
-
-    pub async fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, reqwest::Error> {
-        let url = format!("{}/getfeeestimation", self.base_url);
-        let response = self.client.get(url).send().await?;
-        let body = response.text().await?;
-        println!("{}",body);
-        let get_fee_estimation_response: GetFeeEstimationResponse = serde_json::from_str(&body).unwrap();
-        Ok(get_fee_estimation_response)
-    }
-
-    pub async fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, Error> {
-        let url = format!("{}/createswap", self.base_url);
-        let response = self.client.post(url)
-            .json(&request)
-            .send()
-            .await?;
-        let body = response.text().await?;
-        println!("{}",body);
-
-        let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
-        Ok(create_swap_response)
-    }
-
-    pub async fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, Error> {
-        let url = format!("{}/swapstatus", self.base_url);
-        let response = self.client.post(url)
-            .json(&request)
-            .send()
-            .await?;
-        let body = response.text().await?;
-        println!("{}",body);
-
-        let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
-        Ok(swap_status_response)
-    }
-}
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ec::XOnlyPair;
 
     #[tokio::test]
     async fn test_get_pairs() {
@@ -442,13 +444,16 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+     #[ignore]
     async fn test_normal_swap() {
         let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
-        let refund_public_key = "3946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string();
+        let refund_key_pair = XOnlyPair {
+            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
+            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
+        };
         let invoice = "lntb560u1pjka0aypp59wmr35slav63cjnt22c2uu4mqyld483jumjjw4m6dj9sdqv9hy5qdpgxguzq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp5qerwpp78lepyejnmn7vm9jp3899vy34xnfp9vdyh2afvwwguntysz38gzprptss3y5w85z548y4mgjpfaghfqe0uxtqvl9gypv64alrky8wc76hfhm55uk8gdr4rlvct67fgxjzmavgc86aunfsw0xfn3sqpcgctl8".to_string();
         let pair_hash = "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
-        let request = CreateSwapRequest::new(SwapType::Submarine, PairId::Btc_Btc, OrderSide::Sell, invoice, pair_hash, Some(refund_public_key),None, None, None,None,None);
+        let request = CreateSwapRequest::new(SwapType::Submarine, PairId::Btc_Btc, OrderSide::Sell, invoice, pair_hash, Some(refund_key_pair.pubkey),None, None, None,None,None);
         let response = client.create_swap(request).await;
         assert!(response.is_ok());
         let id = response.unwrap().id;

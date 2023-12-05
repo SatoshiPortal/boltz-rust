@@ -1,7 +1,7 @@
 use crate::e::{ErrorKind, S5Error};
-use bitcoin::network::constants::Network;
+use bdk::bitcoin::network::constants::Network;
 use bitcoin::secp256k1::Secp256k1;
-use bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
+use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
 use bitcoin::secp256k1::{KeyPair, PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
 use std::ffi::CString;
@@ -79,8 +79,8 @@ impl ChildKeys {
                 let parity = public_key.to_string().remove(1);
                 let keypair = if parity == '3' {
                   let mut seckey = SecretKey::from_keypair(&keypair);
-                  seckey.negate_assign();
-                  let key_pair = KeyPair::from_secret_key(&secp, seckey); 
+                  seckey.negate();
+                  let key_pair = KeyPair::from_secret_key(&secp, &seckey); 
                   key_pair
                 }
                 else{

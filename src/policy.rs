@@ -196,7 +196,6 @@ pub fn id(config: WalletConfig) -> Result<(bool, String), S5Error> {
 mod tests {
     use super::*;
     use crate::config::{WalletConfig, DEFAULT_TESTNET_NODE};
-    use crate::address::generate;
     // use bdk::descriptor::policy::BuildSatisfaction;
     // use bdk::descriptor::ExtractPolicy;
     // use bitcoin::secp256k1::Secp256k1;

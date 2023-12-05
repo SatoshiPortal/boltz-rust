@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::ffi::CString;
 use std::os::raw::c_char;
-use std::str::{FromStr};
+use std::str::FromStr;
 use secp256k1::hashes::sha256;
 use secp256k1::schnorr::Signature;
 use secp256k1::Secp256k1;
 use secp256k1::{ecdh::SharedSecret, KeyPair, Message, PublicKey, SecretKey, XOnlyPublicKey};
-use bitcoin::util::bip32::ExtendedPrivKey;
+use bitcoin::bip32::ExtendedPrivKey;
 
 use crate::e::{ErrorKind, S5Error};
 
@@ -69,13 +69,13 @@ pub fn compute_shared_secret_str(
     Ok(result) => result,
     Err(_) =>  return Err(S5Error::new(ErrorKind::Key, "BAD SECKEY STRING")),
   };
-  let public_key = if public_key.clone().len() == 64 {
-    "02".to_string() + public_key.clone()
-  } else if public_key.clone().len() == 66 {
-    public_key.to_string()
-  } else {
-     return Err(S5Error::new(ErrorKind::Key, "BAD PUBKEY STRING"));
-  };
+  // let public_key = if public_key.len() == 64 {
+  //   "02".to_string() + public_key
+  // } else if public_key.len() == 66 {
+  //   public_key.to_string()
+  // } else {
+  //    return Err(S5Error::new(ErrorKind::Key, "BAD PUBKEY STRING"));
+  // };
   let pubkey = match PublicKey::from_str(&public_key) {
     Ok(result) => result,
     Err(_) =>  return Err(S5Error::new(ErrorKind::Key, "BAD PUBKEY STRING")),
@@ -107,7 +107,7 @@ pub fn schnorr_verify(signature: &str,message: &str, pubkey: &str) -> Result<boo
     Err(_) =>  return Err(S5Error::new(ErrorKind::Key, "BAD SIGNATURE STRING")),
   };
 
-  let pubkey = match XOnlyPublicKey::from_str(pubkey) {
+  let pubkey = match XOnlyPublicKey::from_str(&pubkey[2..]) {
     Ok(result) => result,
     Err(_) =>  return Err(S5Error::new(ErrorKind::Key, "BAD PUBKEY STRING")),
   };
@@ -130,14 +130,14 @@ mod tests {
   fn test_from_xprv_str() {
     let xprv= "xprv9ym1fn2sRJ6Am4z3cJkM4NoxFsaeNdSyFQvE5CqzqqterM5nZdKUStQghQWBupjAgJZEgAWCSQWuFgqbvdGwg22tiUp8rsupd4fTrtYMEWS";
     let key_pair = keypair_from_xprv_str(xprv).unwrap();
-    let expected_pubkey = "86a4b6e8b4c544111a6736d4f4195027d23495d947f87aa448c088da477c1b5f";
+    let expected_pubkey = "0286a4b6e8b4c544111a6736d4f4195027d23495d947f87aa448c088da477c1b5f";
     assert_eq!(expected_pubkey, key_pair.public_key().to_string());
   }
   #[test]
   fn test_schnorr_sigs() {
     let message = "stackmate 1646056571433";
     let alice_seckey = "3c842fc0e15f2f1395922d432aafa60c35e09ad97c363a37b637f03e7adcb1a7";
-    let exptected_pubkey = "dfbbf1979269802015da7dba4143ff5935ea502ef3a7276cc650be0d84a9c882";
+    let exptected_pubkey = "02dfbbf1979269802015da7dba4143ff5935ea502ef3a7276cc650be0d84a9c882";
     let key_pair = keypair_from_seckey_str(&alice_seckey).unwrap();
     assert_eq!(exptected_pubkey, &key_pair.public_key().to_string());
 
@@ -152,11 +152,11 @@ mod tests {
   fn test_shared_secret() {
     let alice_pair = XOnlyPair {
       seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
-      pubkey: "3946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
+      pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
     };
     let bob_pair = XOnlyPair {
       seckey: "3c842fc0e15f2f1395922d432aafa60c35e09ad97c363a37b637f03e7adcb1a7".to_string(),
-      pubkey: "dfbbf1979269802015da7dba4143ff5935ea502ef3a7276cc650be0d84a9c882".to_string(),
+      pubkey: "02dfbbf1979269802015da7dba4143ff5935ea502ef3a7276cc650be0d84a9c882".to_string(),
     };
     // let expected_shared_secret = "48c413dc9459a3c154221a524e8fad34267c47fc7b47443246fa8919b19fff93";
     let alice_shared_secret =
