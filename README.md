@@ -63,10 +63,10 @@ For the sake of simplification, we will look at the standard procedure when doin
 - [x] ensure our script matches the `redeemScript` provided by boltz
 - [x] pay the `invoice` (use local clightning)
 - [ ] boltz will confirm `invoice` paid and send funds to the `address` creating a utxo that we can spend
-- [ ] once confirmed, construct a transaction to spend this utxo
-- [ ] spend the utxo to your existing bitcoin wallet
+- [ ] construct a transaction to spend this utxo
+- [ ] solve spending conditions: hashlock + signature
+- [ ] sweep the utxo to your existing bitcoin wallet
 - [ ] once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice` 
-
 
 ### Liquid (UTXO Chain)
 
