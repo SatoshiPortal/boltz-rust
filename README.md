@@ -2,10 +2,10 @@
 
 The goal of this project is to develop a working boltz client that supports:
 
-- [] normal submarine swaps: Chain->LN for both Bitcoin & Liquid
+- [ ] normal submarine swaps: Chain->LN for both Bitcoin & Liquid
 Here we will pay an onchain script address for boltz and boltz will pay our LN invoice.
 
-- [] reverse submarine swaps LN->Chain for both Bitcoin & Liquid
+- [ ] reverse submarine swaps LN->Chain for both Bitcoin & Liquid
 Here we will pay an LN invoice to boltz and boltz will fund an onchain script for us to sweep.
 
 
@@ -49,23 +49,23 @@ In case of `reverse swaps`; the client (us) will ALWAYS be required to build and
 
 For the most parts, normal swaps only requires interaction with the boltz.exchange api, making it quite straight forward. In case of a dispute and we need to claim back funds, we will need to build the script and spend it. 
 
-For the sake of simplification, we will look at the standard procedure when doing a reverse swap.
+For the sake of simplification, we will look at the standard procedure when doing a `reverse swap` as it is more involved.
 
-- Create a `keypair.{seckey,pubkey}`
-- Create a random secret (preimage)
-- Create `hash`=sha256(preimage)
-- Share `keypair.pubkey` and `hash` with boltz.exchange
-- boltz will use use this to create the script on their end and send it back to us as a `redeem_script` along with an LN `invoice` for us to pay and an onchain `address` that they will fund for us to claim
-- boltz will also return their `pubkey` and the `timeout` used
-- verify the response from boltz and the preimage used in the invoice (boltz cannot claim the invoice until the preimage is known)
-- build the script on our end using: `our_pubkey, hash, boltz_pubkey and timeout`
-- generate address from the script and check for a match against the `address` provided by boltz
-- ensure our script matches the `redeemScript` provided by boltz
-- pay the `invoice`
-- boltz will confirm `invoice` paid and send funds to the `address` creating a utxo that we can spend
-- once confirmed, construct a transaction to spend this utxo
-- spend the utxo to your existing bitcoin wallet
-- once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice` 
+- [x] Create a `keypair.{seckey,pubkey}`
+- [x] Create a random secret (preimage)
+- [x] Create `hash`=sha256(preimage)
+- [x] Share `keypair.pubkey` and `hash` with boltz.exchange
+- [x] boltz will use use this to create the script on their end and send it back to us as a `redeem_script` along with an LN `invoice` for us to pay and an onchain `address` that they will fund for us to claim
+- [x] boltz will also return their `pubkey` and the `timeout` used
+- [x] verify the response from boltz and the preimage used in the invoice (boltz cannot claim the invoice until the preimage is known)
+- [x] build the script on our end using: `our_pubkey, hash, boltz_pubkey and timeout`
+- [x] generate address from the script and check for a match against the `address` provided by boltz
+- [x] ensure our script matches the `redeemScript` provided by boltz
+- [x] pay the `invoice` (use local clightning)
+- [ ] boltz will confirm `invoice` paid and send funds to the `address` creating a utxo that we can spend
+- [ ] once confirmed, construct a transaction to spend this utxo
+- [ ] spend the utxo to your existing bitcoin wallet
+- [ ] once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice` 
 
 
 ### Liquid (UTXO Chain)
