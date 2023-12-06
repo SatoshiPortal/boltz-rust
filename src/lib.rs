@@ -8,13 +8,15 @@ pub mod util;
 pub mod script;
 pub mod address;
 pub mod sync;
+pub mod electrum;
 
 #[cfg(test)]
 mod tests {
     use std::{env, str::FromStr};
     use bitcoin::Network;
+    use electrum_client::ElectrumApi;
     use secp256k1::{rand::{thread_rng, Rng}, hashes::ripemd160};
-    use crate::{config::WalletConfig, address, seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, util::rnd_str, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, script::{ SwapRedeemScriptElements, self, ReverseSwapRedeemScriptElements, }};
+    use crate::{config::WalletConfig, address, seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, util::rnd_str, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, script::{ SwapRedeemScriptElements, self, ReverseSwapRedeemScriptElements, }, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
     use dotenv::dotenv;
     use bitcoin::hashes::{sha256, Hash};
 
@@ -36,11 +38,19 @@ mod tests {
         let preimage = rnd_str();
         println!("Preimage: {:?}", preimage);
         let preimage_hash =  sha256::Hash::hash(&hex::decode(preimage).unwrap());
-        let hash160 = ripemd160::Hash::hash(&hex::decode(preimage_hash.to_string()).unwrap());
 
-        println!("Hash160: {:?}", hash160);
-        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let boltz_pairs = client.get_pairs().await.unwrap();
+        let network_config = NetworkConfig::new(
+            BitcoinNetwork::BitcoinTestnet,
+            DEFAULT_TESTNET_NODE,
+            true,
+            true,
+            false,
+            None,
+        ).unwrap();
+        let electrum_client = network_config.electrum_url.build_client().unwrap();
+        let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
+       
+        let boltz_pairs = boltz_client.get_pairs().await.unwrap();
         
         let pair_hash = boltz_pairs.pairs.pairs.get("BTC/BTC")
             .map(|pair_info| pair_info.hash.clone())
@@ -56,6 +66,7 @@ mod tests {
          * 
          * 
          */
+
         let request = CreateSwapRequest::new_reverse(
             SwapType::ReverseSubmarine, 
             PairId::Btc_Btc, 
@@ -66,7 +77,7 @@ mod tests {
             timeout as u64,
             100_000
         );
-        let response = client.create_swap(request).await;
+        let response = boltz_client.create_swap(request).await;
         assert!(response.is_ok());
         println!("{}",preimage_hash.to_string());
         assert!(response.as_ref().unwrap().validate_preimage(preimage_hash.to_string()));
@@ -76,7 +87,7 @@ mod tests {
         let id = response.as_ref().unwrap().id.clone();
         let boltz_script_elements = ReverseSwapRedeemScriptElements::from_str(&response.as_ref().unwrap().redeem_script.as_ref().unwrap().clone()).unwrap();
         // assert!(response.as_ref().unwrap().claim_public_key.as_ref().unwrap().clone() == boltz_script_elements.sender_pubkey);
-
+        let hash160 = ripemd160::Hash::hash(&hex::decode(preimage_hash.to_string()).unwrap());
         let constructed_script_elements = ReverseSwapRedeemScriptElements{
             hashlock: hash160.to_string(),
             reciever_pubkey: string_keypair.pubkey.clone(),
@@ -88,8 +99,12 @@ mod tests {
         assert!(constructed_script_elements == boltz_script_elements);
         // println!("swap id:{}",id);
         let request = SwapStatusRequest{id: id};
-        let response = client.swap_status(request).await;
+        let response = boltz_client.swap_status(request).await;
         assert!(response.is_ok());
+
+        let script_balance = electrum_client.script_get_balance(&constructed_script_elements.to_script()).unwrap();
+        assert_eq!(script_balance.unconfirmed, 0);
+        assert_eq!(script_balance.confirmed, 0);
 
     }
     

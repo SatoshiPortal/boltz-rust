@@ -83,6 +83,7 @@ Additionally, this repo will also explore using `bewallet` as an option for bull
 - [elements](https://docs.rs/elements/0.22.0/elements/index.html)
 - [lightning-invoice](https://docs.rs/lightning-invoice/latest/lightning_invoice/)
 - [bewallet](https://github.com/LeoComandini/BEWallet/tree/master)
+- [electrum-client](https://docs.rs/electrum-client/latest/electrum_client/)
 
 ## Resources
 
