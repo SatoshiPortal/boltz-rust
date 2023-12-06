@@ -12,11 +12,11 @@ use crate::e::{ErrorKind, S5Error};
 
 /// FFI Output
 #[derive(Serialize, Deserialize, Debug)]
-pub struct XOnlyPair {
+pub struct KeyPairString {
   pub seckey: String,
   pub pubkey: String,
 }
-impl XOnlyPair {
+impl KeyPairString {
   pub fn c_stringify(&self) -> *mut c_char {
     let stringified = match serde_json::to_string(self) {
       Ok(result) => result,
@@ -29,8 +29,8 @@ impl XOnlyPair {
 
     CString::new(stringified).unwrap().into_raw()
   }
-  pub fn from_keypair(keypair: KeyPair) -> XOnlyPair {
-    return XOnlyPair {
+  pub fn from_keypair(keypair: KeyPair) -> KeyPairString {
+    return KeyPairString {
       seckey: hex::encode(keypair.secret_bytes()).to_string(),
       pubkey: keypair.public_key().to_string(),
     };
@@ -150,11 +150,11 @@ mod tests {
 
   #[test]
   fn test_shared_secret() {
-    let alice_pair = XOnlyPair {
+    let alice_pair = KeyPairString {
       seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
       pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
     };
-    let bob_pair = XOnlyPair {
+    let bob_pair = KeyPairString {
       seckey: "3c842fc0e15f2f1395922d432aafa60c35e09ad97c363a37b637f03e7adcb1a7".to_string(),
       pubkey: "02dfbbf1979269802015da7dba4143ff5935ea502ef3a7276cc650be0d84a9c882".to_string(),
     };

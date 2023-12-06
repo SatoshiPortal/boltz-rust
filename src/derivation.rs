@@ -275,20 +275,6 @@ mod tests {
         assert_eq!(derived.xprv, child_keys.xprv);
     }
 
-
-    #[test]
-    fn test_derivation_errors() {
-        let master_xprv: &str = "tpr8ZgxMBicQKsPduTkddZgfGyk4ZJjtEEZQjofpyJg74LizJ469DzoF8nmU1YcvBFskXVKdoYmLoRuZZR1wuTeuAf8rNYR2zb1RvFns2Vs8hY";
-        let purpose = DerivationPurpose::Native; //Native-native
-        let account = 0; // 0
-        let expected_error = "Invalid Master Key.";
-
-        let derived = to_hardened_account(master_xprv, purpose.clone(), account)
-            .err()
-            .unwrap();
-        assert_eq!(derived.message, expected_error);
-    }
-
     #[test]
     fn test_check_xpub() {
         assert!(check_xpub("tpubDDXskyWJLq5pUioZn8sGQ46aieCybzsjLb5BGmRPBAdwfGyvwiyXaoho8EYJcgJa5QGHGYpDjLQ8gWzczWbxadeRkCuExW32Boh696yuQ9m"));

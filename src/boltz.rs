@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 use serde::Serializer;
 use std::str::FromStr;
 use bitcoin::bech32::{decode, FromBase32};
+
+pub const BOLTZ_TESTNET_URL: &str = "https://testnet.boltz.exchange/api";
+pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
+
 pub struct BoltzApiClient {
     client: Client,
     base_url: String,
@@ -108,23 +112,23 @@ impl FromStr for PairId {
 pub struct GetPairsResponse {
     info: Vec<String>,
     warnings: Vec<String>,
-    pairs: Pairs,
+    pub pairs: Pairs,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Pairs {
-    // Use a HashMap to represent pairs, keys are strings like "BTC/BTC"
     #[serde(flatten)]
-    pairs: std::collections::HashMap<String, Pair>,
+    pub pairs: std::collections::HashMap<String, Pair>,
+
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Pair {
-    hash: String,
-    rate: f64,
-    limits: Limits,
-    fees: Fees,
+    pub hash: String,
+    pub rate: f64,
+    pub limits: Limits,
+    pub fees: Fees,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -405,20 +409,20 @@ pub struct ChannelDetails {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSwapResponse {
-    id: String,
-    invoice: Option<String>,
-    redeem_script: Option<String>,
-    timeout_block_height: Option<u64>,
-    onchain_amount: Option<u64>,
-    lockup_address: Option<String>,
-    miner_fee_invoice: Option<String>,
-    service_fee_percentage: Option<f64>,
-    preimage: Option<String>,
-    claim_address: Option<String>,
-    claim_public_key: Option<String>,
-    private_key: Option<String>,
-    refund_address: Option<String>,
-    refund_public_key: Option<String>,
+    pub id: String,
+    pub invoice: Option<String>,
+    pub  redeem_script: Option<String>,
+    pub  timeout_block_height: Option<u64>,
+    pub  onchain_amount: Option<u64>,
+    pub  lockup_address: Option<String>,
+    pub  miner_fee_invoice: Option<String>,
+    pub  service_fee_percentage: Option<f64>,
+    pub  preimage: Option<String>,
+    pub  claim_address: Option<String>,
+    pub  claim_public_key: Option<String>,
+    pub  private_key: Option<String>,
+    pub  refund_address: Option<String>,
+    pub  refund_public_key: Option<String>,
 }
 
 impl CreateSwapResponse {
@@ -452,7 +456,7 @@ impl CreateSwapResponse {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SwapStatusRequest {
-    id: String,
+    pub id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -474,14 +478,21 @@ pub struct GetFeeEstimationResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ec::XOnlyPair;
+    use crate::ec::KeyPairString;
 
     #[tokio::test]
     async fn test_get_pairs() {
-        let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
+        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let response = client.get_pairs().await;
         assert!(response.is_ok());
-        // Here you can add more detailed tests, like checking the contents of the response
+        // println!("{:?}",response.unwrap().pairs);
+        let pair_hash = response.unwrap().pairs.pairs.get("BTC/BTC")
+        .map(|pair_info| pair_info.hash.clone())
+        .unwrap();
+
+        assert_eq!(pair_hash,"d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string());
+
+
     }
 
     #[tokio::test]
@@ -489,16 +500,15 @@ mod tests {
         let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
         let response = client.get_fee_estimation().await;
         assert!(response.is_ok());
-        // Additional detailed assertions can be added here
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_normal_swap() {
-        let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
+        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let invoice = "lntb30m1pjhqyqqpp576x9kefhdxz3hzcp3l0cyzjttq7xazhdp28hzxwdc0mq3uec96dqdpyxysysctvvcsxzgz5dahzqmmxyppk7enxv4jsxqrrsscqp79qy9qsqsp595vs7sn5e9hdpxga9ac7x3ah5ku9x4063appk8yp45c85w44ngcsajatrejq8zupa60syckuuanxnhsh8rcyy7ht470c29jsgkqpv3p8m5c4n9jf5ag5rxed5dp5p4aw570ktafsdjeeq0ucmmpenw4lhycpvv4jkr".to_string();
         
-        let refund_key_pair = XOnlyPair {
+        let refund_key_pair = KeyPairString {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
@@ -519,13 +529,12 @@ mod tests {
         let response = client.swap_status(request).await;
         assert!(response.is_ok());
 
-        // Additional detailed assertions can be added here
     }
     #[tokio::test]
     #[ignore]
     async fn test_reverse_swap() {
-        let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
-        let claim_key_pair = XOnlyPair {
+        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
+        let claim_key_pair = KeyPairString {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
@@ -551,25 +560,16 @@ mod tests {
         let response = client.swap_status(request).await;
         assert!(response.is_ok());
 
-        // Additional detailed assertions can be added here
     }
     #[tokio::test]
     #[ignore]
     async fn test_swap_status() {
-        let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
+        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let id = "Nh7Y1J".to_string();
         let request = SwapStatusRequest{id: id};
         let response = client.swap_status(request).await;
         assert!(response.is_ok());
 
-        // Additional detailed assertions can be added here
     }
-    // #[tokio::test]
-    // async fn test_reverse_swap() {
-    //     let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
-    //     let response = client.get_fee_estimation().await;
-    //     assert!(response.is_ok());
-    //     // Additional detailed assertions can be added here
-    // }
     
 }

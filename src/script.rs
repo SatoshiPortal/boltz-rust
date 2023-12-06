@@ -154,7 +154,7 @@ mod tests {
 
     use std::str::FromStr;
 
-    use crate::ec::XOnlyPair;
+    use crate::ec::KeyPairString;
 
     use super::*;
 
@@ -209,7 +209,7 @@ mod tests {
         let redeem_script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
         let expected_address = "2MxkD9NtLhU4iRAUw8G6B83SiHxDESGfDac";
         let expected_timeout = 2542048;
-        let sender_key_pair = XOnlyPair {
+        let sender_key_pair = KeyPairString {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
