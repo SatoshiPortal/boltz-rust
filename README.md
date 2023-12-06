@@ -3,9 +3,15 @@
 The goal of this project is to develop a working boltz client that supports:
 
 - [] normal submarine swaps: Chain->LN for both Bitcoin & Liquid
-- [] reverse submarine swaps LN->Chain for both Bitcoin & Liquid
+Here we will pay an onchain script address for boltz and boltz will pay our LN invoice.
 
-This requires building a one-time use wallet for the following bitcoin script:
+- [] reverse submarine swaps LN->Chain for both Bitcoin & Liquid
+Here we will pay an LN invoice to boltz and boltz will fund an onchain script for us to sweep.
+
+
+## Script
+
+This requires building a `one-time use and dispose wallet` for the following bitcoin script (p2shwsh ONLY):
 
 ```
     HASH160 <hash of the preimage> 
@@ -18,11 +24,28 @@ This requires building a one-time use wallet for the following bitcoin script:
     CHECKSIG
 ```
 
-In case of normal swaps; the client will ONLY be required to create the swap script spend in case boltz cheats and we need to claim back funds from the script after a timeout. This will be a rare occurence.
+This script captures the following spending conditions:
 
-In case of reverse swaps; the client will ALWAYS be required to build and spend from the script to claim back onchain funds.
+```
+Either; a preimage and the reciever's signature is required // happy case
+Or; after a timeout the senders signature is required. // dispute
+```
+
+The `reciever` will be able to claim the funds on chain and in our case this would be us in case of a reverse swap and this would be boltz in case of a normal swap.
+
+The `sender` will be able to claim funds on LN, once the reciever claims the onchain funds and reveals the preimage. This would be us in case of a normal swap and boltz in the case of a reverse swap.
+
 
 ## Procedure
+
+There is no requirement for a database as we will not persist and data.
+
+We simply create keys, build a script, generate a single address correspoding to this key, watch the address for a payment and spend the utxo by building a transaction, solving the spending conditions and broadcasting. We do not need to store transaction history or address indexes etc.
+
+In case of `normal swaps`; the client (us) will ONLY be required to create the swap script and spend it in case boltz cheats and we need to claim back funds onchain from the script after a timeout. This will be a rare occurence. In the happy case, everything goes well, boltz pays our invoice and claims the onchain funds.
+With reference to the above script, we would be the `sender` here; and can only spend after a timeout incase of a dispute.
+
+In case of `reverse swaps`; the client (us) will ALWAYS be required to build and spend from the script to claim onchain funds. With reference to the above script, we would be the `receiver` here; and the solution to the reverse swap is the `preimage` of a hash and a `signature` from a key.
 
 For the most parts, normal swaps only requires interaction with the boltz.exchange api, making it quite straight forward. In case of a dispute and we need to claim back funds, we will need to build the script and spend it. 
 
@@ -61,7 +84,18 @@ Additionally, this repo will also explore using `bewallet` as an option for bull
 - [lightning-invoice](https://docs.rs/lightning-invoice/latest/lightning_invoice/)
 - [bewallet](https://github.com/LeoComandini/BEWallet/tree/master)
 
-# test
+## Resources
+
+- [teleport](https://github.com/bitcoin-teleport/teleport-transactions)
+A script wallet for coinswap
+
+- [bitcoin-wallet](https://github.com/rust-bitcoin/rust-wallet)
+A simple rust bitcoin wallet
+
+- [rust-bitcoin-wallet](https://github.com/stevenroose/rust-bitcoin-wallet)
+Another old simple rust bitcoin wallet
+
+## test
 
 ```bash
 cargo test
