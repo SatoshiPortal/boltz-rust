@@ -1,12 +1,27 @@
-use bitcoin::{blockdata::script::{Script, Instruction}, opcodes::{all::{OP_HASH160, OP_EQUALVERIFY, OP_DROP, OP_ELSE, OP_IF}, OP_0}, Address};
+use bitcoin::{
+    blockdata::script::{Script,ScriptBuf,Builder, Instruction}, 
+    opcodes::{all::{*}, OP_0},
+    PublicKey, 
+    Address, script::PushBytes
+};
 
-fn bytes_to_u32(bytes: &[u8]) -> u32 {
-    let mut result = 0u32;
-    for &byte in bytes {
-        result = (result << 8) | (byte as u32);
-    }
-    result
-}
+use bitcoin::{
+    blockdata::locktime::absolute::LockTime,
+    hashes::{
+        hash160::Hash,
+        hex::{FromHex},
+    },
+    secp256k1,
+    secp256k1::{Secp256k1, SecretKey},
+            secp256k1::ecdsa::Signature
+    };
+
+use bitcoin::{
+    bip32::{ChildNumber, DerivationPath, ExtendedPrivKey, ExtendedPubKey},
+    psbt,
+    Amount, Network, OutPoint, Transaction, TxIn, TxOut, Txid,
+};
+
 
 #[derive(Debug)]
 pub struct DecodedNormalBTCSwapRedeemScript {
@@ -14,12 +29,16 @@ pub struct DecodedNormalBTCSwapRedeemScript {
     pub reciever_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
-    pub address: String,
 }
 
 pub fn decode_normal_btc_swap_script(redeem_script_str: String)->Option<DecodedNormalBTCSwapRedeemScript>{
     let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
     let script = Script::from_bytes(&script_bytes);
+    let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
+    // println!("ADDRESS DECODED: {:?}",address);
+    let script_hash = script.script_hash();
+    let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
+    // println!("DECODED SCRIPT HASH: {}",sh_str);
     let instructions = script.instructions();
     let mut last_op = OP_0;
     let mut hashlock = None;
@@ -40,7 +59,7 @@ pub fn decode_normal_btc_swap_script(redeem_script_str: String)->Option<DecodedN
                     reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
                 }
                 if last_op == OP_ELSE {
-                    timelock = Some(bytes_to_u32(&bytes.as_bytes()));
+                    timelock = Some(bytes_to_u32_little_endian(&bytes.as_bytes()));
                 }
                 if last_op == OP_DROP {
                     sender_pubkey = Some(hex::encode(bytes.as_bytes()));
@@ -53,14 +72,11 @@ pub fn decode_normal_btc_swap_script(redeem_script_str: String)->Option<DecodedN
     }
 
     if hashlock.is_some() && sender_pubkey.is_some() && timelock.is_some() && sender_pubkey.is_some() {
-        let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
-        println!("ADDRESS: {:?}",address);
         Some(DecodedNormalBTCSwapRedeemScript{
             hashlock: hashlock.unwrap(),
             reciever_pubkey: reciever_pubkey.unwrap(),
             timelock: timelock.unwrap(),
             sender_pubkey: sender_pubkey.unwrap(),
-            address: address.to_string(),
         })
     }
     else {
@@ -68,8 +84,75 @@ pub fn decode_normal_btc_swap_script(redeem_script_str: String)->Option<DecodedN
     }
 }
 
+pub fn create_btc_swap_script(
+    hashvalue: Hash,
+    reciever_pubkey: PublicKey,
+    sender_pubkey: PublicKey,
+    locktime: LockTime,
+) -> ScriptBuf {
+    /* 
+        HASH160 <hash of the preimage> 
+        EQUAL
+        IF <reciever public key>
+        ELSE <timeout block height> 
+        CHECKLOCKTIMEVERIFY
+        DROP <sender public key> 
+        ENDIF
+        CHECKSIG
+    */
+    let hashbytes: [u8;20] = *hashvalue.as_ref();
+
+    let script = Builder::new()
+    .push_opcode(OP_HASH160)
+        .push_slice(hashbytes)
+    .push_opcode(OP_EQUAL)
+    .push_opcode(OP_IF)
+        .push_key(&reciever_pubkey)
+    .push_opcode(OP_ELSE)
+        .push_lock_time(locktime)
+    .push_opcode(OP_CLTV)
+    .push_opcode(OP_DROP)
+        .push_key(&sender_pubkey)
+    .push_opcode(OP_ENDIF)
+    .push_opcode(OP_CHECKSIG)
+    .into_script();
+
+    // for instruction in script.instructions() {
+    //     match instruction {
+    //         Ok(Instruction::Op(opcode)) => {
+    //             println!("Opcode: {:?}", opcode)
+    //         },
+    //         Ok(Instruction::PushBytes(bytes)) => {
+    //             println!("PushBytes: {:?}", bytes.as_bytes());
+    //         },
+    //         Err(e) => println!("Error: {:?}", e),
+    //     }
+    // };
+
+    script
+
+}
+
+fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
+    let mut result = 0u32;
+    for (i, &byte) in bytes.iter().enumerate() {
+        result |= (byte as u32) << (8 * i);
+    }
+    result
+}
+
+fn find_difference(s1: &str, s2: &str) -> Vec<(usize, char, char)> {
+    s1.char_indices()
+        .zip(s2.chars())
+        .filter(|((_, char1), char2)| char1 != char2)
+        .map(|((i, char1), char2)| (i, char1, char2))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+
+    use std::str::FromStr;
 
     use crate::ec::XOnlyPair;
 
@@ -77,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_decode_script() {
-        let script_str = "a914e1db6d8de42a72420d408695ab393407a28bc341876321036e36d8f4c8ccf8776828fe6962b87024bf786a42b8127a0e7a8b92c2bfc5c8e5670358c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
+        let script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
         let script_bytes = hex::decode(script_str).unwrap().to_owned();
         let script = Script::from_bytes(&script_bytes);
         println!("is p2pk: {}",script.is_p2pk());
@@ -105,14 +188,15 @@ mod tests {
                         println!("Reciever PubKey: {:?}", hex::encode(bytes.as_bytes()));
                         
                     }
-                    if last_op == OP_DROP {
-                        if bytes.as_bytes().len() == 3 {
-                            println!("TimeLock: {:?}", bytes_to_u32(&bytes.as_bytes()));
-                        } else {
-                            println!("Sender Pubkey: {:?}", hex::encode(bytes.as_bytes()));
-                        }
-                    }
+                    if last_op == OP_ELSE {
+                        println!("TimeLock: {:?}", bytes_to_u32_little_endian(bytes.as_bytes()));
+                        // println!("TimeLock: {:?}", Height::try_from(bytes.as_bytes()));
 
+                        
+                    }
+                    if last_op == OP_DROP {
+                        println!("Sender Pubkey: {:?}", hex::encode(bytes.as_bytes()));
+                    }
                     println!("PushBytes: {:?}", bytes.as_bytes());
                 },
                 Err(e) => println!("Error: {:?}", e),
@@ -121,17 +205,34 @@ mod tests {
     }
     
     #[test]
-    fn test_decode_swap_redeem_script(){
-        let redeem_script_str = "a914e1db6d8de42a72420d408695ab393407a28bc341876321036e36d8f4c8ccf8776828fe6962b87024bf786a42b8127a0e7a8b92c2bfc5c8e5670358c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
-        let expected_address = "2NBQJYfU4VrTuNb4rcWySMT9tGB8o8rfGAM";
+    fn test_decode_encode_swap_redeem_script(){
+        let redeem_script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
+        let expected_address = "2MxkD9NtLhU4iRAUw8G6B83SiHxDESGfDac";
+        let expected_timeout = 2542048;
         let sender_key_pair = XOnlyPair {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
-        let decoded = decode_normal_btc_swap_script(redeem_script_str).unwrap();
+        let decoded = decode_normal_btc_swap_script(redeem_script_str.clone()).unwrap();
         println!("{:?}", decoded);
-        assert!(decoded.address == expected_address);
         assert!(decoded.sender_pubkey == sender_key_pair.pubkey);
+        assert!(decoded.timelock == expected_timeout);
+
+        let reciever_pubkey = PublicKey::from_str(&decoded.reciever_pubkey).unwrap();
+        let sender_pubkey = PublicKey::from_str(&decoded.sender_pubkey).unwrap();
+        let hashvalue = Hash::from_str(&decoded.hashlock).unwrap();
+        let timelock = LockTime::from_consensus(decoded.timelock);
+
+        let encoded = create_btc_swap_script(hashvalue, reciever_pubkey, sender_pubkey, timelock);
+        let script_hash = encoded.script_hash();
+        let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
+        println!("ENCODED SCRIPT HASH: {}",sh_str);
+        println!("ENCODED HEX: {}",encoded.to_hex_string());
+        let diff = find_difference(encoded.to_hex_string().as_str() , redeem_script_str.as_str());
+        println!("{:?}",diff);
+        let address = Address::p2shwsh(&encoded, bitcoin::Network::Testnet);
+        println!("ADDRESS FROM ENCODED: {:?}",address.to_string());
+        assert!(address.to_string() == expected_address);
 
     }
 }

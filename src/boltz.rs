@@ -423,7 +423,6 @@ pub struct CreateSwapResponse {
 
 impl CreateSwapResponse {
     pub fn validate_preimage(&self, preimage_hash: String)->bool{
-
         match &self.invoice {
             Some(invoice_str)=>{
                 let invoice = match Bolt11Invoice::from_str(&invoice_str){
@@ -497,7 +496,7 @@ mod tests {
     #[ignore]
     async fn test_normal_swap() {
         let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
-        let invoice = "lntb30m1pjk75dhpp59gtshtxp907n978upwztdyrfasp5sa2lwlv4t5cewax2kny3ec4sdpyxysysctvvcsxzgz5dahzqmmxyppk7enxv4jsxqrrsscqp79qy9qsqsp5e407728y4fl2d0skl3v6s9v3f86gkuq0d4gz0nahxanu2s2sxz4sc5kql0x4d88skzqjgq00hthf0yv0v7fac9gf4etaclp46scsl8mzcgh900394fheyjljw6qluwuvf5r6kkqzlrhmq82rf88t92q6vnqqh7xrr0".to_string();
+        let invoice = "lntb30m1pjhqyqqpp576x9kefhdxz3hzcp3l0cyzjttq7xazhdp28hzxwdc0mq3uec96dqdpyxysysctvvcsxzgz5dahzqmmxyppk7enxv4jsxqrrsscqp79qy9qsqsp595vs7sn5e9hdpxga9ac7x3ah5ku9x4063appk8yp45c85w44ngcsajatrejq8zupa60syckuuanxnhsh8rcyy7ht470c29jsgkqpv3p8m5c4n9jf5ag5rxed5dp5p4aw570ktafsdjeeq0ucmmpenw4lhycpvv4jkr".to_string();
         
         let refund_key_pair = XOnlyPair {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
