@@ -18,3 +18,4 @@ To run `test_normal_swap`, make sure to upadate the `invoice`.
 `swapstatus` is tested within `test_*_swap`, however a separate test exists to manually test your swap' status through its lifetime.
 
 This is also ignored, to run it, make sure you update the `id` accordingly.
+

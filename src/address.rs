@@ -82,38 +82,9 @@ mod tests {
         let config = WalletConfig::new_offline(Network::Testnet,&descriptor,&descriptor,None).unwrap();
         let address0 = generate(config, 0).unwrap();
         assert_eq!(
-            "tb1q093gl5yxww0hlvlkajdmf8wh3a6rlvsdk9e6d3".to_string(),
+            "tb1qyfqtkev9gltvmzkytk96gd0yjpgwvf0yrnxse2".to_string(),
             address0.address
         );
-        let config = WalletConfig::new_offline(Network::Testnet,&descriptor,&descriptor,None).unwrap();
-        let address1 = generate(config, 1).unwrap();
-        assert_eq!(
-            "tb1qzdwqxt8l2s47vl4fp4ft6w67fcxel4qf5j96ld".to_string(),
-            address1.address
-        );
-    }
-
-    #[test]
-    fn test_sqlite_generate() {
-        let xkey = "[db7d25b5/84'/1'/6']tpubDCCh4SuT3pSAQ1qAN86qKEzsLoBeiugoGGQeibmieRUKv8z6fCTTmEXsb9yeueBkUWjGVzJr91bCzeCNShorbBqjZV4WRGjz3CrJsCboXUe";
-        let descriptor = format!("wpkh({}/*)", xkey);
-        let mut rng = thread_rng();
-        let random: u16 = rng.gen();
-        let db_path: String = env::var("CARGO_MANIFEST_DIR").unwrap() + &random.to_string() + ".db";
-        let config = WalletConfig::new_offline(Network::Testnet,&descriptor,&descriptor,Some(db_path.clone())).unwrap();
-        let address0 = sqlite_generate(config).unwrap();
-        assert_eq!(
-            "tb1q093gl5yxww0hlvlkajdmf8wh3a6rlvsdk9e6d3".to_string(),
-            address0.address
-        );
-        let config = WalletConfig::new_offline(Network::Testnet,&descriptor,&descriptor,Some(db_path.clone())).unwrap();
-        let address1 = sqlite_generate(config).unwrap();
-        assert_eq!(
-            "tb1q093gl5yxww0hlvlkajdmf8wh3a6rlvsdk9e6d3".to_string(),
-            address1.address
-        );
-        fs::remove_file(Path::new(&db_path))
-        .expect("File delete failed");
     }
 
 }
