@@ -96,8 +96,8 @@ mod tests {
         ).unwrap();
 
         let electrum_client = network_config.electrum_url.build_client().unwrap();
-        let response = electrum_client.server_features().unwrap();
-        println!("Server Genesis Hash: {:?}",hex::encode(response.genesis_hash));
-        assert!(false)
+        assert!(electrum_client.ping().is_ok());
+        // let res = client.server_features();
+        // println!("chain genesis block: {:#?}", res.genesis_block);
     }
 }

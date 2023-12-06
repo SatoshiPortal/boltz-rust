@@ -462,7 +462,7 @@ pub struct SwapStatusRequest {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SwapStatusResponse {
-    status: String,
+    pub status: String,
     zero_conf_rejected: Option<bool>,
 }
 
@@ -477,8 +477,10 @@ pub struct GetFeeEstimationResponse {
 
 #[cfg(test)]
 mod tests {
+    use secp256k1::hashes::{sha256, Hash};
+
     use super::*;
-    use crate::ec::KeyPairString;
+    use crate::{ec::KeyPairString, util::rnd_str};
 
     #[tokio::test]
     async fn test_get_pairs() {
@@ -491,8 +493,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(pair_hash,"d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string());
-
-
     }
 
     #[tokio::test]
@@ -504,6 +504,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
+    /// updated invoice before running
     async fn test_normal_swap() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let invoice = "lntb30m1pjhqyqqpp576x9kefhdxz3hzcp3l0cyzjttq7xazhdp28hzxwdc0mq3uec96dqdpyxysysctvvcsxzgz5dahzqmmxyppk7enxv4jsxqrrsscqp79qy9qsqsp595vs7sn5e9hdpxga9ac7x3ah5ku9x4063appk8yp45c85w44ngcsajatrejq8zupa60syckuuanxnhsh8rcyy7ht470c29jsgkqpv3p8m5c4n9jf5ag5rxed5dp5p4aw570ktafsdjeeq0ucmmpenw4lhycpvv4jkr".to_string();
@@ -531,7 +532,7 @@ mod tests {
 
     }
     #[tokio::test]
-    #[ignore]
+    /// No changes required to run
     async fn test_reverse_swap() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let claim_key_pair = KeyPairString {
@@ -539,8 +540,11 @@ mod tests {
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
 
+        let preimage = rnd_str();
+        println!("Preimage: {:?}", preimage);
+        let preimage_hash =  sha256::Hash::hash(&hex::decode(preimage).unwrap()).to_string();
+
         let pair_hash = "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
-        let preimage_hash = "77b4d347ef09644e2bb3a5f5e79a15d3e587c601a4d87087130616e7f6ce1a79".to_string();
 
         let request = CreateSwapRequest::new_reverse(
             SwapType::ReverseSubmarine, 

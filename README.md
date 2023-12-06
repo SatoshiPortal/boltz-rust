@@ -98,16 +98,31 @@ Another old simple rust bitcoin wallet
 
 ## test
 
+Run all tests, except ignored tests
+
 ```bash
 cargo test
 cargo test -- --nocapture # for logs
 ```
 
-`test_*_swap` is ignored by default, always keep them ignored and run the test manually. 
+### ignored tests
 
-To run `test_normal_swap`, make sure to upadate the `invoice`.
+To run complete reverse swap integration test: 
 
-`swapstatus` is tested within `test_*_swap`, however a separate test exists to manually test your swap' status through its lifetime.
+```bash
+cargo test test_rsi -- --nocapture 
+```
+`test_rsi` is interactive. It will block the terminal and prompt you to pay a ln invoice to proceed.
 
-This is also ignored, to run it, make sure you update the `id` accordingly.
+
+```bash
+cargo test test_normal_swap -- --nocapture 
+
+```
+`test_normal_swap` is ignored since it requires always using a new invoice or else it errors with 409
+
+So when manually testing, make sure you update the invoice variable.
+
+For all ignored unit tests read the tests before running.
+
 

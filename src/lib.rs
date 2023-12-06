@@ -20,8 +20,20 @@ mod tests {
     use dotenv::dotenv;
     use bitcoin::hashes::{sha256, Hash};
 
+    use std::io;
+    use std::io::prelude::*;
+
+    fn pause_and_wait() {
+        let mut stdin = io::stdin();
+        let mut stdout = io::stdout();
+        write!(stdout, "Press Enter to continue...").unwrap();
+        stdout.flush().unwrap();
+        let _ = stdin.read_line(&mut String::new()).unwrap();
+    }
+
     #[tokio::test]
-    async fn test_reverse_swap_integration() {
+    #[ignore]
+    async fn test_rsi() {
         const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
         dotenv().ok();
         let mnemonic = match env::var("MNEMONIC") {
@@ -84,7 +96,9 @@ mod tests {
         // assert_eq!(timeout as u64 , response.as_ref().unwrap().timeout_block_height.unwrap().clone());
 
         let timeout = response.as_ref().unwrap().timeout_block_height.unwrap().clone();
-        let id = response.as_ref().unwrap().id.clone();
+        let id = response.as_ref().unwrap().id.as_str().clone();
+        let invoice = response.as_ref().unwrap().invoice.clone().unwrap();
+
         let boltz_script_elements = ReverseSwapRedeemScriptElements::from_str(&response.as_ref().unwrap().redeem_script.as_ref().unwrap().clone()).unwrap();
         // assert!(response.as_ref().unwrap().claim_public_key.as_ref().unwrap().clone() == boltz_script_elements.sender_pubkey);
         let hash160 = ripemd160::Hash::hash(&hex::decode(preimage_hash.to_string()).unwrap());
@@ -98,13 +112,41 @@ mod tests {
 
         assert!(constructed_script_elements == boltz_script_elements);
         // println!("swap id:{}",id);
-        let request = SwapStatusRequest{id: id};
-        let response = boltz_client.swap_status(request).await;
-        assert!(response.is_ok());
 
         let script_balance = electrum_client.script_get_balance(&constructed_script_elements.to_script()).unwrap();
         assert_eq!(script_balance.unconfirmed, 0);
         assert_eq!(script_balance.confirmed, 0);
+        println!("*******PAY********************");
+        println!("*******LN*********************");
+        println!("*******INVOICE****************");
+        println!("{}",invoice);
+        println!("");
+        println!("Once you have paid the invoice, press enter to continue the tests.");
+        println!("******************************");
+
+        loop{
+            pause_and_wait();
+            let request = SwapStatusRequest{id: id.to_string()};
+            let response = boltz_client.swap_status(request).await;
+            assert!(response.is_ok());
+            let swap_status = response.unwrap().status;
+            if swap_status == "swap.created"{
+                println!("Your turn: Pay the invoice");
+
+            }
+            if swap_status == "transaction.mempool"{
+                println!("*******BOLTZ******************");
+                println!("*******ONCHAIN-TX*************");
+                println!("*******DETECTED***************");
+            }
+            if swap_status == "transaction.confirmed"{
+                println!("*******BOLTZ******************");
+                println!("*******ONCHAIN-TX*************");
+                println!("*******CONFIRMED**************");
+                break
+            }
+        }
+        assert!(false);
 
     }
     
