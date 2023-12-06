@@ -1,3 +1,5 @@
+use std::{num::ParseIntError, str::FromStr};
+
 use bitcoin::{
     blockdata::script::{Script,ScriptBuf,Builder, Instruction}, 
     opcodes::{all::{*}, OP_0},
@@ -23,114 +25,239 @@ use bitcoin::{
 };
 
 
-#[derive(Debug)]
-pub struct DecodedNormalBTCSwapRedeemScript {
+#[derive(Debug, PartialEq)]
+pub struct SwapRedeemScriptElements {
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
 }
 
-pub fn decode_normal_btc_swap_script(redeem_script_str: String)->Option<DecodedNormalBTCSwapRedeemScript>{
-    let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
-    let script = Script::from_bytes(&script_bytes);
-    let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
-    // println!("ADDRESS DECODED: {:?}",address);
-    let script_hash = script.script_hash();
-    let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
-    // println!("DECODED SCRIPT HASH: {}",sh_str);
-    let instructions = script.instructions();
-    let mut last_op = OP_0;
-    let mut hashlock = None;
-    let mut reciever_pubkey = None;
-    let mut timelock = None;
-    let mut sender_pubkey = None;
 
-    for instruction in instructions {
-        match instruction {
-            Ok(Instruction::Op(opcode)) => {
-                last_op = opcode;
-            },
-            Ok(Instruction::PushBytes(bytes)) => {
-                if last_op == OP_HASH160 {
-                    hashlock = Some(hex::encode(bytes.as_bytes()));
-                }
-                if last_op == OP_IF {
-                    reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
-                }
-                if last_op == OP_ELSE {
-                    timelock = Some(bytes_to_u32_little_endian(&bytes.as_bytes()));
-                }
-                if last_op == OP_DROP {
-                    sender_pubkey = Some(hex::encode(bytes.as_bytes()));
-                    
-                }
+impl FromStr for SwapRedeemScriptElements {
+    type Err = String; // Change this to a more suitable error type as needed
 
-            },
-            Err(e) => println!("Error: {:?}", e),
+    fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
+        let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
+        let script = Script::from_bytes(&script_bytes);
+        // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
+        // println!("ADDRESS DECODED: {:?}",address);
+        // let script_hash = script.script_hash();
+        // let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
+        // println!("DECODED SCRIPT HASH: {}",sh_str);
+        let instructions = script.instructions();
+        let mut last_op = OP_0;
+        let mut hashlock = None;
+        let mut reciever_pubkey = None;
+        let mut timelock = None;
+        let mut sender_pubkey = None;
+
+        for instruction in instructions {
+            match instruction {
+                Ok(Instruction::Op(opcode)) => {
+                    last_op = opcode;
+                    println!("{:?}", opcode)
+                },
+                
+                Ok(Instruction::PushBytes(bytes)) => {
+                    if last_op == OP_HASH160 {
+                        hashlock = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    if last_op == OP_IF {
+                        reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    if last_op == OP_ELSE {
+                        timelock = Some(bytes_to_u32_little_endian(&bytes.as_bytes()));
+                    }
+                    if last_op == OP_DROP {
+                        sender_pubkey = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    println!("{:?}", bytes)
+                },
+                Err(e) => println!("Error: {:?}", e),
+            }
         }
-    }
 
-    if hashlock.is_some() && sender_pubkey.is_some() && timelock.is_some() && sender_pubkey.is_some() {
-        Some(DecodedNormalBTCSwapRedeemScript{
-            hashlock: hashlock.unwrap(),
-            reciever_pubkey: reciever_pubkey.unwrap(),
-            timelock: timelock.unwrap(),
-            sender_pubkey: sender_pubkey.unwrap(),
-        })
+        if hashlock.is_some() && sender_pubkey.is_some() && timelock.is_some() && sender_pubkey.is_some() {
+            Ok(SwapRedeemScriptElements{
+                hashlock: hashlock.unwrap(),
+                reciever_pubkey: reciever_pubkey.unwrap(),
+                timelock: timelock.unwrap(),
+                sender_pubkey: sender_pubkey.unwrap(),
+            })
+        }
+        else {
+            Err(format!("Could not extract all elements: {:?} {:?} {:?} {:?}",hashlock,reciever_pubkey,timelock,sender_pubkey))
+        }
+    
     }
-    else {
-        None
+}
+impl  SwapRedeemScriptElements{
+    pub fn to_script(
+        &self,
+    ) -> ScriptBuf {
+        /* 
+            HASH160 <hash of the preimage> 
+            EQUAL
+            IF <reciever public key>
+            ELSE <timeout block height> 
+            CHECKLOCKTIMEVERIFY
+            DROP <sender public key> 
+            ENDIF
+            CHECKSIG
+        */
+        let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
+        let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+        let locktime = LockTime::from_consensus(self.timelock);
+        let hashvalue = Hash::from_str(&self.hashlock).unwrap();
+        let hashbytes: [u8;20] = *hashvalue.as_ref();
+
+        let script = Builder::new()
+        .push_opcode(OP_HASH160)
+            .push_slice(hashbytes)
+        .push_opcode(OP_EQUAL)
+        .push_opcode(OP_IF)
+            .push_key(&reciever_pubkey)
+        .push_opcode(OP_ELSE)
+            .push_lock_time(locktime)
+        .push_opcode(OP_CLTV)
+        .push_opcode(OP_DROP)
+            .push_key(&sender_pubkey)
+        .push_opcode(OP_ENDIF)
+        .push_opcode(OP_CHECKSIG)
+        .into_script();
+
+        script
+
     }
 }
 
-pub fn create_btc_swap_script(
-    hashvalue: Hash,
-    reciever_pubkey: PublicKey,
-    sender_pubkey: PublicKey,
-    locktime: LockTime,
-) -> ScriptBuf {
-    /* 
-        HASH160 <hash of the preimage> 
-        EQUAL
-        IF <reciever public key>
-        ELSE <timeout block height> 
-        CHECKLOCKTIMEVERIFY
-        DROP <sender public key> 
-        ENDIF
-        CHECKSIG
-    */
-    let hashbytes: [u8;20] = *hashvalue.as_ref();
+#[derive(Debug, PartialEq)]
+pub struct ReverseSwapRedeemScriptElements {
+    pub hashlock: String,
+    pub reciever_pubkey: String,
+    pub timelock: u32,
+    pub sender_pubkey: String,
+}
 
-    let script = Builder::new()
-    .push_opcode(OP_HASH160)
-        .push_slice(hashbytes)
-    .push_opcode(OP_EQUAL)
-    .push_opcode(OP_IF)
-        .push_key(&reciever_pubkey)
-    .push_opcode(OP_ELSE)
-        .push_lock_time(locktime)
-    .push_opcode(OP_CLTV)
-    .push_opcode(OP_DROP)
-        .push_key(&sender_pubkey)
-    .push_opcode(OP_ENDIF)
-    .push_opcode(OP_CHECKSIG)
-    .into_script();
 
-    // for instruction in script.instructions() {
-    //     match instruction {
-    //         Ok(Instruction::Op(opcode)) => {
-    //             println!("Opcode: {:?}", opcode)
-    //         },
-    //         Ok(Instruction::PushBytes(bytes)) => {
-    //             println!("PushBytes: {:?}", bytes.as_bytes());
-    //         },
-    //         Err(e) => println!("Error: {:?}", e),
-    //     }
-    // };
+impl FromStr for ReverseSwapRedeemScriptElements {
+    type Err = String; // Change this to a more suitable error type as needed
 
-    script
+    fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
+        let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
+        let script = Script::from_bytes(&script_bytes);
+        // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
+        // println!("ADDRESS DECODED: {:?}",address);
+        // let script_hash = script.script_hash();
+        // let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
+        // println!("DECODED SCRIPT HASH: {}",sh_str);
+        let instructions = script.instructions();
+        let mut last_op = OP_0;
+        let mut hashlock = None;
+        let mut reciever_pubkey = None;
+        let mut timelock = None;
+        let mut sender_pubkey = None;
 
+        for instruction in instructions {
+            match instruction {
+                Ok(Instruction::Op(opcode)) => {
+                    last_op = opcode;
+                    println!("{:?}", opcode)
+                },
+                
+                Ok(Instruction::PushBytes(bytes)) => {
+                    if last_op == OP_HASH160 {
+                        hashlock = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    if last_op == OP_EQUALVERIFY {
+                        reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    if last_op == OP_DROP {
+                        if bytes.len() == 3 as usize {
+                            timelock = Some(bytes_to_u32_little_endian(&bytes.as_bytes()));
+                        } else {
+                            sender_pubkey = Some(hex::encode(bytes.as_bytes()));
+                        }
+                    }
+                    println!("{:?}: LENGTH: {}", bytes, bytes.len() )
+                },
+                Err(e) => println!("Error: {:?}", e),
+            }
+        }
+
+        if hashlock.is_some() && sender_pubkey.is_some() && timelock.is_some() && sender_pubkey.is_some() {
+            Ok(ReverseSwapRedeemScriptElements{
+                hashlock: hashlock.unwrap(),
+                reciever_pubkey: reciever_pubkey.unwrap(),
+                timelock: timelock.unwrap(),
+                sender_pubkey: sender_pubkey.unwrap(),
+            })
+        }
+        else {
+            Err(format!("Could not extract all elements: {:?} {:?} {:?} {:?}",hashlock,reciever_pubkey,timelock,sender_pubkey))
+        }
+    
+    }
+}
+impl  ReverseSwapRedeemScriptElements{
+    pub fn to_script(
+        &self,
+    ) -> ScriptBuf {
+        /* 
+            HASH160 <hash of the preimage> 
+            EQUAL
+            IF <reciever public key>
+            ELSE <timeout block height> 
+            CHECKLOCKTIMEVERIFY
+            DROP <sender public key> 
+            ENDIF
+            CHECKSIG
+            OP_SIZE
+            PushBytes([32])
+            OP_EQUAL
+            OP_IF
+            OP_HASH160
+            PushBytes([244, 244, 122, 139, 184, 3, 198, 182, 253, 18, 185, 160, 0, 212, 234, 193, 126, 41, 82, 110])
+            OP_EQUALVERIFY
+            PushBytes([3, 79, 102, 171, 30, 21, 230, 77, 29, 53, 181, 128, 54, 113, 65, 190, 205, 250, 11, 233, 223, 228, 60, 217, 122, 156, 248, 92, 129, 194, 175, 144, 136])
+            OP_ELSE
+            OP_DROP
+            PushBytes([184, 201, 38])
+            OP_CLTV
+            OP_DROP
+            PushBytes([2, 193, 110, 249, 28, 32, 166, 107, 46, 52, 190, 84, 179, 79, 126, 72, 116, 26, 212, 104, 253, 219, 88, 195, 144, 127, 176, 106, 223, 73, 159, 238, 121])
+            OP_ENDIF
+            OP_CHECKSIG
+        */
+        let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
+        let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+        let locktime = LockTime::from_consensus(self.timelock);
+        let hashvalue = Hash::from_str(&self.hashlock).unwrap();
+        let hashbytes: [u8;20] = *hashvalue.as_ref();
+
+        let script = Builder::new()
+        .push_opcode(OP_SIZE)
+            .push_slice([32])
+        .push_opcode(OP_EQUAL)
+        .push_opcode(OP_IF)
+        .push_opcode(OP_HASH160)
+            .push_slice(hashbytes)
+        .push_opcode(OP_EQUALVERIFY)
+            .push_key(&reciever_pubkey)
+        .push_opcode(OP_ELSE)
+        .push_opcode(OP_DROP)
+            .push_lock_time(locktime)
+        .push_opcode(OP_CLTV)
+        .push_opcode(OP_DROP)
+            .push_key(&sender_pubkey)
+        .push_opcode(OP_ENDIF)
+        .push_opcode(OP_CHECKSIG)
+        .into_script();
+
+        script
+
+    }
 }
 
 fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
@@ -141,13 +268,13 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
     result
 }
 
-fn find_difference(s1: &str, s2: &str) -> Vec<(usize, char, char)> {
-    s1.char_indices()
-        .zip(s2.chars())
-        .filter(|((_, char1), char2)| char1 != char2)
-        .map(|((i, char1), char2)| (i, char1, char2))
-        .collect()
-}
+// fn find_difference(s1: &str, s2: &str) -> Vec<(usize, char, char)> {
+//     s1.char_indices()
+//         .zip(s2.chars())
+//         .filter(|((_, char1), char2)| char1 != char2)
+//         .map(|((i, char1), char2)| (i, char1, char2))
+//         .collect()
+// }
 
 #[cfg(test)]
 mod tests {
@@ -213,23 +340,21 @@ mod tests {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
         };
-        let decoded = decode_normal_btc_swap_script(redeem_script_str.clone()).unwrap();
+        let decoded = SwapRedeemScriptElements::from_str(&redeem_script_str.clone()).unwrap();
         println!("{:?}", decoded);
         assert!(decoded.sender_pubkey == sender_key_pair.pubkey);
         assert!(decoded.timelock == expected_timeout);
 
-        let reciever_pubkey = PublicKey::from_str(&decoded.reciever_pubkey).unwrap();
-        let sender_pubkey = PublicKey::from_str(&decoded.sender_pubkey).unwrap();
-        let hashvalue = Hash::from_str(&decoded.hashlock).unwrap();
-        let timelock = LockTime::from_consensus(decoded.timelock);
-
-        let encoded = create_btc_swap_script(hashvalue, reciever_pubkey, sender_pubkey, timelock);
+        let encoded = SwapRedeemScriptElements{
+            hashlock: decoded.hashlock,
+            reciever_pubkey:  decoded.reciever_pubkey,
+            sender_pubkey: decoded.sender_pubkey,
+            timelock:  decoded.timelock
+        }.to_script();
         let script_hash = encoded.script_hash();
         let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
         println!("ENCODED SCRIPT HASH: {}",sh_str);
         println!("ENCODED HEX: {}",encoded.to_hex_string());
-        let diff = find_difference(encoded.to_hex_string().as_str() , redeem_script_str.as_str());
-        println!("{:?}",diff);
         let address = Address::p2shwsh(&encoded, bitcoin::Network::Testnet);
         println!("ADDRESS FROM ENCODED: {:?}",address.to_string());
         assert!(address.to_string() == expected_address);
