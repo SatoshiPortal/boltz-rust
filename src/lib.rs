@@ -4,10 +4,9 @@ pub mod config;
 pub mod seed;
 pub mod derivation;
 pub mod ec;
-pub mod hash;
+pub mod util;
 pub mod script;
 pub mod address;
-pub mod policy;
 pub mod sync;
 
 #[cfg(test)]
