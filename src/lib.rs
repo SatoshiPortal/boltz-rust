@@ -167,7 +167,7 @@ mod tests {
      * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.SecretKey.html
      *
      * seed (words) -> master (root_xprv) -> child (child_xprv) -> keypair
-     *  
+     *  m
      */
 
 
