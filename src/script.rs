@@ -145,7 +145,6 @@ pub struct ReverseSwapRedeemScriptElements {
     pub sender_pubkey: String,
 }
 
-
 impl FromStr for ReverseSwapRedeemScriptElements {
     type Err = String; // Change this to a more suitable error type as needed
 
@@ -206,9 +205,19 @@ impl FromStr for ReverseSwapRedeemScriptElements {
     }
 }
 impl  ReverseSwapRedeemScriptElements{
+    pub fn new(hashlock: String, reciever_pubkey: String, timelock: u32, sender_pubkey: String)->Self{
+        ReverseSwapRedeemScriptElements{
+            hashlock,
+            reciever_pubkey,
+            timelock,
+            sender_pubkey,
+        }
+    }
+
     pub fn to_script(
         &self,
     ) -> ScriptBuf {
+        // Script ~= ScriptBufs
         /* 
             OP_SIZE
             [32]

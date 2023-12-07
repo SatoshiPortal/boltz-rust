@@ -1,7 +1,7 @@
 # bullbitcoin-rnd
 
-The goal of this project is to develop a working boltz client that supports:
-
+The goal of this  is to develop a working boltz client that supports:
+project
 - [ ] normal submarine swaps: Chain->LN for both Bitcoin & Liquid
 Here we will pay an onchain script address for boltz and boltz will pay our LN invoice.
 
@@ -13,12 +13,31 @@ Here we will pay an LN invoice to boltz and boltz will fund an onchain script fo
 
 This requires building a `one-time use and dispose wallet` for the following bitcoin script (p2shwsh ONLY):
 
+NORMAL SWAP:
+
 ```
     HASH160 <hash of the preimage> 
     EQUAL
     IF <reciever public key>
     ELSE <timeout block height> 
     CHECKLOCKTIMEVERIFY
+    DROP <sender public key> 
+    ENDIF
+    CHECKSIG
+```
+
+REVERSE SWAP:
+
+```
+    SIZE
+    [32]
+    EQUAL
+    IF
+    HASH160 <hash of the preimage>
+    EQUALVERIFY <reciever public key>
+    ELSE
+    DROP <timeout block height>
+    CLTV
     DROP <sender public key> 
     ENDIF
     CHECKSIG

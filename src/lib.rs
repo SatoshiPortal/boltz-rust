@@ -96,23 +96,27 @@ mod tests {
         let id = response.as_ref().unwrap().id.as_str().clone();
         let invoice = response.as_ref().unwrap().invoice.clone().unwrap();
         let lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
+        let redeem_script_string = response.as_ref().unwrap().redeem_script.as_ref().unwrap().clone();
 
-        let boltz_script_elements = ReverseSwapRedeemScriptElements::from_str(&response.as_ref().unwrap().redeem_script.as_ref().unwrap().clone()).unwrap();
+        let boltz_script_elements = ReverseSwapRedeemScriptElements::from_str(&redeem_script_string).unwrap();
         // assert!(response.as_ref().unwrap().claim_public_key.as_ref().unwrap().clone() == boltz_script_elements.sender_pubkey);
         let hash160 = ripemd160::Hash::hash(&hex::decode(preimage_hash.to_string()).unwrap());
-        let constructed_script_elements = ReverseSwapRedeemScriptElements{
-            hashlock: hash160.to_string(),
-            reciever_pubkey: string_keypair.pubkey.clone(),
-            timelock: timeout as u32,
-            sender_pubkey: boltz_script_elements.sender_pubkey.clone(),
-        };
+
+        let constructed_script_elements = ReverseSwapRedeemScriptElements::new(
+            hash160.to_string(),
+            string_keypair.pubkey.clone(),
+            timeout as u32,
+            boltz_script_elements.sender_pubkey.clone(),
+        );
         println!("{:?} , {:?}", constructed_script_elements, boltz_script_elements);
 
         assert!(constructed_script_elements == boltz_script_elements);
+        
         let constructed_address = constructed_script_elements.to_address(Network::Testnet);
         println!("{}", constructed_address.to_string());
-        assert!(constructed_address.to_string() == lockup_address);
+        assert_eq!(constructed_address.to_string() , lockup_address);
 
+        
         let script_balance = electrum_client.script_get_balance(&constructed_script_elements.to_script()).unwrap();
         assert_eq!(script_balance.unconfirmed, 0);
         assert_eq!(script_balance.confirmed, 0);
@@ -130,6 +134,7 @@ mod tests {
             let response = boltz_client.swap_status(request).await;
             assert!(response.is_ok());
             let swap_status = response.unwrap().status;
+            
             if swap_status == "swap.created"{
                 println!("Your turn: Pay the invoice");
 
@@ -138,16 +143,40 @@ mod tests {
                 println!("*******BOLTZ******************");
                 println!("*******ONCHAIN-TX*************");
                 println!("*******DETECTED***************");
+
             }
             if swap_status == "transaction.confirmed"{
                 println!("*******BOLTZ******************");
                 println!("*******ONCHAIN-TX*************");
                 println!("*******CONFIRMED**************");
+                // claim the transaction
+
                 break
             }
         }
         assert!(false);
 
     }
+   
+  #[test]
+  fn test_playground(){
+    /*
+     * 
+     * create an ecdsa signature for this message with the keys provided
+     * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.Keypair.html
+     * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.SecretKey.html
+     *
+     * seed (words) -> master (root_xprv) -> child (child_xprv) -> keypair
+     *  
+     */
+
+
+    let key_pair_string = KeyPairString { 
+        seckey: "f37f95f01f3a28ba2bf4054e56b0cc217dd0b48edfd75a205cc2a96c20876a1b".to_string(), 
+        pubkey: "037bdb90d61d1100664c4aaf0ea93fb71c87433f417e93294e08ae9859910efcea".to_string() 
+    };
     
+    let message = "Hello from Stackmate!";
+
+  } 
 }

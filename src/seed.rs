@@ -17,22 +17,6 @@ pub struct MasterKey {
   pub xprv: String,
 }
 
-impl MasterKey {
-  pub fn c_stringify(&self) -> *mut c_char {
-    let stringified = match serde_json::to_string(self) {
-      Ok(result) => result,
-      Err(e) => {
-        eprint!("{:#?}", e.to_string());
-        return CString::new("Error:JSON Stringify Failed. BAD NEWS! Contact Support.")
-          .unwrap()
-          .into_raw();
-      }
-    };
-
-    CString::new(stringified).unwrap().into_raw()
-  }
-}
-
 pub fn generate(
   passphrase: &str, 
   network: Network
@@ -103,4 +87,5 @@ mod tests {
     assert_eq!(imported_master_key.xprv, master_key.xprv);
     assert_eq!(imported_master_key.fingerprint, master_key.fingerprint);
   }
+
 }

@@ -17,18 +17,6 @@ pub struct KeyPairString {
   pub pubkey: String,
 }
 impl KeyPairString {
-  pub fn c_stringify(&self) -> *mut c_char {
-    let stringified = match serde_json::to_string(self) {
-      Ok(result) => result,
-      Err(_) => {
-        return CString::new("Error:JSON Stringify Failed. BAD NEWS! Contact Support.")
-          .unwrap()
-          .into_raw()
-      }
-    };
-
-    CString::new(stringified).unwrap().into_raw()
-  }
   pub fn from_keypair(keypair: KeyPair) -> KeyPairString {
     return KeyPairString {
       seckey: hex::encode(keypair.secret_bytes()).to_string(),
