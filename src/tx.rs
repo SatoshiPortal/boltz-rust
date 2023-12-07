@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
     use std::{str::FromStr, env};
-    use bitcoin::{Network, OutPoint, Txid, Transaction, consensus::{Decodable, deserialize}, TxOut, TxIn, Sequence, ScriptBuf, Witness, Address, absolute::{Height, LockTime}};
+    use bitcoin::{Network, OutPoint, Txid, Transaction, consensus::{Decodable, deserialize}, TxOut, TxIn, Sequence, ScriptBuf, Witness, Address, absolute::{Height, LockTime}, sighash::SighashCache};
     use electrum_client::ElectrumApi;
     use bitcoin::psbt::Psbt;
-    use secp256k1::hashes::hex::FromHex;
+    use secp256k1::{hashes::hex::FromHex, Message, Secp256k1};
     use crate::{ec::{KeyPairString, keypair_from_xprv_str}, derivation::{DerivationPurpose, to_hardened_account}, seed::import, script::ReverseSwapRedeemScriptElements, electrum::NetworkConfig};
     use super::*;
 
@@ -36,6 +36,7 @@ mod tests {
             seckey: "f37f95f01f3a28ba2bf4054e56b0cc217dd0b48edfd75a205cc2a96c20876a1b".to_string(), 
             pubkey: "037bdb90d61d1100664c4aaf0ea93fb71c87433f417e93294e08ae9859910efcea".to_string() 
         };
+        let key_pair = key_pair_string.to_typed();
         let redeem_script_str = "8201208763a9140ba9f02ac085c062d72db3c1ca5a448b75537a1c8821037bdb90d61d1100664c4aaf0ea93fb71c87433f417e93294e08ae9859910efcea677503f8c926b1752102ee2ebf016f67732a95ee6751eede736c433325f29470fde26fb6d8d2d7f0513168ac";
 
         let script_elements = ReverseSwapRedeemScriptElements::from_str(redeem_script_str).unwrap();
@@ -63,23 +64,43 @@ mod tests {
         let tx_in_0: TxIn = TxIn { previous_output: outpoint_10000, script_sig: ScriptBuf::new(),sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, witness: Witness::new() };
         let tx_in_1: TxIn = TxIn { previous_output: outpoint_5000, script_sig: ScriptBuf::new(),sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, witness: Witness::new() };
         let tx_out_0: TxOut = TxOut {script_pubkey:return_address.payload.script_pubkey(), value: 14_000};
-        
+        let secp = Secp256k1::new();
+
         let sweep_tx = Transaction{
             version : 0, 
             lock_time: LockTime::from_consensus(script_elements.timelock),
             input: vec![tx_in_0,tx_in_1],
             output: vec![tx_out_0],
         };
-        let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
-        println!("{:?}",sweep_psbt);
+        let sighash_0 = Message::from_slice(
+            &SighashCache::new(sweep_tx.clone()).segwit_signature_hash(
+                0,
+                &script_elements.to_script(),
+                10_000,
+                bitcoin::sighash::EcdsaSighashType::All,
+            ).unwrap()[..],
+        ).unwrap();
+        let _signature_0 = secp.sign_ecdsa(&sighash_0, &key_pair.secret_key());
 
-        // let txid: ;
-        // let vout = utxos[0].tx_pos;
-
+        let sighash_1 = Message::from_slice(
+            &SighashCache::new(sweep_tx.clone()).segwit_signature_hash(
+                1,
+                &script_elements.to_script(),
+                5_000,
+                bitcoin::sighash::EcdsaSighashType::All,
+            ).unwrap()[..],
+        ).unwrap();
+        let _signature_1 = secp.sign_ecdsa(&sighash_1, &key_pair.secret_key());
 
         
-        // Script, Address
-        // Transaction, SigHashCache
+        let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
+        println!("{:?}",sweep_psbt);
+        /*
+         * REFERENCES
+         * https://github.com/BoltzExchange/boltz-core/blob/master/lib/swap/Claim.ts#L63
+         * 
+         * https://github.com/bitcoin-teleport/teleport-transactions/blob/master/src/contracts.rs#L516C8-L516C24
+         */
         
     }
 }

@@ -86,7 +86,7 @@ For the sake of unifying the implementation challenge, we will look at the stand
 - [x] ensure our script matches the `redeemScript` provided by boltz
 - [x] pay the `invoice` (use local clightning)
 - [ ] boltz will confirm `invoice` paid and send funds to the `address` creating a utxo that we can spend
-- [ ] construct a transaction to spend this utxo
+- [x] construct a transaction/psbt to spend this utxo
 - [ ] solve spending conditions: hashlock + signature
 - [ ] sweep the utxo to your existing bitcoin wallet
 - [ ] once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice` 
@@ -154,5 +154,4 @@ cargo test test_normal_swap -- --nocapture
 So when manually testing, make sure you update the invoice variable.
 
 For all ignored unit tests read the tests before running.
-
 

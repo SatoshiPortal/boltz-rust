@@ -1,3 +1,4 @@
+use bitcoin::psbt::raw::Key;
 use serde::{Deserialize, Serialize};
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -22,6 +23,11 @@ impl KeyPairString {
       seckey: hex::encode(keypair.secret_bytes()).to_string(),
       pubkey: keypair.public_key().to_string(),
     };
+  }
+  pub fn to_typed(&self)-> KeyPair {
+    let secp = Secp256k1::new();
+    let seckey = SecretKey::from_str(&self.seckey).unwrap();
+    KeyPair::from_secret_key(&secp, &seckey)
   }
 }
 
