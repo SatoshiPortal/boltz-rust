@@ -205,28 +205,16 @@ impl  ReverseSwapRedeemScriptElements{
         &self,
     ) -> ScriptBuf {
         /* 
-            HASH160 <hash of the preimage> 
-            EQUAL
-            IF <reciever public key>
-            ELSE <timeout block height> 
-            CHECKLOCKTIMEVERIFY
-            DROP <sender public key> 
-            ENDIF
-            CHECKSIG
             OP_SIZE
-            PushBytes([32])
+            [32]
             OP_EQUAL
             OP_IF
-            OP_HASH160
-            PushBytes([244, 244, 122, 139, 184, 3, 198, 182, 253, 18, 185, 160, 0, 212, 234, 193, 126, 41, 82, 110])
-            OP_EQUALVERIFY
-            PushBytes([3, 79, 102, 171, 30, 21, 230, 77, 29, 53, 181, 128, 54, 113, 65, 190, 205, 250, 11, 233, 223, 228, 60, 217, 122, 156, 248, 92, 129, 194, 175, 144, 136])
+            OP_HASH160 <hash of the preimage>
+            OP_EQUALVERIFY <reciever public key>
             OP_ELSE
-            OP_DROP
-            PushBytes([184, 201, 38])
+            OP_DROP <timeout block height>
             OP_CLTV
-            OP_DROP
-            PushBytes([2, 193, 110, 249, 28, 32, 166, 107, 46, 52, 190, 84, 179, 79, 126, 72, 116, 26, 212, 104, 253, 219, 88, 195, 144, 127, 176, 106, 223, 73, 159, 238, 121])
+            OP_DROP <sender public key> 
             OP_ENDIF
             OP_CHECKSIG
         */

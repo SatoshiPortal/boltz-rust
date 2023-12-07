@@ -31,25 +31,29 @@ Either; a preimage and the reciever's signature is required // happy case
 Or; after a timeout the senders signature is required. // dispute
 ```
 
-The `reciever` will be able to claim the funds on chain and in our case this would be us in case of a reverse swap and this would be boltz in case of a normal swap.
+The `reciever` will be able to claim the funds on chain,
+We are the reciever in case of a reverse swap and this would be boltz in case of a normal swap.
 
-The `sender` will be able to claim funds on LN, once the reciever claims the onchain funds and reveals the preimage. This would be us in case of a normal swap and boltz in the case of a reverse swap.
-
+The `sender` will be able to claim funds on LN, once the reciever claims the onchain funds and reveals the preimage. 
+We are the sender in case of a normal swap and boltz in the case of a reverse swap.
 
 ## Procedure
 
 There is no requirement for a database as we will not persist and data.
 
-We simply create keys, build a script, generate a single address correspoding to this key, watch the address for a payment and spend the utxo by building a transaction, solving the spending conditions and broadcasting. We do not need to store transaction history or address indexes etc.
+We simply create keys, build a script, generate a single address correspoding to this key, watch the address for a payment and spend the utxo by building a transaction, solving the spending conditions and broadcasting. 
+We do not need to store transaction history or address indexes etc.
 
-In case of `normal swaps`; the client (us) will ONLY be required to create the swap script and spend it in case boltz cheats and we need to claim back funds onchain from the script after a timeout. This will be a rare occurence. In the happy case, everything goes well, boltz pays our invoice and claims the onchain funds.
-With reference to the above script, we would be the `sender` here; and can only spend after a timeout incase of a dispute.
+In case of `normal swaps`; In the happy case, everything goes well, boltz pays our invoice and claims the onchain funds.
+The client (us) will ONLY be required to create the swap script and spend it in case boltz cheats and we need to claim back funds onchain from the script after a timeout. 
+We would be the `sender`; and can only spend after a timeout incase of a dispute.
 
-In case of `reverse swaps`; the client (us) will ALWAYS be required to build and spend from the script to claim onchain funds. With reference to the above script, we would be the `receiver` here; and the solution to the reverse swap is the `preimage` of a hash and a `signature` from a key.
+In case of `reverse swaps`; In the happy case, the client (us) will ALWAYS be required to build and spend from the script to claim onchain funds. 
+We would be the `receiver` ; and the solution we have to create to the reverse swap is the `preimage` of a hash and a `signature` from our key.
 
-For the most parts, normal swaps only requires interaction with the boltz.exchange api, making it quite straight forward. In case of a dispute and we need to claim back funds, we will need to build the script and spend it. 
+For the most parts, normal swaps only requires interaction with the boltz.exchange api, making it quite straight forward. In case of a dispute and we need to claim back funds, we will need to build the script and spend it.
 
-For the sake of simplification, we will look at the standard procedure when doing a `reverse swap` as it is more involved.
+For the sake of unifying the implementation challenge, we will look at the standard procedure when doing a `reverse swap` happy case.
 
 - [x] Create a `keypair.{seckey,pubkey}`
 - [x] Create a random secret (preimage)
@@ -96,7 +100,13 @@ A simple rust bitcoin wallet
 - [rust-bitcoin-wallet](https://github.com/stevenroose/rust-bitcoin-wallet)
 Another old simple rust bitcoin wallet
 
+- [bdk](https://docs.rs/bdk/latest/bdk/)
+A descriptor library that uses bitcoin, miniscript and electrum-client
+
 ## test
+
+The best place to start diving into this repo is `src/lib.rs` and check out `test_rsi`. 
+This contains the entire flow of the reverse swap procedure above.
 
 Run all tests, except ignored tests
 
@@ -112,7 +122,8 @@ To run complete reverse swap integration test:
 ```bash
 cargo test test_rsi -- --nocapture 
 ```
-`test_rsi` is interactive. It will block the terminal and prompt you to pay a ln invoice to proceed.
+`test_rsi` is interactive. 
+It will block the terminal and prompt you to pay a ln invoice to proceed.
 
 
 ```bash

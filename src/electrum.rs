@@ -97,7 +97,7 @@ mod tests {
 
         let electrum_client = network_config.electrum_url.build_client().unwrap();
         assert!(electrum_client.ping().is_ok());
-        // let res = client.server_features();
-        // println!("chain genesis block: {:#?}", res.genesis_block);
+        // let res = electrum_client.server_features().unwrap();
+        // println!("chain genesis block: {:#?}", res.genesis_hash);
     }
 }
