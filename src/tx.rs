@@ -38,7 +38,7 @@ mod tests {
         assert_eq!(address.to_string() , lockup_address);
         let script_balance = electrum_client.script_get_balance(&script_elements.to_script().to_v0_p2wsh()).unwrap();
         println!("Balance: {:?}", script_balance);
-
-        
+        let utxos = electrum_client.script_list_unspent(&script_elements.to_script().to_v0_p2wsh()).unwrap();
+        println!("Utxos: {:?}", utxos);
     }
 }

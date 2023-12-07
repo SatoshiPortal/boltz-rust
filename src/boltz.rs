@@ -563,7 +563,6 @@ mod tests {
         let request = SwapStatusRequest{id: id};
         let response = client.swap_status(request).await;
         assert!(response.is_ok());
-
     }
     #[tokio::test]
     #[ignore]
@@ -573,7 +572,6 @@ mod tests {
         let request = SwapStatusRequest{id: id};
         let response = client.swap_status(request).await;
         assert!(response.is_ok());
-
     }
     
 }

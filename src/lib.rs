@@ -1,13 +1,10 @@
 pub mod e;
 pub mod boltz;
-pub mod config;
 pub mod seed;
 pub mod derivation;
 pub mod ec;
 pub mod util;
 pub mod script;
-pub mod address;
-pub mod sync;
 pub mod electrum;
 pub mod tx;
 
@@ -17,7 +14,7 @@ mod tests {
     use bitcoin::Network;
     use electrum_client::ElectrumApi;
     use secp256k1::{rand::{thread_rng, Rng}, hashes::ripemd160};
-    use crate::{config::WalletConfig, address, seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, util::rnd_str, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, script::{ SwapRedeemScriptElements, self, ReverseSwapRedeemScriptElements, }, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
+    use crate::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, util::rnd_str, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, script::{ SwapRedeemScriptElements, self, ReverseSwapRedeemScriptElements, }, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
     use dotenv::dotenv;
     use bitcoin::hashes::{sha256, Hash};
 
