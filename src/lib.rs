@@ -9,6 +9,7 @@ pub mod script;
 pub mod address;
 pub mod sync;
 pub mod electrum;
+pub mod tx;
 
 #[cfg(test)]
 mod tests {
@@ -41,12 +42,11 @@ mod tests {
             Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
         };
         println!("{}", mnemonic);
-
         let master_key = import(&mnemonic, "" , Network::Testnet).unwrap();
-        let child_key = to_hardened_account(&master_key.xprv, DerivationPurpose::Compatible, 0).unwrap();
+        let child_key = to_hardened_account(&master_key.xprv, DerivationPurpose::Native, 0).unwrap();
         let ec_key = keypair_from_xprv_str(&child_key.xprv).unwrap();
         let string_keypair = KeyPairString::from_keypair(ec_key);
-
+        println!("{:?}",string_keypair);
         let preimage = rnd_str();
         println!("Preimage: {:?}", preimage);
         let preimage_hash =  sha256::Hash::hash(&hex::decode(preimage).unwrap());
@@ -98,6 +98,7 @@ mod tests {
         let timeout = response.as_ref().unwrap().timeout_block_height.unwrap().clone();
         let id = response.as_ref().unwrap().id.as_str().clone();
         let invoice = response.as_ref().unwrap().invoice.clone().unwrap();
+        let lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
 
         let boltz_script_elements = ReverseSwapRedeemScriptElements::from_str(&response.as_ref().unwrap().redeem_script.as_ref().unwrap().clone()).unwrap();
         // assert!(response.as_ref().unwrap().claim_public_key.as_ref().unwrap().clone() == boltz_script_elements.sender_pubkey);
@@ -111,7 +112,9 @@ mod tests {
         println!("{:?} , {:?}", constructed_script_elements, boltz_script_elements);
 
         assert!(constructed_script_elements == boltz_script_elements);
-        // println!("swap id:{}",id);
+        let constructed_address = constructed_script_elements.to_address(Network::Testnet);
+        println!("{}", constructed_address.to_string());
+        assert!(constructed_address.to_string() == lockup_address);
 
         let script_balance = electrum_client.script_get_balance(&constructed_script_elements.to_script()).unwrap();
         assert_eq!(script_balance.unconfirmed, 0);

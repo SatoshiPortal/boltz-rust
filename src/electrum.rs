@@ -47,6 +47,16 @@ pub struct NetworkConfig {
 }
 
 impl NetworkConfig {
+    pub fn default()->Result<Self, S5Error>{
+        NetworkConfig::new(
+            BitcoinNetwork::BitcoinTestnet,
+            DEFAULT_TESTNET_NODE,
+            true,
+            true,
+            false,
+            None,
+        )
+    }
     pub fn new(
         network: BitcoinNetwork,
         electrum_url: &str,

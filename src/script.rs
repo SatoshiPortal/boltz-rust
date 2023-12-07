@@ -130,6 +130,11 @@ impl  SwapRedeemScriptElements{
         script
 
     }
+
+    pub fn to_address(&self, network: bitcoin::Network)->Address{
+        let script = self.to_script();
+        Address::p2shwsh(&script, network)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -163,7 +168,7 @@ impl FromStr for ReverseSwapRedeemScriptElements {
             match instruction {
                 Ok(Instruction::Op(opcode)) => {
                     last_op = opcode;
-                    println!("{:?}", opcode)
+                    // println!("{:?}", opcode)
                 },
                 
                 Ok(Instruction::PushBytes(bytes)) => {
@@ -180,7 +185,7 @@ impl FromStr for ReverseSwapRedeemScriptElements {
                             sender_pubkey = Some(hex::encode(bytes.as_bytes()));
                         }
                     }
-                    println!("{:?}: LENGTH: {}", bytes, bytes.len() )
+                    // println!("{:?}: LENGTH: {}", bytes, bytes.len() )
                 },
                 Err(e) => println!("Error: {:?}", e),
             }
@@ -246,6 +251,10 @@ impl  ReverseSwapRedeemScriptElements{
         script
 
     }
+    pub fn to_address(&self, network: bitcoin::Network)->Address{
+        let script = self.to_script();
+        Address::p2wsh(&script, network)
+    }
 }
 
 fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
@@ -306,8 +315,6 @@ mod tests {
                     if last_op == OP_ELSE {
                         println!("TimeLock: {:?}", bytes_to_u32_little_endian(bytes.as_bytes()));
                         // println!("TimeLock: {:?}", Height::try_from(bytes.as_bytes()));
-
-                        
                     }
                     if last_op == OP_DROP {
                         println!("Sender Pubkey: {:?}", hex::encode(bytes.as_bytes()));
