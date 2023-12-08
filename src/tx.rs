@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
     use std::{str::FromStr, env};
-    use bitcoin::{Network, OutPoint, Txid, Transaction, consensus::{Decodable, deserialize}, TxOut, TxIn, Sequence, ScriptBuf, Witness, Address, absolute::{Height, LockTime}, sighash::SighashCache, script::Builder};
+    use bitcoin::{Network, OutPoint, Txid, Transaction, consensus::{Decodable, deserialize}, TxOut, TxIn, Sequence, ScriptBuf, Witness, Address, absolute::{Height, LockTime}, sighash::SighashCache, script::Builder, Amount};
     use electrum_client::ElectrumApi;
     use bitcoin::psbt::Psbt;
-    use secp256k1::{hashes::hex::FromHex, Message, Secp256k1};
+    use secp256k1::{hashes::{hex::FromHex, Hash}, Message, Secp256k1};
     use crate::{ec::{KeyPairString, keypair_from_xprv_str}, derivation::{DerivationPurpose, to_hardened_account}, seed::import, script::ReverseSwapRedeemScriptElements, electrum::NetworkConfig};
     use super::*;
 
@@ -30,8 +30,8 @@ mod tests {
         const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
         let return_address = Address::from_str(RETURN_ADDRESS).unwrap();
 
-        
         let preimage = "36393139333730383132383738353633303337";
+        let preimage_bytes = hex::decode(preimage).unwrap();
         let key_pair_string = KeyPairString { 
             seckey: "f37f95f01f3a28ba2bf4054e56b0cc217dd0b48edfd75a205cc2a96c20876a1b".to_string(), 
             pubkey: "037bdb90d61d1100664c4aaf0ea93fb71c87433f417e93294e08ae9859910efcea".to_string() 
@@ -57,20 +57,18 @@ mod tests {
             utxos[0].tx_hash, 
             utxos[0].tx_pos as u32,
         );
-        let outpoint_5000 = OutPoint::new(
-            utxos[1].tx_hash, 
-            utxos[1].tx_pos as u32,
-        );
-        let tx_in_0: TxIn = TxIn { previous_output: outpoint_10000, script_sig: ScriptBuf::new(),sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, witness: Witness::new() };
-        // let tx_in_1: TxIn = TxIn { previous_output: outpoint_5000, script_sig: ScriptBuf::new(),sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, witness: Witness::new() };
+
+        let witness = Witness::new();
+        let tx_in_0: TxIn = TxIn { previous_output: outpoint_10000, script_sig: ScriptBuf::new(),sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, witness: witness };
+
         let tx_out_0: TxOut = TxOut {script_pubkey:return_address.payload.script_pubkey(), value: 9_000};
         let secp = Secp256k1::new();
 
         let sweep_tx = Transaction{
             version : 0, 
-            lock_time: LockTime::from_consensus(script_elements.timelock),
+            lock_time: LockTime::from_consensus(0),
             input: vec![tx_in_0],
-            output: vec![tx_out_0],
+            output: vec![tx_out_0.clone()],
         };
         let sighash_0 = Message::from_slice(
             &SighashCache::new(sweep_tx.clone()).segwit_signature_hash(
@@ -81,22 +79,34 @@ mod tests {
             ).unwrap()[..],
         ).unwrap();
         let signature_0 = secp.sign_ecdsa(&sighash_0, &key_pair.secret_key());
-        // let sighash_1 = Message::from_slice(
-        //     &SighashCache::new(sweep_tx.clone()).segwit_signature_hash(
-        //         1,
-        //         &script_elements.to_script(),
-        //         5_000,
-        //         bitcoin::sighash::EcdsaSighashType::All,
-        //     ).unwrap()[..],
-        // ).unwrap();
-        // let _signature_1 = secp.sign_ecdsa(&sighash_1, &key_pair.secret_key());
         let solved_script_elements = script_elements.add_secrets(preimage.to_string(), signature_0.to_string());
         let solution = solved_script_elements.solve().unwrap();
-
        
+        let mut witness = Witness::new();
+        witness.push(preimage_bytes);
+        witness.push_bitcoin_signature(&signature_0.serialize_der(), bitcoin::sighash::EcdsaSighashType::All);
+        let updated_tx_in = TxIn { 
+            previous_output: outpoint_10000, 
+            script_sig: solved_script_elements.to_script(),
+            sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, 
+            witness: witness 
+        };
+
+        let updated_tx = Transaction{
+            version : 0, 
+            lock_time: LockTime::from_consensus(0),
+            input: vec![updated_tx_in],
+            output: vec![tx_out_0],
+        };
         // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
         println!("{:?}", solution.to_hex_string());
-
+        // let verification = solution.as_script().verify(
+        //     0,
+        //     Amount::from_sat(10_000),
+        //     updated_tx.txid().as_byte_array()
+        // );
+        // println!("{:?}",verification);
+        // assert!(verification.is_ok());
 
         /*
          * REFERENCES
