@@ -24,6 +24,8 @@ use bitcoin::{
     Amount, Network, OutPoint, Transaction, TxIn, TxOut, Txid,
 };
 
+use crate::e::S5Error;
+
 
 #[derive(Debug, PartialEq)]
 pub struct SwapRedeemScriptElements {
@@ -143,6 +145,8 @@ pub struct ReverseSwapRedeemScriptElements {
     pub reciever_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
+    pub preimage: Option<String>,
+    pub signature: Option<String>,
 }
 
 impl FromStr for ReverseSwapRedeemScriptElements {
@@ -196,6 +200,8 @@ impl FromStr for ReverseSwapRedeemScriptElements {
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
                 sender_pubkey: sender_pubkey.unwrap(),
+                preimage: None,
+                signature: None
             })
         }
         else {
@@ -211,6 +217,8 @@ impl  ReverseSwapRedeemScriptElements{
             reciever_pubkey,
             timelock,
             sender_pubkey,
+            preimage: None, 
+            signature: None,
         }
     }
 
@@ -260,9 +268,61 @@ impl  ReverseSwapRedeemScriptElements{
         script
 
     }
+    
     pub fn to_address(&self, network: bitcoin::Network)->Address{
         let script = self.to_script();
         Address::p2wsh(&script, network)
+    }
+    
+    pub fn add_secrets(&self, preimage: String, signature: String)->ReverseSwapRedeemScriptElements{
+        ReverseSwapRedeemScriptElements { hashlock: self.hashlock.clone(), reciever_pubkey: self.reciever_pubkey.clone(), timelock: self.timelock.clone(), sender_pubkey: self.sender_pubkey.clone(), preimage: Some(preimage), signature: Some(signature) }
+    }
+    
+    pub fn solve(&self)->Result<ScriptBuf, S5Error>{
+        if self.preimage.is_none()  {
+            return Err(S5Error { kind:"Bad input".to_string(), message: "Missing preimage".to_string() })
+        }
+        if self.signature.is_none()  {
+            return Err(S5Error { kind:"Bad input".to_string(), message: "Missing signature".to_string() })
+        }
+
+        let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
+        let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+        let locktime = LockTime::from_consensus(self.timelock);
+        let hashvalue = Hash::from_str(&self.hashlock).unwrap();
+        let hashbytes: [u8;20] = *hashvalue.as_ref();
+        let preimage_vec = Vec::from_hex(self.preimage.as_ref().unwrap())
+        .expect("Decoding failed");
+        let preimage_bytes= &preimage_vec[..];
+        let preimage_slice: [u8;19] = preimage_bytes.try_into().unwrap();
+        let signature = Signature::from_str(self.signature.as_ref().unwrap()).unwrap().serialize_compact();
+        let signature_bytes: &PushBytes = signature.as_ref();
+        // let byte_slice: &[u8] = signature.as_ref();
+
+        // Assuming PushBytes can be constructed from a &[u8]
+        let script = Builder::new()
+            .push_slice(signature_bytes)
+            .push_slice(preimage_slice)
+        .push_opcode(OP_SIZE)
+            .push_slice([32])
+        .push_opcode(OP_EQUAL)
+        .push_opcode(OP_IF)
+        .push_opcode(OP_HASH160)
+            .push_slice(hashbytes)
+        .push_opcode(OP_EQUALVERIFY)
+            .push_key(&reciever_pubkey)
+        .push_opcode(OP_ELSE)
+        .push_opcode(OP_DROP)
+            .push_lock_time(locktime)
+        .push_opcode(OP_CLTV)
+        .push_opcode(OP_DROP)
+            .push_key(&sender_pubkey)
+        .push_opcode(OP_ENDIF)
+        .push_opcode(OP_CHECKSIG)
+        .into_script();
+
+        Ok(script)
+
     }
 }
 

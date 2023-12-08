@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::{str::FromStr, env};
-    use bitcoin::{Network, OutPoint, Txid, Transaction, consensus::{Decodable, deserialize}, TxOut, TxIn, Sequence, ScriptBuf, Witness, Address, absolute::{Height, LockTime}, sighash::SighashCache};
+    use bitcoin::{Network, OutPoint, Txid, Transaction, consensus::{Decodable, deserialize}, TxOut, TxIn, Sequence, ScriptBuf, Witness, Address, absolute::{Height, LockTime}, sighash::SighashCache, script::Builder};
     use electrum_client::ElectrumApi;
     use bitcoin::psbt::Psbt;
     use secp256k1::{hashes::hex::FromHex, Message, Secp256k1};
@@ -62,14 +62,14 @@ mod tests {
             utxos[1].tx_pos as u32,
         );
         let tx_in_0: TxIn = TxIn { previous_output: outpoint_10000, script_sig: ScriptBuf::new(),sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, witness: Witness::new() };
-        let tx_in_1: TxIn = TxIn { previous_output: outpoint_5000, script_sig: ScriptBuf::new(),sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, witness: Witness::new() };
-        let tx_out_0: TxOut = TxOut {script_pubkey:return_address.payload.script_pubkey(), value: 14_000};
+        // let tx_in_1: TxIn = TxIn { previous_output: outpoint_5000, script_sig: ScriptBuf::new(),sequence: Sequence::ENABLE_LOCKTIME_NO_RBF, witness: Witness::new() };
+        let tx_out_0: TxOut = TxOut {script_pubkey:return_address.payload.script_pubkey(), value: 9_000};
         let secp = Secp256k1::new();
 
         let sweep_tx = Transaction{
             version : 0, 
             lock_time: LockTime::from_consensus(script_elements.timelock),
-            input: vec![tx_in_0,tx_in_1],
+            input: vec![tx_in_0],
             output: vec![tx_out_0],
         };
         let sighash_0 = Message::from_slice(
@@ -80,21 +80,24 @@ mod tests {
                 bitcoin::sighash::EcdsaSighashType::All,
             ).unwrap()[..],
         ).unwrap();
-        let _signature_0 = secp.sign_ecdsa(&sighash_0, &key_pair.secret_key());
+        let signature_0 = secp.sign_ecdsa(&sighash_0, &key_pair.secret_key());
+        // let sighash_1 = Message::from_slice(
+        //     &SighashCache::new(sweep_tx.clone()).segwit_signature_hash(
+        //         1,
+        //         &script_elements.to_script(),
+        //         5_000,
+        //         bitcoin::sighash::EcdsaSighashType::All,
+        //     ).unwrap()[..],
+        // ).unwrap();
+        // let _signature_1 = secp.sign_ecdsa(&sighash_1, &key_pair.secret_key());
+        let solved_script_elements = script_elements.add_secrets(preimage.to_string(), signature_0.to_string());
+        let solution = solved_script_elements.solve().unwrap();
 
-        let sighash_1 = Message::from_slice(
-            &SighashCache::new(sweep_tx.clone()).segwit_signature_hash(
-                1,
-                &script_elements.to_script(),
-                5_000,
-                bitcoin::sighash::EcdsaSighashType::All,
-            ).unwrap()[..],
-        ).unwrap();
-        let _signature_1 = secp.sign_ecdsa(&sighash_1, &key_pair.secret_key());
+       
+        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
+        println!("{:?}", solution.to_hex_string());
 
-        
-        let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
-        println!("{:?}",sweep_psbt);
+
         /*
          * REFERENCES
          * https://github.com/BoltzExchange/boltz-core/blob/master/lib/swap/Claim.ts#L63
