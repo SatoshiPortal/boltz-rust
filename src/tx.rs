@@ -83,8 +83,9 @@ mod tests {
         let solution = solved_script_elements.solve().unwrap();
        
         let mut witness = Witness::new();
-        witness.push(preimage_bytes);
         witness.push_bitcoin_signature(&signature_0.serialize_der(), bitcoin::sighash::EcdsaSighashType::All);
+        witness.push(preimage_bytes);
+
         let updated_tx_in = TxIn { 
             previous_output: outpoint_10000, 
             script_sig: solved_script_elements.to_script(),
