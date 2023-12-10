@@ -1,10 +1,9 @@
-use crate::e::{ErrorKind, S5Error};
-use elements::bitcoin::hashes::hex::FromHex;
+use crate::e::S5Error;
 
 // TODO: policy asset should only be set for ElementsRegtest, fail otherwise
-const LIQUID_POLICY_ASSET_STR: &str =
+const _LIQUID_POLICY_ASSET_STR: &str =
     "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d";
-const LIQUID_TESTNET_POLICY_ASSET_STR: &str =
+const _LIQUID_TESTNET_POLICY_ASSET_STR: &str =
     "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 
 pub const DEFAULT_TESTNET_NODE: &str = "electrum.bullbitcoin.com:60002";
@@ -28,7 +27,7 @@ pub enum ElectrumUrl {
 impl ElectrumUrl {
     pub fn build_client(&self) -> Result<electrum_client::Client, S5Error> {
         let builder = electrum_client::ConfigBuilder::new();
-        let (url, builder) = match self {
+        let (url, _builder) = match self {
             ElectrumUrl::Tls(url, validate) => {
                 (format!("ssl://{}", url), builder.validate_domain(*validate))
             }

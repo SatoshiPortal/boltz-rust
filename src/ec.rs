@@ -1,7 +1,4 @@
-use bitcoin::psbt::raw::Key;
 use serde::{Deserialize, Serialize};
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::str::FromStr;
 use secp256k1::hashes::sha256;
 use secp256k1::schnorr::Signature;

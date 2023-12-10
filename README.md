@@ -122,6 +122,9 @@ Another old simple rust bitcoin wallet
 - [bdk](https://docs.rs/bdk/latest/bdk/)
 A descriptor library that uses bitcoin, miniscript and electrum-client
 
+- [boltz](https://github.com/BoltzExchange/boltz-core/blob/master/lib/swap/Claim.ts)
+Boltz-core - solving the claim script
+
 ## test
 
 The best place to start diving into this repo is `src/lib.rs` and check out `test_rsi`. 
@@ -155,3 +158,15 @@ So when manually testing, make sure you update the invoice variable.
 
 For all ignored unit tests read the tests before running.
 
+
+## Milestones
+
+- [x] NormalSwap  (BTC): HappyCase
+- [ ] NormalSwap  (BTC): DisputeCase
+- [ ] ReverseSwap (BTC): HappyCase
+- [x] ReverseSwap (BTC): DisputeCase
+- [ ] NormalSwap  (L-BTC): HappyCase
+- [ ] NormalSwap  (L-BTC): DisputeCase
+- [ ] ReverseSwap (L-BTC): HappyCase
+- [ ] ReverseSwap (L-BTC): DisputeCase
+- [ ] Elements.Liquid wallet (BEWallet)

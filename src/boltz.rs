@@ -3,7 +3,6 @@ use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
 use serde::Serializer;
 use std::str::FromStr;
-use bitcoin::bech32::{decode, FromBase32};
 
 pub const BOLTZ_TESTNET_URL: &str = "https://testnet.boltz.exchange/api";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";

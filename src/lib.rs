@@ -13,8 +13,8 @@ mod tests {
     use std::{env, str::FromStr};
     use bitcoin::Network;
     use electrum_client::ElectrumApi;
-    use secp256k1::{rand::{thread_rng, Rng}, hashes::ripemd160};
-    use crate::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, util::rnd_str, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, script::{ SwapRedeemScriptElements, self, ReverseSwapRedeemScriptElements, }, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
+    use secp256k1::hashes::ripemd160;
+    use crate::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, util::rnd_str, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, script:: ReverseSwapRedeemScriptElements, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
     use dotenv::dotenv;
     use bitcoin::hashes::{sha256, Hash};
 
@@ -22,7 +22,7 @@ mod tests {
     use std::io::prelude::*;
 
     fn pause_and_wait() {
-        let mut stdin = io::stdin();
+        let stdin = io::stdin();
         let mut stdout = io::stdout();
         write!(stdout, "Press Enter to continue...").unwrap();
         stdout.flush().unwrap();
@@ -32,7 +32,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_rsi() {
-        const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
+        const _RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
         dotenv().ok();
         let mnemonic = match env::var("MNEMONIC") {
             Ok(result) => result,
@@ -93,7 +93,7 @@ mod tests {
         // assert_eq!(timeout as u64 , response.as_ref().unwrap().timeout_block_height.unwrap().clone());
 
         let timeout = response.as_ref().unwrap().timeout_block_height.unwrap().clone();
-        let id = response.as_ref().unwrap().id.as_str().clone();
+        let id = response.as_ref().unwrap().id.as_str();
         let invoice = response.as_ref().unwrap().invoice.clone().unwrap();
         let lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
         let redeem_script_string = response.as_ref().unwrap().redeem_script.as_ref().unwrap().clone();
@@ -171,12 +171,12 @@ mod tests {
      */
 
 
-    let key_pair_string = KeyPairString { 
+    let _key_pair_string = KeyPairString { 
         seckey: "f37f95f01f3a28ba2bf4054e56b0cc217dd0b48edfd75a205cc2a96c20876a1b".to_string(), 
         pubkey: "037bdb90d61d1100664c4aaf0ea93fb71c87433f417e93294e08ae9859910efcea".to_string() 
     };
     
-    let message = "Hello from Stackmate!";
+    let _message = "Hello from Stackmate!";
 
   } 
 }

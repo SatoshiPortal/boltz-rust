@@ -1,28 +1,18 @@
-use std::{num::ParseIntError, str::FromStr};
+use std::str::FromStr;
 
 use bitcoin::{
     blockdata::script::{Script,ScriptBuf,Builder, Instruction}, 
     opcodes::{all::{*}, OP_0},
     PublicKey, 
-    Address, script::PushBytes
+    Address,
 };
 
 use bitcoin::{
     blockdata::locktime::absolute::LockTime,
-    hashes::{
-        hash160::Hash,
-        hex::{FromHex},
-    },
-    secp256k1,
-    secp256k1::{Secp256k1, SecretKey},
-            secp256k1::ecdsa::Signature
-    };
-
-use bitcoin::{
-    bip32::{ChildNumber, DerivationPath, ExtendedPrivKey, ExtendedPubKey},
-    psbt,
-    Amount, Network, OutPoint, Transaction, TxIn, TxOut, Txid,
+    hashes::hash160::Hash,
 };
+
+
 
 use crate::e::S5Error;
 
@@ -291,18 +281,19 @@ impl  ReverseSwapRedeemScriptElements{
         let locktime = LockTime::from_consensus(self.timelock);
         let hashvalue = Hash::from_str(&self.hashlock).unwrap();
         let hashbytes: [u8;20] = *hashvalue.as_ref();
-        let preimage_vec = Vec::from_hex(self.preimage.as_ref().unwrap())
-        .expect("Decoding failed");
-        let preimage_bytes= &preimage_vec[..];
-        let preimage_slice: [u8;19] = preimage_bytes.try_into().unwrap();
-        let signature = Signature::from_str(self.signature.as_ref().unwrap()).unwrap().serialize_compact();
-        let signature_bytes: &PushBytes = signature.as_ref();
-        // let byte_slice: &[u8] = signature.as_ref();
-
+        // let preimage_vec = Vec::from_hex(self.preimage.as_ref().unwrap())
+        // .expect("Decoding failed");
+        // let preimage_bytes= &preimage_vec[..];
+        // let preimage_slice: [u8;32] = preimage_bytes.try_into().unwrap();
+        // let signature = hex::decode(self.signature.as_ref().unwrap()).unwrap();
+        // let signature_bytes: [u8;70] = signature.try_into().unwrap();
+        // // let byte_slice: &[u8] = signature.as_ref();
+        // print!("{}",signature_bytes.len());
         // Assuming PushBytes can be constructed from a &[u8]
         let script = Builder::new()
-            .push_slice(signature_bytes)
-            .push_slice(preimage_slice)
+        //     .push_slice(signature_bytes)
+        //     .push_slice(preimage_slice)
+        // .push_opcode(OP_PUSHDATA1)
         .push_opcode(OP_SIZE)
             .push_slice([32])
         .push_opcode(OP_EQUAL)

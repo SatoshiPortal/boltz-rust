@@ -78,8 +78,7 @@ impl ChildKeys {
                 // ENFORCE EVEN PARITY!
                 let parity = public_key.to_string().remove(1);
                 let keypair = if parity == '3' {
-                  let mut seckey = SecretKey::from_keypair(&keypair);
-                  seckey.negate();
+                  let seckey = SecretKey::from_keypair(&keypair).negate();
                   let key_pair = KeyPair::from_secret_key(&secp, &seckey); 
                   key_pair
                 }
