@@ -113,6 +113,7 @@ mod tests {
         let our_rs = hex::encode(constructed_script_elements.to_script().to_bytes());
         println!("{}", boltz_rs);
         assert_eq!(constructed_script_elements , boltz_script_elements);
+        assert_eq!(lockup_address, Address::p2wsh(&constructed_script_elements.to_script(), Network::Testnet).to_string());
 
         assert_eq!(boltz_rs,our_rs);
         assert!(boltz_rs == redeem_script_string && our_rs == redeem_script_string);
@@ -173,22 +174,14 @@ mod tests {
         Address,
     };
     use std::{ collections::HashMap};
-    use bitcoin::{ OutPoint, Transaction, TxOut, TxIn, Sequence, Witness, absolute::LockTime, sighash::SighashCache};
+    use bitcoin::{ OutPoint, Transaction, TxOut, TxIn, Sequence, Witness, absolute::LockTime};
     
 
     #[test]
     #[ignore]
     fn test_playground(){
-        /*
-        * 
-        * create an ecdsa signature for this message with the keys provided
-        * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.Keypair.html
-        * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.SecretKey.html
-        *
-        * seed (words) -> master (root_xprv) -> child (child_xprv) -> keypair
-        *  m
-        */
-        let preimage = "a45380303a1b87ec9d0de25f5eba4f6bfbf79b0396e15b72df4914fdb1124633";
+
+        let preimage = "a45380303a1b87ec9d0de25f5eba4f6bfbf79b0396e15b72df4914fdb1124634";
         let preimage_bytes = hex::decode(preimage).unwrap();
         let preimage_hash = hash160::Hash::hash(&preimage_bytes);
         // let hashvalue = Hash::from_str(&self.hashlock).unwrap();
@@ -197,17 +190,14 @@ mod tests {
         // assert_eq!(hashcheck, preimage_hash);
 
         let script = Builder::new()
-            .push_opcode(OP_SIZE)
-            .push_slice([32])
-            .push_opcode(OP_EQUAL)
             .push_opcode(OP_HASH160)
             .push_slice(hashbytes)
-            .push_opcode(OP_EQUALVERIFY)
+            .push_opcode(OP_EQUAL)
             .into_script();
 
         let address = Address::p2wsh(&script, Network::Testnet);
         println!("PAY THIS ADDRESS: {}", address);
-        // pause_and_wait();
+        pause_and_wait();
 
         let electrum_client = NetworkConfig::default()
         .unwrap()
@@ -221,23 +211,25 @@ mod tests {
             utxos[0].tx_pos as u32,
         );
         let utxo_value = utxos[0].value;
+
         assert_eq!(utxo_value, 1_000);
-        // println!("{:?}", utxos[0]);
+        println!("{:?}", utxos[0]);
 
         let mut witness = Witness::new();
-        // let preimage_hash =  sha256::Hash::hash(&preimage_bytes);
-        witness.push(preimage_bytes.clone());
-        witness.push(hex::encode(script.to_bytes()));
 
+        // witness.push(OP_0);
+        witness.push(preimage_bytes);
+        witness.push((script.to_bytes()));
+        // println!("{:?}",script.to_v0_p2wsh());
         let input: TxIn = TxIn { 
             previous_output: outpoint_0, 
             script_sig: Script::empty().into(),
-            sequence: Sequence::ZERO, 
+            sequence: Sequence::from_consensus(0xFFFFFFFF), 
             witness: witness
         };
         const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
         let return_address = Address::from_str(RETURN_ADDRESS).unwrap();
-        let output_value = 500;
+        let output_value = 700;
 
         let output: TxOut = TxOut {
             script_pubkey:return_address.payload.script_pubkey(), 

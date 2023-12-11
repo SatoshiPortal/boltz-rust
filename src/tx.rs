@@ -53,7 +53,7 @@ mod tests {
         let address = script_elements.to_address(Network::Testnet);
         let lockup_address = "tb1qc5hyw0wh2kk2xp2ynk5l0mpeqhvqclv5ypurw65serefg3qu4hesxactxc".to_string();
         // nSEQUENCE
-        let sequence = Sequence::ZERO;
+        let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
         // INIT ELECTRUM
         let electrum_client = NetworkConfig::default()
