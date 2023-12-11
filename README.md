@@ -117,7 +117,7 @@ A script wallet for coinswap
 A simple rust bitcoin wallet
 
 - [rust-bitcoin-wallet](https://github.com/stevenroose/rust-bitcoin-wallet)
-Another old simple rust bitcoin wallet
+Another old simple rust bitcoin wallet - only upto Psbt building
 
 - [bdk](https://docs.rs/bdk/latest/bdk/)
 A descriptor library that uses bitcoin, miniscript and electrum-client

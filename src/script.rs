@@ -201,7 +201,12 @@ impl FromStr for ReverseSwapRedeemScriptElements {
     }
 }
 impl  ReverseSwapRedeemScriptElements{
-    pub fn new(hashlock: String, reciever_pubkey: String, timelock: u32, sender_pubkey: String)->Self{
+    pub fn new(
+        hashlock: String, 
+        reciever_pubkey: String, 
+        timelock: u32, 
+        sender_pubkey: String
+    )->Self{
         ReverseSwapRedeemScriptElements{
             hashlock,
             reciever_pubkey,
@@ -241,16 +246,16 @@ impl  ReverseSwapRedeemScriptElements{
             .push_slice([32])
         .push_opcode(OP_EQUAL)
         .push_opcode(OP_IF)
-        .push_opcode(OP_HASH160)
-            .push_slice(hashbytes)
-        .push_opcode(OP_EQUALVERIFY)
-            .push_key(&reciever_pubkey)
+            .push_opcode(OP_HASH160)
+                .push_slice(hashbytes)
+            .push_opcode(OP_EQUALVERIFY)
+                .push_key(&reciever_pubkey)
         .push_opcode(OP_ELSE)
-        .push_opcode(OP_DROP)
-            .push_lock_time(locktime)
-        .push_opcode(OP_CLTV)
-        .push_opcode(OP_DROP)
-            .push_key(&sender_pubkey)
+            .push_opcode(OP_DROP)
+                .push_lock_time(locktime)
+            .push_opcode(OP_CLTV)
+            .push_opcode(OP_DROP)
+                .push_key(&sender_pubkey)
         .push_opcode(OP_ENDIF)
         .push_opcode(OP_CHECKSIG)
         .into_script();
@@ -293,7 +298,6 @@ impl  ReverseSwapRedeemScriptElements{
         let script = Builder::new()
         //     .push_slice(signature_bytes)
         //     .push_slice(preimage_slice)
-        // .push_opcode(OP_PUSHDATA1)
         .push_opcode(OP_SIZE)
             .push_slice([32])
         .push_opcode(OP_EQUAL)

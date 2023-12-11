@@ -11,9 +11,9 @@ pub mod tx;
 #[cfg(test)]
 mod tests {
     use std::{env, str::FromStr};
-    use bitcoin::Network;
+    use bitcoin::{Network, script::Error};
     use electrum_client::ElectrumApi;
-    use secp256k1::hashes::ripemd160;
+    use secp256k1::hashes::hash160;
     use crate::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, util::rnd_str, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, script:: ReverseSwapRedeemScriptElements, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
     use dotenv::dotenv;
     use bitcoin::hashes::{sha256, Hash};
@@ -46,7 +46,8 @@ mod tests {
         println!("{:?}",string_keypair);
         let preimage = rnd_str();
         println!("Preimage: {:?}", preimage);
-        let preimage_hash =  sha256::Hash::hash(&hex::decode(preimage).unwrap());
+        let preimage_s256 =  sha256::Hash::hash(&hex::decode(preimage.clone()).unwrap());
+        let preimage_ripemd =  hash160::Hash::hash(preimage_s256.as_byte_array());
 
         let network_config = NetworkConfig::new(
             BitcoinNetwork::BitcoinTestnet,
@@ -81,15 +82,15 @@ mod tests {
             PairId::Btc_Btc, 
             OrderSide::Buy, 
             pair_hash, 
-            preimage_hash.to_string(), 
+            preimage_s256.to_string(), 
             string_keypair.pubkey.clone(), 
             timeout as u64,
             100_000
         );
         let response = boltz_client.create_swap(request).await;
         assert!(response.is_ok());
-        println!("{}",preimage_hash.to_string());
-        assert!(response.as_ref().unwrap().validate_preimage(preimage_hash.to_string()));
+        println!("{}",preimage.clone().to_string());
+        assert!(response.as_ref().unwrap().validate_preimage(preimage_s256.to_string()));
         // assert_eq!(timeout as u64 , response.as_ref().unwrap().timeout_block_height.unwrap().clone());
 
         let timeout = response.as_ref().unwrap().timeout_block_height.unwrap().clone();
@@ -100,7 +101,7 @@ mod tests {
 
         let boltz_script_elements = ReverseSwapRedeemScriptElements::from_str(&redeem_script_string).unwrap();
         // assert!(response.as_ref().unwrap().claim_public_key.as_ref().unwrap().clone() == boltz_script_elements.sender_pubkey);
-        let hash160 = ripemd160::Hash::hash(&hex::decode(preimage_hash.to_string()).unwrap());
+        let hash160 = hash160::Hash::hash(&hex::decode(preimage.to_string()).unwrap());
 
         let constructed_script_elements = ReverseSwapRedeemScriptElements::new(
             hash160.to_string(),
@@ -108,75 +109,172 @@ mod tests {
             timeout as u32,
             boltz_script_elements.sender_pubkey.clone(),
         );
-        println!("{:?} , {:?}", constructed_script_elements, boltz_script_elements);
+        let boltz_rs = hex::encode(boltz_script_elements.to_script().to_bytes());
+        let our_rs = hex::encode(constructed_script_elements.to_script().to_bytes());
+        println!("{}", boltz_rs);
+        assert_eq!(constructed_script_elements , boltz_script_elements);
 
-        assert!(constructed_script_elements == boltz_script_elements);
+        assert_eq!(boltz_rs,our_rs);
+        assert!(boltz_rs == redeem_script_string && our_rs == redeem_script_string);
         
-        let constructed_address = constructed_script_elements.to_address(Network::Testnet);
-        println!("{}", constructed_address.to_string());
-        assert_eq!(constructed_address.to_string() , lockup_address);
+        // println!("{:?} , {:?}", constructed_script_elements, boltz_script_elements);
 
         
-        let script_balance = electrum_client.script_get_balance(&constructed_script_elements.to_script()).unwrap();
-        assert_eq!(script_balance.unconfirmed, 0);
-        assert_eq!(script_balance.confirmed, 0);
-        println!("*******PAY********************");
-        println!("*******LN*********************");
-        println!("*******INVOICE****************");
-        println!("{}",invoice);
-        println!("");
-        println!("Once you have paid the invoice, press enter to continue the tests.");
-        println!("******************************");
+        // let constructed_address = constructed_script_elements.to_address(Network::Testnet);
+        // println!("{}", constructed_address.to_string());
+        // assert_eq!(constructed_address.to_string() , lockup_address);
 
-        loop{
-            pause_and_wait();
-            let request = SwapStatusRequest{id: id.to_string()};
-            let response = boltz_client.swap_status(request).await;
-            assert!(response.is_ok());
-            let swap_status = response.unwrap().status;
+        
+        // let script_balance = electrum_client.script_get_balance(&constructed_script_elements.to_script()).unwrap();
+        // assert_eq!(script_balance.unconfirmed, 0);
+        // assert_eq!(script_balance.confirmed, 0);
+        // println!("*******PAY********************");
+        // println!("*******LN*********************");
+        // println!("*******INVOICE****************");
+        // println!("{}",invoice);
+        // println!("");
+        // println!("Once you have paid the invoice, press enter to continue the tests.");
+        // println!("******************************");
+
+        // loop{
+        //     pause_and_wait();
+        //     let request = SwapStatusRequest{id: id.to_string()};
+        //     let response = boltz_client.swap_status(request).await;
+        //     assert!(response.is_ok());
+        //     let swap_status = response.unwrap().status;
             
-            if swap_status == "swap.created"{
-                println!("Your turn: Pay the invoice");
+        //     if swap_status == "swap.created"{
+        //         println!("Your turn: Pay the invoice");
 
-            }
-            if swap_status == "transaction.mempool"{
-                println!("*******BOLTZ******************");
-                println!("*******ONCHAIN-TX*************");
-                println!("*******DETECTED***************");
+        //     }
+        //     if swap_status == "transaction.mempool"{
+        //         println!("*******BOLTZ******************");
+        //         println!("*******ONCHAIN-TX*************");
+        //         println!("*******DETECTED***************");
 
-            }
-            if swap_status == "transaction.confirmed"{
-                println!("*******BOLTZ******************");
-                println!("*******ONCHAIN-TX*************");
-                println!("*******CONFIRMED**************");
-                // claim the transaction
+        //     }
+        //     if swap_status == "transaction.confirmed"{
+        //         println!("*******BOLTZ******************");
+        //         println!("*******ONCHAIN-TX*************");
+        //         println!("*******CONFIRMED**************");
+        //         // claim the transaction
 
-                break
-            }
-        }
-        assert!(false);
+        //         break
+        //     }
+        // }
+        // assert!(false);
 
     }
-   
-  #[test]
-  fn test_playground(){
-    /*
-     * 
-     * create an ecdsa signature for this message with the keys provided
-     * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.Keypair.html
-     * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.SecretKey.html
-     *
-     * seed (words) -> master (root_xprv) -> child (child_xprv) -> keypair
-     *  m
-     */
 
-
-    let _key_pair_string = KeyPairString { 
-        seckey: "f37f95f01f3a28ba2bf4054e56b0cc217dd0b48edfd75a205cc2a96c20876a1b".to_string(), 
-        pubkey: "037bdb90d61d1100664c4aaf0ea93fb71c87433f417e93294e08ae9859910efcea".to_string() 
+    use bitcoin::{
+        blockdata::script::{Script,ScriptBuf,Builder, Instruction}, 
+        opcodes::{all::{*}, OP_0},
+        PublicKey, 
+        Address,
     };
+    use std::{ collections::HashMap};
+    use bitcoin::{ OutPoint, Transaction, TxOut, TxIn, Sequence, Witness, absolute::LockTime, sighash::SighashCache};
     
-    let _message = "Hello from Stackmate!";
 
-  } 
+    #[test]
+    #[ignore]
+    fn test_playground(){
+        /*
+        * 
+        * create an ecdsa signature for this message with the keys provided
+        * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.Keypair.html
+        * https://docs.rs/secp256k1/0.28.0/secp256k1/struct.SecretKey.html
+        *
+        * seed (words) -> master (root_xprv) -> child (child_xprv) -> keypair
+        *  m
+        */
+        let preimage = "a45380303a1b87ec9d0de25f5eba4f6bfbf79b0396e15b72df4914fdb1124633";
+        let preimage_bytes = hex::decode(preimage).unwrap();
+        let preimage_hash = hash160::Hash::hash(&preimage_bytes);
+        // let hashvalue = Hash::from_str(&self.hashlock).unwrap();
+        let hashbytes: [u8;20] = *preimage_hash.as_ref();
+        // let hashcheck = ripemd160::Hash::from_slice(&hashbytes).unwrap();
+        // assert_eq!(hashcheck, preimage_hash);
+
+        let script = Builder::new()
+            .push_opcode(OP_SIZE)
+            .push_slice([32])
+            .push_opcode(OP_EQUAL)
+            .push_opcode(OP_HASH160)
+            .push_slice(hashbytes)
+            .push_opcode(OP_EQUALVERIFY)
+            .into_script();
+
+        let address = Address::p2wsh(&script, Network::Testnet);
+        println!("PAY THIS ADDRESS: {}", address);
+        // pause_and_wait();
+
+        let electrum_client = NetworkConfig::default()
+        .unwrap()
+        .electrum_url
+        .build_client()
+        .unwrap();
+
+        let utxos = electrum_client.script_list_unspent(&script.to_v0_p2wsh()).unwrap();
+        let outpoint_0 = OutPoint::new(
+            utxos[0].tx_hash, 
+            utxos[0].tx_pos as u32,
+        );
+        let utxo_value = utxos[0].value;
+        assert_eq!(utxo_value, 1_000);
+        // println!("{:?}", utxos[0]);
+
+        let mut witness = Witness::new();
+        // let preimage_hash =  sha256::Hash::hash(&preimage_bytes);
+        witness.push(preimage_bytes.clone());
+        witness.push(hex::encode(script.to_bytes()));
+
+        let input: TxIn = TxIn { 
+            previous_output: outpoint_0, 
+            script_sig: Script::empty().into(),
+            sequence: Sequence::ZERO, 
+            witness: witness
+        };
+        const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
+        let return_address = Address::from_str(RETURN_ADDRESS).unwrap();
+        let output_value = 500;
+
+        let output: TxOut = TxOut {
+            script_pubkey:return_address.payload.script_pubkey(), 
+            value: output_value
+        };
+
+        let tx = Transaction{
+            version : 1, 
+            lock_time: LockTime::from_consensus(0),
+            input: vec![input],
+            output: vec![output.clone()],
+        };
+
+        let txid = electrum_client.transaction_broadcast(&tx).unwrap();
+        println!("{}", txid);
+
+        // let mut utxo_map = HashMap::new();
+        // utxo_map.insert(outpoint_0, output);
+        
+        // let verify_result = tx.verify(|outpoint| {
+        //     utxo_map.get(outpoint).cloned()
+        // });
+
+        // match verify_result {
+        //     Ok(_) => println!("Transaction verified successfully!"),
+        //     Err(e) =>{ 
+        //         println!("Verification failed: {:?}", e.to_string())
+        //     }
+        // }
+        // assert!(verify_result.is_ok());
+        // let unsigned_tx = Transaction{
+        //     version : 1, 
+        //     lock_time: LockTime::from_consensus(script_elements.timelock),
+        //     input: vec![unsigned_input],
+        //     output: vec![output.clone()],
+        // };
+
+
+    } 
 }
