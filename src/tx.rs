@@ -32,7 +32,7 @@ mod tests {
 
         // SECRETS FOR UNLOCKING SCRIPT
         // let _preimage = "36393139333730383132383738353633303337";
-        let preimage = "d8f64d842dba7883989b70e13ae5bfb85f918a2da98c33c8abfa37f414066faa";
+        let preimage = "205dc0ea42d89f4fd36564393ffdc27fc162f9a51304c625531bac25d4e271af";
         let preimage_bytes = hex::decode(preimage).unwrap();
         let preimage_hash =  sha256::Hash::hash(&preimage_bytes);
         let preimage_ripemd = ripemd160::Hash::hash(preimage_hash.as_byte_array());
@@ -45,13 +45,13 @@ mod tests {
 
         // REDEEM SCRIPT
 
-        let redeem_script_str = "8201208763a91465cb49fff0542478b408a8d8f220ce9e1ab437578821037bdb90d61d1100664c4aaf0ea93fb71c87433f417e93294e08ae9859910efcea677503bbcb26b17521034f26a94daafc342874aa4973a2418585dbfdd579d060643d0d087c002addee6268ac";
+        let redeem_script_str = "8201208763a91402db8b707d1dfe9f80f17474f115c22ad6f57bc38821037bdb90d61d1100664c4aaf0ea93fb71c87433f417e93294e08ae9859910efcea677503facb26b17521031978ba29b28bcbde719c5e1847bd870a783da6573b3daf9b0180ee7c9ba731f568ac";
         let script_elements = ReverseSwapRedeemScriptElements::from_str(redeem_script_str).unwrap();
         assert_eq!(preimage_ripemd.to_string(),script_elements.hashlock);
 
         // ADDRESS WITH FUNDS THAT NEEDS TO BE CLAIMED
         let address = script_elements.to_address(Network::Testnet);
-        let lockup_address = "tb1qc5hyw0wh2kk2xp2ynk5l0mpeqhvqclv5ypurw65serefg3qu4hesxactxc".to_string();
+        let lockup_address = "tb1qlvny9ft5czrdlx8vs8vrlj9vwlz5tj8l9gqwydryr39gaqqfdqpq0dlm8n".to_string();
         // nSEQUENCE
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
@@ -113,7 +113,7 @@ mod tests {
         witness.push_bitcoin_signature(&signature_0.serialize_der(), bitcoin::sighash::EcdsaSighashType::All);
         // witness.push(bitcoin::sighash::EcdsaSighashType::All);
         witness.push(preimage_bytes);
-        witness.push(&hex::encode(script_elements.to_script().as_bytes()));
+        witness.push(script_elements.to_script().as_bytes());
 
         assert_eq!(redeem_script_str,&hex::encode(script_elements.to_script().as_bytes()));
         // https://github.com/bitcoin-teleport/teleport-transactions/blob/master/src/wallet_sync.rs#L255
