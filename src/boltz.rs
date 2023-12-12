@@ -1,5 +1,7 @@
 use lightning_invoice::Bolt11Invoice;
-use reqwest::{Client, Error};
+// use reqwest::{Client, Error};
+use serde_json;
+use ureq::Error;
 use serde::{Deserialize, Serialize};
 use serde::Serializer;
 use std::str::FromStr;
@@ -8,61 +10,84 @@ pub const BOLTZ_TESTNET_URL: &str = "https://testnet.boltz.exchange/api";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
 
 pub struct BoltzApiClient {
-    client: Client,
     base_url: String,
 }
 
 impl BoltzApiClient {
     pub fn new(base_url: &str) -> Self {
         BoltzApiClient {
-            client: Client::new(),
             base_url: base_url.to_string(),
         }
     }
 
-    pub async fn get_pairs(&self) -> Result<GetPairsResponse, Error> {
+    pub fn get_pairs(&self) -> Result<GetPairsResponse, Error> {
         let url = format!("{}/getpairs", self.base_url);
-        let response = self.client.get(url).send().await?;
-        let body = response.text().await?; // Get the response body as a string
-        println!("{}",body);
-        let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap(); // Deserialize the string into your Rust struct
-        Ok(get_pairs_response)
+        let response = ureq::get(&url).call();
+        
+        match response {
+            Ok(resp) => {
+                let body = resp.into_string()?;
+                println!("{}", body);
+                let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
+                Ok(get_pairs_response)
+            },
+            Err(e) => Err(e)
+        }
     }
-
-    pub async fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, reqwest::Error> {
+    
+    pub fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, Error> {
         let url = format!("{}/getfeeestimation", self.base_url);
-        let response = self.client.get(url).send().await?;
-        let body = response.text().await?;
-        println!("{}",body);
-        let get_fee_estimation_response: GetFeeEstimationResponse = serde_json::from_str(&body).unwrap();
-        Ok(get_fee_estimation_response)
+        let response = ureq::get(&url).call();
+        
+        match response {
+            Ok(resp) => {
+                let body = resp.into_string()?;
+                println!("{}", body);
+                let get_fee_estimation_response: GetFeeEstimationResponse = serde_json::from_str(&body).unwrap();
+                Ok(get_fee_estimation_response)
+            },
+            Err(e) => Err(e)
+        }
     }
+    
+   
+pub fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, Error> {
+    let url = format!("{}/createswap", self.base_url);
+    let json_request = serde_json::to_string(&request).unwrap();
 
-    pub async fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, Error> {
-        let url = format!("{}/createswap", self.base_url);
-        let response = self.client.post(url)
-            .json(&request)
-            .send()
-            .await?;
-        let body = response.text().await?;
-        println!("{}",body);
+    let response = ureq::post(&url)
+        .set("Content-Type", "application/json")
+        .send_string(&json_request);
 
-        let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
-        Ok(create_swap_response)
+    match response {
+        Ok(resp) => {
+            let body = resp.into_string()?;
+            let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
+            Ok(create_swap_response)
+        },
+        Err(e) => Err(e.into())
     }
+}
 
-    pub async fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, Error> {
-        let url = format!("{}/swapstatus", self.base_url);
-        let response = self.client.post(url)
-            .json(&request)
-            .send()
-            .await?;
-        let body = response.text().await?;
-        println!("{}",body);
+pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, Error> {
+    let url = format!("{}/swapstatus", self.base_url);
+    let json_request = serde_json::to_string(&request).unwrap();
 
-        let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
-        Ok(swap_status_response)
+    let response = ureq::post(&url)
+        .set("Content-Type", "application/json")
+        .send_string(&json_request);
+
+    match response {
+        Ok(resp) => {
+            let body = resp.into_string()?;
+            let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
+            Ok(swap_status_response)
+        },
+        Err(e) => Err(e.into())
     }
+}
+    
+    
 }
 
 #[derive(Deserialize, Debug)]
@@ -481,10 +506,10 @@ mod tests {
     use super::*;
     use crate::{key::ec::KeyPairString, util::rnd_str};
 
-    #[tokio::test]
-    async fn test_get_pairs() {
+    #[test]
+    fn test_get_pairs() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let response = client.get_pairs().await;
+        let response = client.get_pairs();
         assert!(response.is_ok());
         // println!("{:?}",response.unwrap().pairs);
         let pair_hash = response.unwrap().pairs.pairs.get("BTC/BTC")
@@ -492,7 +517,7 @@ mod tests {
         .unwrap();
         assert_eq!(pair_hash,"d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string());
         
-        let response = client.get_pairs().await;
+        let response = client.get_pairs();
         assert!(response.is_ok());
         let pair_hash = response.unwrap().pairs.pairs.get("L-BTC/BTC")
         .map(|pair_info| pair_info.hash.clone())
@@ -502,17 +527,17 @@ mod tests {
 
     }
 
-    #[tokio::test]
-    async fn test_get_fee_estimation() {
+    #[test]
+    fn test_get_fee_estimation() {
         let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
-        let response = client.get_fee_estimation().await;
+        let response = client.get_fee_estimation();
         assert!(response.is_ok());
     }
 
-    #[tokio::test]
+    #[test]
     #[ignore]
     /// updated invoice before running
-    async fn test_normal_swap() {
+    fn test_normal_swap() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let invoice = "lntb30m1pjhqyqqpp576x9kefhdxz3hzcp3l0cyzjttq7xazhdp28hzxwdc0mq3uec96dqdpyxysysctvvcsxzgz5dahzqmmxyppk7enxv4jsxqrrsscqp79qy9qsqsp595vs7sn5e9hdpxga9ac7x3ah5ku9x4063appk8yp45c85w44ngcsajatrejq8zupa60syckuuanxnhsh8rcyy7ht470c29jsgkqpv3p8m5c4n9jf5ag5rxed5dp5p4aw570ktafsdjeeq0ucmmpenw4lhycpvv4jkr".to_string();
         
@@ -529,18 +554,18 @@ mod tests {
             invoice,
             refund_key_pair.pubkey,
         );
-        let response = client.create_swap(request).await;
+        let response = client.create_swap(request);
         assert!(response.is_ok());
         // assert!(response.as_ref().unwrap().validate_preimage());
         let id = response.unwrap().id;
         let request = SwapStatusRequest{id: id};
-        let response = client.swap_status(request).await;
+        let response = client.swap_status(request);
         assert!(response.is_ok());
 
     }
-    #[tokio::test]
+    #[test]
     /// No changes required to run
-    async fn test_bitcoin_reverse_swap() {
+    fn test_bitcoin_reverse_swap() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let claim_key_pair = KeyPairString {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
@@ -562,18 +587,18 @@ mod tests {
             claim_key_pair.pubkey, 
             100_000
         );
-        let response = client.create_swap(request).await;
+        let response = client.create_swap(request);
         assert!(response.is_ok());
         assert!(response.as_ref().unwrap().validate_preimage(preimage_hash));
         let id = response.unwrap().id;
         let request = SwapStatusRequest{id: id};
-        let response = client.swap_status(request).await;
+        let response = client.swap_status(request);
         assert!(response.is_ok());
     }
    
-    #[tokio::test]
+    #[test]
     /// No changes required to run
-    async fn test_liquid_reverse_swap() {
+    fn test_liquid_reverse_swap() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let claim_key_pair = KeyPairString {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
@@ -595,22 +620,22 @@ mod tests {
             claim_key_pair.pubkey, 
             100_000
         );
-        let response = client.create_swap(request).await;
+        let response = client.create_swap(request);
         assert!(response.is_ok());
         assert!(response.as_ref().unwrap().validate_preimage(preimage_hash));
         let id = response.unwrap().id;
         let request = SwapStatusRequest{id: id};
-        let response = client.swap_status(request).await;
+        let response = client.swap_status(request);
         assert!(response.is_ok());
     }
    
-    #[tokio::test]
+    #[test]
     #[ignore]
-    async fn test_swap_status() {
+    fn test_swap_status() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let id = "Nh7Y1J".to_string();
         let request = SwapStatusRequest{id: id};
-        let response = client.swap_status(request).await;
+        let response = client.swap_status(request);
         assert!(response.is_ok());
     }
     

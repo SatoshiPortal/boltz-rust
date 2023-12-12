@@ -1,32 +1,41 @@
 [package]
 name = "bullbitcoin-rnd"
-version = "0.1.0"
+authors = ["i5hi <ishi@satoshiportal.com>"]
+version = "0.2.0"
 edition = "2021"
 
 [lib]
-name = "bullbitcoin_rnd"
+name = "bullwallet"
 path = "src/lib.rs"
 doctest = false
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+crate-type = ["staticlib", "cdylib", "rlib"] 
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[build]
+profiler = true
 
 [dependencies]
 sha-1 = "0.10.0"
 hex = "0.4.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0.0"
+serde_json = "1.0"
 rand_core = {version = "0.6.4", features = ["getrandom"]}
+dotenv = "0.15.0"
 
+bip39 = "2.0.0"
 secp256k1 = {version = "0.27.0", features = ["rand", "global-context", "rand-std"]}
 bitcoin = {version = "0.30.0", features = ["rand", "base64"]}
-bdk = {version = "0.29.0", features = ["compiler", "rpc", "electrum", "sqlite", "keys-bip39"]}
 miniscript = {version = "0.10.0"}
 lightning-invoice = "0.26.0"
 elements = "0.23.0"
 electrum-client = "0.18.0"
 
-dotenv = "0.15.0"
-reqwest = { version = "0.11", features = ["json"] }
-tokio = { version = "1", features = ["full"] }
-serde_json = "1.0"
-base32 = "0.4.0"
-base64 = "0.13.0"
+ureq = "2.8.0"
+

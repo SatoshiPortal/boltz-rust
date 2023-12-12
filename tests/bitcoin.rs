@@ -1,17 +1,24 @@
     // mod bullbitcoin_rnd;
-    extern crate bullbitcoin_rnd;
+    // extern crate libbullwallet;
+
+    use bullwallet::{
+        key::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}}, 
+        util::{rnd_str, pause_and_wait}, 
+        boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, 
+        swaps::script::OnchainReverseSwapScriptElements, 
+        electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}
+    };
     use std::{env, str::FromStr};
     use bitcoin::{Network, script::Error, sighash::SighashCache, Address, OutPoint, TxIn, Witness, Script, TxOut, Transaction, absolute::LockTime};
     use electrum_client::ElectrumApi;
     use bitcoin::Sequence;
     use secp256k1::{hashes::hash160, Secp256k1, Message};
-    use bullbitcoin_rnd::{key::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}}, util::{rnd_str, pause_and_wait}, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, swaps::script::OnchainReverseSwapScriptElements, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
     use dotenv::dotenv;
     use bitcoin::hashes::{sha256, Hash};
 
-    #[tokio::test]
+    #[test]
     #[ignore]
-    async fn test_bitcoin_rsi() {
+    fn test_bitcoin_rsi() {
 
         const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
         let out_amount = 50_000;
@@ -43,7 +50,7 @@
         let electrum_client = network_config.electrum_url.build_client().unwrap();
         let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
        
-        let boltz_pairs = boltz_client.get_pairs().await.unwrap();
+        let boltz_pairs = boltz_client.get_pairs().unwrap();
         
         let pair_hash = boltz_pairs.pairs.pairs.get("BTC/BTC")
             .map(|pair_info| pair_info.hash.clone())
@@ -70,7 +77,7 @@
             // timeout as u64,
             out_amount
         );
-        let response = boltz_client.create_swap(request).await;
+        let response = boltz_client.create_swap(request);
         assert!(response.is_ok());
         println!("{}",preimage.clone().to_string());
         assert!(response.as_ref().unwrap().validate_preimage(preimage_s256.to_string()));
@@ -122,7 +129,7 @@
         loop{
             pause_and_wait();
             let request = SwapStatusRequest{id: id.to_string()};
-            let response = boltz_client.swap_status(request).await;
+            let response = boltz_client.swap_status(request);
             assert!(response.is_ok());
             let swap_status = response.unwrap().status;
             

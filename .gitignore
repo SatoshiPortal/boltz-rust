@@ -1,2 +1,4 @@
 /target
+/builds
 .env
+Cargo.lock

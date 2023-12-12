@@ -36,9 +36,9 @@ init:
 all: ios android bindings
 
 ## ios: Compile the iOS universal library
-ios: target/universal/release/libstackmate.a
+ios: target/universal/release/libbullwallet.a
 
-target/universal/release/libstackmate.a: $(SOURCES) ndk-home
+target/universal/release/libbullwallet.a: $(SOURCES) ndk-home
 	@if [ $$(uname) == "Darwin" ] ; then \
 		cargo lipo --release ; \
 		else echo "Skipping iOS compilation on $$(uname)" ; \
@@ -46,21 +46,21 @@ target/universal/release/libstackmate.a: $(SOURCES) ndk-home
 	@echo "[DONE] $@"
 
 ## android: Compile the android targets (arm64, armv7 and i686)
-android: target/aarch64-linux-android/release/libstackmate.so target/armv7-linux-androideabi/release/libstackmate.so target/i686-linux-android/release/libstackmate.so target/x86_64-linux-android/release/libstackmate.so
+android: target/aarch64-linux-android/release/libbullwallet.so target/armv7-linux-androideabi/release/libbullwallet.so target/i686-linux-android/release/libbullwallet.so target/x86_64-linux-android/release/libbullwallet.so
 
-target/aarch64-linux-android/release/libstackmate.so: $(SOURCES) ndk-home
+target/aarch64-linux-android/release/libbullwallet.so: $(SOURCES) ndk-home
 	cargo build --target aarch64-linux-android --release
 	@echo "[DONE] $@"
 
-target/armv7-linux-androideabi/release/libstackmate.so: $(SOURCES) ndk-home
+target/armv7-linux-androideabi/release/libbullwallet.so: $(SOURCES) ndk-home
 	cargo build --target armv7-linux-androideabi --release
 	@echo "[DONE] $@"
 
-target/i686-linux-android/release/libstackmate.so: $(SOURCES) ndk-home
+target/i686-linux-android/release/libbullwallet.so: $(SOURCES) ndk-home
 	cargo  build --target i686-linux-android --release 
 	@echo "[DONE] $@"
 
-target/x86_64-linux-android/release/libstackmate.so: $(SOURCES) ndk-home
+target/x86_64-linux-android/release/libbullwallet.so: $(SOURCES) ndk-home
 	cargo build --target x86_64-linux-android --release
 	@echo "[DONE] $@"
 
