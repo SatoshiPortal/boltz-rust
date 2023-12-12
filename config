@@ -1,0 +1,19 @@
+[target.aarch64-linux-android]
+ar = "/android/ndk/23.0.7599858/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+linker = "/android/ndk/23.0.7599858/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang"
+
+[target.armv7-linux-androideabi]
+ar = "/android/ndk/23.0.7599858/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+linker = "/android/ndk/23.0.7599858/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi31-clang"
+
+[target.i686-linux-android]
+ar = "/android/ndk/23.0.7599858/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+linker = "/android/ndk/23.0.7599858/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android31-clang"
+
+[target.x86_64-linux-android]
+ar = "/android/ndk/23.0.7599858/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+linker = "/android/ndk/23.0.7599858/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android31-clang"
+
+[target.x86_64-apple-darwin]
+linker = "x86_64-apple-darwin14-clang"
+ar = "llvm-as"
