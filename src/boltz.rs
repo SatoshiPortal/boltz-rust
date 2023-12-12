@@ -421,6 +421,8 @@ pub struct CreateSwapResponse {
     pub  private_key: Option<String>,
     pub  refund_address: Option<String>,
     pub  refund_public_key: Option<String>,
+    pub  blinding_key: Option<String>,
+
 }
 
 impl CreateSwapResponse {
@@ -472,7 +474,6 @@ pub struct GetFeeEstimationResponse {
     lbtc: f64,
 }
 
-
 #[cfg(test)]
 mod tests {
     use secp256k1::hashes::{sha256, Hash};
@@ -489,8 +490,16 @@ mod tests {
         let pair_hash = response.unwrap().pairs.pairs.get("BTC/BTC")
         .map(|pair_info| pair_info.hash.clone())
         .unwrap();
-
         assert_eq!(pair_hash,"d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string());
+        
+        let response = client.get_pairs().await;
+        assert!(response.is_ok());
+        let pair_hash = response.unwrap().pairs.pairs.get("L-BTC/BTC")
+        .map(|pair_info| pair_info.hash.clone())
+        .unwrap();
+        assert_eq!(pair_hash,"bfe685df32af97d89e4ca9faa0f133003bf7637e719fdef0d665f34cc66d3f76".to_string());
+
+
     }
 
     #[tokio::test]
@@ -531,7 +540,7 @@ mod tests {
     }
     #[tokio::test]
     /// No changes required to run
-    async fn test_reverse_swap() {
+    async fn test_bitcoin_reverse_swap() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let claim_key_pair = KeyPairString {
             seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
@@ -561,6 +570,40 @@ mod tests {
         let response = client.swap_status(request).await;
         assert!(response.is_ok());
     }
+   
+    #[tokio::test]
+    /// No changes required to run
+    async fn test_liquid_reverse_swap() {
+        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
+        let claim_key_pair = KeyPairString {
+            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
+            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
+        };
+
+        let preimage = rnd_str();
+        println!("Preimage: {:?}", preimage);
+        let preimage_hash =  sha256::Hash::hash(&hex::decode(preimage).unwrap()).to_string();
+
+        let pair_hash = "bfe685df32af97d89e4ca9faa0f133003bf7637e719fdef0d665f34cc66d3f76".to_string();
+
+        let request = CreateSwapRequest::new_reverse(
+            SwapType::ReverseSubmarine, 
+            PairId::LBtc_Btc, 
+            OrderSide::Buy, 
+            pair_hash, 
+            preimage_hash.clone(), 
+            claim_key_pair.pubkey, 
+            100_000
+        );
+        let response = client.create_swap(request).await;
+        assert!(response.is_ok());
+        assert!(response.as_ref().unwrap().validate_preimage(preimage_hash));
+        let id = response.unwrap().id;
+        let request = SwapStatusRequest{id: id};
+        let response = client.swap_status(request).await;
+        assert!(response.is_ok());
+    }
+   
     #[tokio::test]
     #[ignore]
     async fn test_swap_status() {

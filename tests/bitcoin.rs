@@ -8,12 +8,10 @@
     use bullbitcoin_rnd::{key::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}}, util::{rnd_str, pause_and_wait}, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, swaps::script::OnchainReverseSwapScriptElements, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
     use dotenv::dotenv;
     use bitcoin::hashes::{sha256, Hash};
-    use std::io;
-    use std::io::prelude::*;
 
     #[tokio::test]
     #[ignore]
-    async fn test_rsi() {
+    async fn test_bitcoin_rsi() {
 
         const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
         let out_amount = 50_000;
