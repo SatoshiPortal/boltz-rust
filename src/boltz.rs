@@ -379,7 +379,6 @@ impl CreateSwapRequest {
         pair_hash: String,
         preimage_hash: String,
         claim_public_key: String,
-        timeout_block_height: u64,
         onchain_amount: u64,
     ) -> CreateSwapRequest {
         CreateSwapRequest {
@@ -391,7 +390,7 @@ impl CreateSwapRequest {
             refund_public_key: None,
             preimage_hash: Some(preimage_hash),
             claim_public_key: Some(claim_public_key),
-            timeout_block_height: Some(timeout_block_height),
+            timeout_block_height: None,
             onchain_amount: Some(onchain_amount),
             channel: None,
         }
@@ -552,7 +551,6 @@ mod tests {
             pair_hash, 
             preimage_hash.clone(), 
             claim_key_pair.pubkey, 
-            999_999,
             100_000
         );
         let response = client.create_swap(request).await;
