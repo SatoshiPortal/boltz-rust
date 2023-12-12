@@ -9,9 +9,8 @@ mod tests {
     use secp256k1::hashes::{sha256, Hash, ripemd160, hash160};
     use secp256k1::{Message, Secp256k1};
     use crate::util::pause_and_wait;
-    use crate::{script::ReverseSwapRedeemScriptElements, electrum::NetworkConfig, ec::KeyPairString};
-    use bitcoin::blockdata::script::Error as ScriptError;
-    use bitcoin::bitcoinconsensus::Error as ConsensusError;
+    use crate::{electrum::NetworkConfig};
+
     
     #[test]
     #[ignore]

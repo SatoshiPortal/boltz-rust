@@ -1,9 +1,6 @@
 pub mod e;
-pub mod boltz;
-pub mod seed;
-pub mod derivation;
-pub mod ec;
 pub mod util;
-pub mod script;
 pub mod electrum;
-pub mod tx;
+pub mod boltz;
+pub mod swaps;
+pub mod key;

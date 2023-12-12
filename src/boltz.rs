@@ -478,7 +478,7 @@ mod tests {
     use secp256k1::hashes::{sha256, Hash};
 
     use super::*;
-    use crate::{ec::KeyPairString, util::rnd_str};
+    use crate::{key::ec::KeyPairString, util::rnd_str};
 
     #[tokio::test]
     async fn test_get_pairs() {

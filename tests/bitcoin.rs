@@ -1,11 +1,11 @@
-#[cfg(test)]
-mod tests {
+    // mod bullbitcoin_rnd;
+    extern crate bullbitcoin_rnd;
     use std::{env, str::FromStr};
     use bitcoin::{Network, script::Error, sighash::SighashCache, Address, OutPoint, TxIn, Witness, Script, TxOut, Transaction, absolute::LockTime};
     use electrum_client::ElectrumApi;
     use bitcoin::Sequence;
     use secp256k1::{hashes::hash160, Secp256k1, Message};
-    use crate::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, util::{rnd_str, pause_and_wait}, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, script:: ReverseSwapRedeemScriptElements, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
+    use bullbitcoin_rnd::{key::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}}, util::{rnd_str, pause_and_wait}, boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, swaps::script::OnchainReverseSwapScriptElements, electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}};
     use dotenv::dotenv;
     use bitcoin::hashes::{sha256, Hash};
     use std::io;
@@ -84,10 +84,10 @@ mod tests {
         let lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
         let redeem_script_string = response.as_ref().unwrap().redeem_script.as_ref().unwrap().clone();
 
-        let boltz_script_elements = ReverseSwapRedeemScriptElements::from_str(&redeem_script_string).unwrap();
+        let boltz_script_elements = OnchainReverseSwapScriptElements::from_str(&redeem_script_string).unwrap();
         // assert!(response.as_ref().unwrap().claim_public_key.as_ref().unwrap().clone() == boltz_script_elements.sender_pubkey);
 
-        let constructed_script_elements = ReverseSwapRedeemScriptElements::new(
+        let constructed_script_elements = OnchainReverseSwapScriptElements::new(
             preimage_h160.to_string(),
             string_keypair.pubkey.clone(),
             timeout as u32,
@@ -237,4 +237,3 @@ mod tests {
         println!("{}", txid);
 
     }
-}
