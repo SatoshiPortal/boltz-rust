@@ -92,8 +92,8 @@ pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusRespon
 
 #[derive(Deserialize, Debug)]
 pub enum PairId {
-    Btc_Btc,
-    LBtc_Btc,
+    BtcBtc,
+    LBtcBtc,
 }
 
 
@@ -103,8 +103,8 @@ impl Serialize for PairId {
         S: Serializer,
     {
         let s = match *self {
-            PairId::Btc_Btc => "BTC/BTC",
-            PairId::LBtc_Btc => "L-BTC/BTC",
+            PairId::BtcBtc => "BTC/BTC",
+            PairId::LBtcBtc => "L-BTC/BTC",
         };
         serializer.serialize_str(s)
     }
@@ -113,8 +113,8 @@ impl Serialize for PairId {
 impl ToString for PairId {
     fn to_string(&self) -> String {
         match self {
-            PairId::Btc_Btc => "BTC/BTC".to_string(),
-            PairId::LBtc_Btc => "L-BTC/BTC".to_string(),
+            PairId::BtcBtc => "BTC/BTC".to_string(),
+            PairId::LBtcBtc => "L-BTC/BTC".to_string(),
         }
     }
 }
@@ -124,8 +124,8 @@ impl FromStr for PairId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "BTC/BTC" => Ok(PairId::Btc_Btc),
-            "L-BTC/BTC" => Ok(PairId::LBtc_Btc),
+            "BTC/BTC" => Ok(PairId::BtcBtc),
+            "L-BTC/BTC" => Ok(PairId::LBtcBtc),
             _ => Err(()),
         }
     }
@@ -548,7 +548,7 @@ mod tests {
         let pair_hash = "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
         let request = CreateSwapRequest::new_normal(
             SwapType::Submarine, 
-            PairId::Btc_Btc, 
+            PairId::BtcBtc, 
             OrderSide::Sell,
             pair_hash, 
             invoice,
@@ -580,7 +580,7 @@ mod tests {
 
         let request = CreateSwapRequest::new_reverse(
             SwapType::ReverseSubmarine, 
-            PairId::Btc_Btc, 
+            PairId::BtcBtc, 
             OrderSide::Buy, 
             pair_hash, 
             preimage_hash.clone(), 
@@ -613,7 +613,7 @@ mod tests {
 
         let request = CreateSwapRequest::new_reverse(
             SwapType::ReverseSubmarine, 
-            PairId::LBtc_Btc, 
+            PairId::LBtcBtc, 
             OrderSide::Buy, 
             pair_hash, 
             preimage_hash.clone(), 

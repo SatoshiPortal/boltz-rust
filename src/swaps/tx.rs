@@ -1,15 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use std::{str::FromStr, collections::HashMap};
+    use std::str::FromStr;
     use bitcoin::opcodes::all::{OP_HASH160, OP_EQUAL};
-    use bitcoin::psbt::Psbt;
     use bitcoin::script::Builder;
-    use bitcoin::{Network, OutPoint, Transaction, TxOut, TxIn, Sequence, Witness, Address, absolute::LockTime, sighash::SighashCache, Script};
+    use bitcoin::{Network, OutPoint, Transaction, TxOut, TxIn, Sequence, Witness, Address, absolute::LockTime, Script};
     use electrum_client::ElectrumApi;
-    use secp256k1::hashes::{sha256, Hash, ripemd160, hash160};
-    use secp256k1::{Message, Secp256k1};
+    use secp256k1::hashes::{Hash, hash160};
     use crate::util::pause_and_wait;
-    use crate::{electrum::NetworkConfig};
+    use crate::electrum::NetworkConfig;
 
     
     #[test]
@@ -53,7 +51,7 @@ mod tests {
 
         // witness.push(OP_0);
         witness.push(preimage_bytes);
-        witness.push((script.to_bytes()));
+        witness.push(script.to_bytes());
         // println!("{:?}",script.to_v0_p2wsh());
         let input: TxIn = TxIn { 
             previous_output: outpoint_0, 

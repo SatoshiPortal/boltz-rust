@@ -9,7 +9,7 @@
         electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}
     };
     use std::{env, str::FromStr};
-    use bitcoin::{Network, script::Error, sighash::SighashCache, Address, OutPoint, TxIn, Witness, Script, TxOut, Transaction, absolute::LockTime};
+    use bitcoin::{Network, sighash::SighashCache, Address, OutPoint, TxIn, Witness, Script, TxOut, Transaction, absolute::LockTime};
     use electrum_client::ElectrumApi;
     use bitcoin::Sequence;
     use secp256k1::{hashes::hash160, Secp256k1, Message};
@@ -69,7 +69,7 @@
 
         let request = CreateSwapRequest::new_reverse(
             SwapType::ReverseSubmarine, 
-            PairId::Btc_Btc, 
+            PairId::BtcBtc, 
             OrderSide::Buy, 
             pair_hash, 
             preimage_s256.to_string(), 
