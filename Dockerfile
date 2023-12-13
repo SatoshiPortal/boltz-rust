@@ -2,17 +2,16 @@ FROM amd64/rust:slim-bullseye
 ARG USER_ID
 ARG GROUP_ID
 
-# RUN userdel -f USER_ID && groupdel -f GROUP_ID || true
-
-RUN groupadd -g $GROUP_ID debian || true && \
-    if getent passwd $USER_ID > /dev/null; then \
+RUN if ! getent group $GROUP_ID >/dev/null; then \
+        groupadd -g $GROUP_ID debian; \
+    fi && \
+    if getent passwd $USER_ID >/dev/null; then \
         existing_user=$(getent passwd $USER_ID | cut -d: -f1) && \
         usermod -l debian $existing_user && \
         usermod -g debian $existing_user; \
     else \
-        useradd -l -u $USER_ID -g debian -m debian; \
+        useradd -u $USER_ID -g debian -m debian; \
     fi
-
 
 RUN mkdir /bullwallet-core
 RUN chown -R debian /bullwallet-core
