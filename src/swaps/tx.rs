@@ -7,7 +7,7 @@ use crate::{key::{ec::KeyPairString, preimage::Preimage}, electrum::{NetworkConf
 
 use super::script::OnchainSwapScriptElements;
 
-struct OnchainSwapTxElements{
+pub struct OnchainSwapTxElements{
     script_elements: OnchainSwapScriptElements,
     output_address: Address,
     absolute_fees: u32,
@@ -29,8 +29,8 @@ impl OnchainSwapTxElements{
             utxo_value: None,
         }
     }
-    pub fn fetch_utxo(self, electrum_url: String, expected_value: u64)->OnchainSwapTxElements{
-        let network = match self.network {
+    pub fn fetch_utxo(&mut self, electrum_url: String, expected_value: u64)->(){
+        let network = match &self.network {
             Network::Bitcoin=>BitcoinNetwork::Bitcoin,
             _=>BitcoinNetwork::BitcoinTestnet
         };
@@ -41,7 +41,7 @@ impl OnchainSwapTxElements{
 
         let utxos = electrum_client.script_list_unspent(&self.script_elements.to_script().to_v0_p2wsh()).unwrap();
         if utxos.len() == 0 {
-            self
+            ()
         }
         else{
             let outpoint_0 = OutPoint::new(
@@ -50,17 +50,12 @@ impl OnchainSwapTxElements{
             );
             let utxo_value = utxos[0].value;
             if utxo_value == expected_value{
-                OnchainSwapTxElements{
-                    script_elements: self.script_elements,
-                    output_address: self.output_address,
-                    absolute_fees: self.absolute_fees,
-                    network: self.network,
-                    utxo: Some(outpoint_0),
-                    utxo_value: Some(utxo_value),
-                }
+                self.utxo = Some(outpoint_0);
+                self.utxo_value = Some(utxo_value);
+                ()
             }
             else {
-                self 
+                () 
                 // this should appropriately error stating exptected value is not a match
             }
 
@@ -68,10 +63,11 @@ impl OnchainSwapTxElements{
         
     }
     
-    pub fn has_utxo(&self)->bool{
+    fn has_utxo(&self)->bool{
         self.utxo.is_some() && self.utxo_value.is_some()
     }
     pub fn build_tx(&self,keys: KeyPairString, preimage: Preimage)->Transaction{
+        // if !self.has_utxo(){ Error::new() }
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
         let unsigned_input: TxIn = TxIn { 
@@ -85,7 +81,7 @@ impl OnchainSwapTxElements{
             value: self.utxo_value.unwrap() - self.absolute_fees as u64
         };
 
-        let unsigned_tx = Transaction{
+        let unsigned_tx = Transaction {
             version : 1, 
             lock_time: LockTime::from_consensus(self.script_elements.timelock),
             input: vec![unsigned_input],
@@ -94,7 +90,7 @@ impl OnchainSwapTxElements{
 
         // SIGN TRANSACTION
         let secp = Secp256k1::new();
-        let sighash_0 = Message::from_slice(
+        let sighash = Message::from_slice(
             &SighashCache::new(unsigned_tx.clone())
                 .segwit_signature_hash(
                     0,
@@ -103,12 +99,10 @@ impl OnchainSwapTxElements{
                     bitcoin::sighash::EcdsaSighashType::All,
                 ).unwrap()[..]
         ).unwrap();
-        let signature_0 = secp.sign_ecdsa(&sighash_0, &keys.to_typed().secret_key());
-        println!("SIG: {}",signature_0.to_string());
+        let signature = secp.sign_ecdsa(&sighash, &keys.to_typed().secret_key());
 
-        // CREATE WITNESS
         let mut witness = Witness::new();
-        witness.push_bitcoin_signature(&signature_0.serialize_der(), bitcoin::sighash::EcdsaSighashType::All);
+        witness.push_bitcoin_signature(&signature.serialize_der(), bitcoin::sighash::EcdsaSighashType::All);
         witness.push(preimage.preimage_bytes);
         witness.push(self.script_elements.to_script().as_bytes());
 
@@ -130,8 +124,6 @@ impl OnchainSwapTxElements{
         };
         signed_tx
         // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
-
-
     }
 }
 
