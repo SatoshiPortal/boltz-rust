@@ -1,3 +1,5 @@
+use bitcoin::Network;
+
 use crate::e::S5Error;
 
 // TODO: policy asset should only be set for ElementsRegtest, fail otherwise

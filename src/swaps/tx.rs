@@ -1,3 +1,140 @@
+use bitcoin::{Script, Address, ScriptBuf, Network, network, Transaction, OutPoint, TxIn, absolute::LockTime, Witness, Sequence, TxOut, sighash::SighashCache};
+use electrum_client::ElectrumApi;
+use secp256k1::{Secp256k1, Message};
+use std::str::FromStr;
+
+use crate::{key::{ec::KeyPairString, preimage::Preimage}, electrum::{NetworkConfig, BitcoinNetwork}};
+
+use super::script::OnchainSwapScriptElements;
+
+struct OnchainSwapTxElements{
+    script_elements: OnchainSwapScriptElements,
+    output_address: Address,
+    absolute_fees: u32,
+    network: Network,
+    utxo: Option<OutPoint>,
+    utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
+}
+
+impl OnchainSwapTxElements{
+    pub fn new(redeem_script: String, output_address: String, absolute_fees: u32, network: Network)->OnchainSwapTxElements{
+        let address = Address::from_str(&output_address).unwrap();
+        address.is_valid_for_network(network);
+        OnchainSwapTxElements{
+            script_elements: OnchainSwapScriptElements::from_str(&redeem_script).unwrap(),
+            output_address: address.assume_checked(),
+            absolute_fees,
+            network: network,
+            utxo: None,
+            utxo_value: None,
+        }
+    }
+    pub fn fetch_utxo(self, electrum_url: String, expected_value: u64)->OnchainSwapTxElements{
+        let network = match self.network {
+            Network::Bitcoin=>BitcoinNetwork::Bitcoin,
+            _=>BitcoinNetwork::BitcoinTestnet
+        };
+        let electrum_client = NetworkConfig::new(network, &electrum_url, true, true, false, None).unwrap()
+        .electrum_url
+        .build_client()
+        .unwrap();
+
+        let utxos = electrum_client.script_list_unspent(&self.script_elements.to_script().to_v0_p2wsh()).unwrap();
+        if utxos.len() == 0 {
+            self
+        }
+        else{
+            let outpoint_0 = OutPoint::new(
+                utxos[0].tx_hash, 
+                utxos[0].tx_pos as u32,
+            );
+            let utxo_value = utxos[0].value;
+            if utxo_value == expected_value{
+                OnchainSwapTxElements{
+                    script_elements: self.script_elements,
+                    output_address: self.output_address,
+                    absolute_fees: self.absolute_fees,
+                    network: self.network,
+                    utxo: Some(outpoint_0),
+                    utxo_value: Some(utxo_value),
+                }
+            }
+            else {
+                self 
+                // this should appropriately error stating exptected value is not a match
+            }
+
+        }        
+        
+    }
+    
+    pub fn has_utxo(&self)->bool{
+        self.utxo.is_some() && self.utxo_value.is_some()
+    }
+    pub fn build_tx(&self,keys: KeyPairString, preimage: Preimage)->Transaction{
+        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+
+        let unsigned_input: TxIn = TxIn { 
+            previous_output: self.utxo.unwrap(), 
+            script_sig: Script::empty().into(),
+            sequence: sequence, 
+            witness: Witness::new() 
+        };
+        let output: TxOut = TxOut {
+            script_pubkey:self.output_address.payload.script_pubkey(), 
+            value: self.utxo_value.unwrap() - self.absolute_fees as u64
+        };
+
+        let unsigned_tx = Transaction{
+            version : 1, 
+            lock_time: LockTime::from_consensus(self.script_elements.timelock),
+            input: vec![unsigned_input],
+            output: vec![output.clone()],
+        };
+
+        // SIGN TRANSACTION
+        let secp = Secp256k1::new();
+        let sighash_0 = Message::from_slice(
+            &SighashCache::new(unsigned_tx.clone())
+                .segwit_signature_hash(
+                    0,
+                    &self.script_elements.to_script(),
+                    self.utxo_value.unwrap(),
+                    bitcoin::sighash::EcdsaSighashType::All,
+                ).unwrap()[..]
+        ).unwrap();
+        let signature_0 = secp.sign_ecdsa(&sighash_0, &keys.to_typed().secret_key());
+        println!("SIG: {}",signature_0.to_string());
+
+        // CREATE WITNESS
+        let mut witness = Witness::new();
+        witness.push_bitcoin_signature(&signature_0.serialize_der(), bitcoin::sighash::EcdsaSighashType::All);
+        witness.push(preimage.preimage_bytes);
+        witness.push(self.script_elements.to_script().as_bytes());
+
+        // https://github.com/bitcoin-teleport/teleport-transactions/blob/master/src/wallet_sync.rs#L255
+        // println!("{:?}", witness);
+        // BUILD SIGNED TX w/ WITNESS
+        let signed_txin = TxIn { 
+            previous_output: self.utxo.unwrap(), 
+            script_sig: Script::empty().into(),
+            sequence: sequence, 
+            witness: witness
+        };
+        
+        let signed_tx = Transaction{
+            version : 1, 
+            lock_time: LockTime::from_consensus(self.script_elements.timelock),
+            input: vec![signed_txin],
+            output: vec![output.clone()],
+        };
+        signed_tx
+        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
+
+
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

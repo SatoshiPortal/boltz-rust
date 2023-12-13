@@ -1,3 +1,4 @@
+use bitcoin::{Network, string};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use secp256k1::hashes::sha256;
@@ -7,6 +8,9 @@ use secp256k1::{ecdh::SharedSecret, KeyPair, Message, PublicKey, SecretKey, XOnl
 use bitcoin::bip32::ExtendedPrivKey;
 
 use crate::e::{ErrorKind, S5Error};
+
+use super::derivation::{DerivationPurpose, ChildKeys};
+use super::seed::MasterKey;
 
 /// FFI Output
 #[derive(Serialize, Deserialize, Debug)]
@@ -25,6 +29,13 @@ impl KeyPairString {
     let secp = Secp256k1::new();
     let seckey = SecretKey::from_str(&self.seckey).unwrap();
     KeyPair::from_secret_key(&secp, &seckey)
+  }
+  pub fn from_mnemonic(mnemonic: String, passphrase: String)->KeyPairString{
+    let master_key = MasterKey::import(&mnemonic, &passphrase , Network::Testnet).unwrap();
+    let child_key = ChildKeys::from_hardened_account(&master_key.xprv, DerivationPurpose::Native, 0).unwrap();
+    let ec_key = keypair_from_xprv_str(&child_key.xprv).unwrap();
+    let string_keypair = KeyPairString::from_keypair(ec_key);
+    string_keypair
   }
 }
 

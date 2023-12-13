@@ -2,7 +2,7 @@
     // extern crate libbullwallet;
 
     use bullwallet::{
-        key::{seed::import, derivation::{to_hardened_account, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}}, 
+        key::{seed::MasterKey, derivation::{ChildKeys, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, preimage::Preimage}, 
         util::{rnd_str, pause_and_wait}, 
         boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, 
         swaps::script::OnchainReverseSwapScriptElements, 
@@ -24,21 +24,16 @@
         let out_amount = 50_000;
 
         dotenv().ok();
+        // SECRETS
         let mnemonic = match env::var("MNEMONIC") {
             Ok(result) => result,
             Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
         };
-        println!("{}", mnemonic);
-        let master_key = import(&mnemonic, "" , Network::Testnet).unwrap();
-        let child_key = to_hardened_account(&master_key.xprv, DerivationPurpose::Native, 0).unwrap();
-        let ec_key = keypair_from_xprv_str(&child_key.xprv).unwrap();
-        let string_keypair = KeyPairString::from_keypair(ec_key);
+        let string_keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string());
         println!("{:?}",string_keypair);
-        let preimage = rnd_str();
-        println!("Preimage: {:?}", preimage);
-        let preimage_s256 =  sha256::Hash::hash(&hex::decode(preimage.clone()).unwrap());
-        let preimage_h160 =  hash160::Hash::hash(&hex::decode(preimage.clone()).unwrap());
-
+        let ec_key = string_keypair.to_typed();
+        let preimage = Preimage::new();
+        // SECRETS
         let network_config = NetworkConfig::new(
             BitcoinNetwork::BitcoinTestnet,
             DEFAULT_TESTNET_NODE,
@@ -49,9 +44,7 @@
         ).unwrap();
         let electrum_client = network_config.electrum_url.build_client().unwrap();
         let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-       
         let boltz_pairs = boltz_client.get_pairs().unwrap();
-        
         let pair_hash = boltz_pairs.pairs.pairs.get("BTC/BTC")
             .map(|pair_info| pair_info.hash.clone())
             .unwrap();
@@ -72,15 +65,15 @@
             PairId::BtcBtc, 
             OrderSide::Buy, 
             pair_hash, 
-            preimage_s256.to_string(), 
+            preimage.clone().sha256, 
             string_keypair.pubkey.clone(), 
             // timeout as u64,
             out_amount
         );
         let response = boltz_client.create_swap(request);
         assert!(response.is_ok());
-        println!("{}",preimage.clone().to_string());
-        assert!(response.as_ref().unwrap().validate_preimage(preimage_s256.to_string()));
+        println!("{:?}",preimage.clone());
+        assert!(response.as_ref().unwrap().validate_preimage(preimage.preimage));
         // assert_eq!(timeout as u64 , response.as_ref().unwrap().timeout_block_height.unwrap().clone());
 
         let timeout = response.as_ref().unwrap().timeout_block_height.unwrap().clone();
@@ -93,7 +86,7 @@
         // assert!(response.as_ref().unwrap().claim_public_key.as_ref().unwrap().clone() == boltz_script_elements.sender_pubkey);
 
         let constructed_script_elements = OnchainReverseSwapScriptElements::new(
-            preimage_h160.to_string(),
+            preimage.hash160.to_string(),
             string_keypair.pubkey.clone(),
             timeout as u32,
             boltz_script_elements.sender_pubkey.clone(),
@@ -215,7 +208,7 @@
         // CREATE WITNESS
         let mut witness = Witness::new();
         witness.push_bitcoin_signature(&signature_0.serialize_der(), bitcoin::sighash::EcdsaSighashType::All);
-        witness.push(hex::decode(preimage).unwrap());
+        witness.push(preimage.preimage_bytes);
         witness.push(constructed_script_elements.to_script().as_bytes());
 
         assert_eq!(redeem_script_string,hex::encode(constructed_script_elements.to_script().as_bytes()));

@@ -19,39 +19,26 @@ pub struct ChildKeys {
     pub xpub: String,
 }
 impl ChildKeys {
-    pub fn c_stringify(&self) -> *mut c_char {
-        let stringified = match serde_json::to_string(self) {
-            Ok(result) => result,
-            Err(_) => {
-                return CString::new("Error:JSON Stringify Failed. BAD NEWS! Contact Support.")
-                    .unwrap()
-                    .into_raw()
-            }
-        };
-
-        CString::new(stringified).unwrap().into_raw()
-    }
-    pub fn _from_hardened_account(
+    pub fn from_hardened_account(
         master_xprv: &str,
         purpose: DerivationPurpose,
         account: u64,
     ) -> Result<ChildKeys, S5Error> {
         let secp = Secp256k1::new();
-
         let root = match ExtendedPrivKey::from_str(master_xprv) {
             Ok(xprv) => xprv,
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
         };
-
+    
         let fingerprint = root.fingerprint(&secp);
         let network = root.network;
-
+    
         let coin = match network {
             Network::Bitcoin => "0",
             Network::Testnet => "1",
             _ => "1",
         };
-
+    
         let hardened_path = format!(
             "m/{}h/{}h/{}h",
             purpose.to_string(),
@@ -67,55 +54,21 @@ impl ChildKeys {
                 ))
             }
         };
-        match purpose {
-            DerivationPurpose::Taproot => {
-                let child_xprv = match root.derive_priv(&secp, &path) {
-                    Ok(xprv) => xprv,
-                    Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-                };
-                let keypair = child_xprv.to_keypair(&secp);
-                let public_key = PublicKey::from_keypair(&keypair);
-                // ENFORCE EVEN PARITY!
-                let parity = public_key.to_string().remove(1);
-                let keypair = if parity == '3' {
-                  let seckey = SecretKey::from_keypair(&keypair).negate();
-                  let key_pair = KeyPair::from_secret_key(&secp, &seckey); 
-                  key_pair
-                }
-                else{
-                  keypair
-                };
-                
-                let schnorr_xprv = ExtendedPrivKey::decode(&keypair.secret_bytes()).unwrap();
-                let schnorr_xpub =
-                    ExtendedPubKey::decode(&keypair.public_key().serialize()).unwrap();
-
-                Ok(ChildKeys {
-                    fingerprint: fingerprint.to_string(),
-                    hardened_path,
-                    xprv: schnorr_xprv.to_string(),
-                    xpub: schnorr_xpub.to_string(),
-                })
-            }
-            _ => {
-                let child_xprv = match root.derive_priv(&secp, &path) {
-                    Ok(xprv) => xprv,
-                    Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-                };
-
-                let child_xpub = ExtendedPubKey::from_priv(&secp, &child_xprv);
-
-                Ok(ChildKeys {
-                    fingerprint: fingerprint.to_string(),
-                    hardened_path,
-                    xprv: child_xprv.to_string(),
-                    xpub: child_xpub.to_string(),
-                })
-            }
-        }
+        let child_xprv = match root.derive_priv(&secp, &path) {
+            Ok(xprv) => xprv,
+            Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
+        };
+    
+        let child_xpub = ExtendedPubKey::from_priv(&secp, &child_xprv);
+    
+        Ok(ChildKeys {
+            fingerprint: fingerprint.to_string(),
+            hardened_path,
+            xprv: child_xprv.to_string(),
+            xpub: child_xpub.to_string(),
+        })
     }
-
-    pub fn _from_path_str(master_xprv: &str, derivation_path: &str) -> Result<ChildKeys, S5Error> {
+    pub fn from_path_str(master_xprv: &str, derivation_path: &str) -> Result<ChildKeys, S5Error> {
         let secp = Secp256k1::new();
         let root = match ExtendedPrivKey::from_str(master_xprv) {
             Ok(xprv) => xprv,
@@ -131,7 +84,7 @@ impl ChildKeys {
             Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
         };
         let child_xpub = ExtendedPubKey::from_priv(&secp, &child_xprv);
-
+    
         Ok(ChildKeys {
             fingerprint: fingerprint.to_string(),
             hardened_path: derivation_path.to_string(),
@@ -139,20 +92,7 @@ impl ChildKeys {
             xpub: child_xpub.to_string(),
         })
     }
-    pub fn _to_extended_xprv_str(&self) -> String {
-        format!(
-            "[{}]{}/*",
-            self.hardened_path.replace("m", &self.fingerprint),
-            self.xprv
-        )
-    }
-    pub fn _to_extended_xpub_str(&self) -> String {
-        format!(
-            "[{}]{}/*",
-            self.hardened_path.replace("m", &self.fingerprint),
-            self.xpub
-        )
-    }
+    
 }
 #[derive(Clone)]
 pub enum DerivationPurpose {
@@ -172,79 +112,6 @@ impl Display for DerivationPurpose {
             DerivationPurpose::_Encryption => write!(f, "392"),
         }
     }
-}
-pub fn to_hardened_account(
-    master_xprv: &str,
-    purpose: DerivationPurpose,
-    account: u64,
-) -> Result<ChildKeys, S5Error> {
-    let secp = Secp256k1::new();
-    let root = match ExtendedPrivKey::from_str(master_xprv) {
-        Ok(xprv) => xprv,
-        Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
-    };
-
-    let fingerprint = root.fingerprint(&secp);
-    let network = root.network;
-
-    let coin = match network {
-        Network::Bitcoin => "0",
-        Network::Testnet => "1",
-        _ => "1",
-    };
-
-    let hardened_path = format!(
-        "m/{}h/{}h/{}h",
-        purpose.to_string(),
-        coin,
-        account.to_string()
-    );
-    let path = match DerivationPath::from_str(&hardened_path) {
-        Ok(hdpath) => hdpath,
-        Err(_) => {
-            return Err(S5Error::new(
-                ErrorKind::Key,
-                "Invalid purpose or account in derivation path.",
-            ))
-        }
-    };
-    let child_xprv = match root.derive_priv(&secp, &path) {
-        Ok(xprv) => xprv,
-        Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-    };
-
-    let child_xpub = ExtendedPubKey::from_priv(&secp, &child_xprv);
-
-    Ok(ChildKeys {
-        fingerprint: fingerprint.to_string(),
-        hardened_path,
-        xprv: child_xprv.to_string(),
-        xpub: child_xpub.to_string(),
-    })
-}
-pub fn to_path_str(master_xprv: &str, derivation_path: &str) -> Result<ChildKeys, S5Error> {
-    let secp = Secp256k1::new();
-    let root = match ExtendedPrivKey::from_str(master_xprv) {
-        Ok(xprv) => xprv,
-        Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
-    };
-    let fingerprint = root.fingerprint(&secp);
-    let path = match DerivationPath::from_str(&derivation_path) {
-        Ok(path) => path,
-        Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Derivation Path.")),
-    };
-    let child_xprv = match root.derive_priv(&secp, &path) {
-        Ok(xprv) => xprv,
-        Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-    };
-    let child_xpub = ExtendedPubKey::from_priv(&secp, &child_xprv);
-
-    Ok(ChildKeys {
-        fingerprint: fingerprint.to_string(),
-        hardened_path: derivation_path.to_string(),
-        xprv: child_xprv.to_string(),
-        xpub: child_xpub.to_string(),
-    })
 }
 
 pub fn check_xpub(xpub: &str) -> bool {
@@ -270,7 +137,7 @@ mod tests {
             xprv: account_xprv.to_string(),
             xpub: account_xpub.to_string(),
         };
-        let derived = to_hardened_account(master_xprv, purpose, account).unwrap();
+        let derived = ChildKeys::from_hardened_account(master_xprv, purpose, account).unwrap();
         assert_eq!(derived.xprv, child_keys.xprv);
     }
 
