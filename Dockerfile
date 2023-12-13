@@ -1,16 +1,11 @@
 FROM amd64/rust:slim-bullseye
 ARG USER_ID
-ARG GROUP_ID
 
-RUN if ! getent group $GROUP_ID >/dev/null; then \
-        groupadd -g $GROUP_ID debian; \
-    fi && \
-    if getent passwd $USER_ID >/dev/null; then \
+RUN if getent passwd $USER_ID >/dev/null; then \
         existing_user=$(getent passwd $USER_ID | cut -d: -f1) && \
-        usermod -l debian $existing_user && \
-        usermod -g debian $existing_user; \
+        usermod -l debian $existing_user; \
     else \
-        useradd -u $USER_ID -g debian -m debian; \
+        useradd -u $USER_ID -m debian; \
     fi
 
 RUN mkdir /bullwallet-core
@@ -61,6 +56,6 @@ ENTRYPOINT ["docker-entrypoint.sh"]
 # CMD ["make", "android"]
 # CMD ["tail", "-f", "/dev/null"]
 
-# docker build --platform linux/x86_64 --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t bwcbuilder . 
+# docker build --platform linux/x86_64 --build-arg USER_ID=$(id -u) -t bwcbuilder . 
 # in the project root directory run:
 # docker run --platform linux/x86_64 --name bwcbuilder01 -v $PWD:/bullwallet-core bwcbuilder && docker stop bwcbuilder01 && docker rm bwcbuilder01
