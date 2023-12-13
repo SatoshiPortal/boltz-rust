@@ -125,6 +125,9 @@ A descriptor library that uses bitcoin, miniscript and electrum-client
 - [boltz](https://github.com/BoltzExchange/boltz-core/blob/master/lib/swap/Claim.ts)
 Boltz-core - solving the claim script
 
+- [bewallet](https://github.com/LeoComandini/BEWallet/blob/master/src/interface.rs#L538)
+Core wallet functions for liquid
+
 ## test
 
 The best place to start diving into this repo is `src/lib.rs` and check out `test_rsi`. 
