@@ -6,7 +6,7 @@ use elements::{
     hashes::hash160::Hash,
     opcodes::all::*,
     script::{Builder as EBuilder, Instruction, Script as EScript},
-    secp256k1_zkp::PublicKey as ZKPublicKey,
+    secp256k1_zkp::{PublicKey as ZKPublicKey, SecretKey as ZKSecretKey},
     AddressParams,
 };
 #[derive(Debug, PartialEq)]
@@ -116,10 +116,10 @@ impl LiquidSwapScriptElements {
         script
     }
 
-    pub fn to_address(&self, _network: elements::bitcoin::Network) -> EAddress {
+    pub fn to_address(&self, _network: elements::bitcoin::Network, blinder: String) -> EAddress {
         let script = self.to_script();
-        let pubkey = ZKPublicKey::from_str(&self.reciever_pubkey).unwrap();
-        EAddress::p2shwsh(&script, Some(pubkey), &AddressParams::LIQUID_TESTNET)
+        let blinder = ZKPublicKey::from_str(&blinder).unwrap();
+        EAddress::p2shwsh(&script, Some(blinder), &AddressParams::LIQUID_TESTNET)
     }
 }
 
@@ -259,10 +259,18 @@ impl LiquidReverseSwapScriptElements {
         script
     }
 
-    pub fn to_address(&self, _network: elements::bitcoin::Network) -> EAddress {
+    pub fn to_address(
+        &self,
+        _network: elements::bitcoin::Network,
+        blinder_pubkey: String,
+    ) -> EAddress {
         let script = self.to_script();
-        let pubkey = ZKPublicKey::from_str(&self.reciever_pubkey).unwrap();
-        EAddress::p2wsh(&script, Some(pubkey), &AddressParams::LIQUID_TESTNET)
+        let blinder_pubkey = ZKPublicKey::from_str(&blinder_pubkey).unwrap();
+        EAddress::p2wsh(
+            &script,
+            Some(blinder_pubkey),
+            &AddressParams::LIQUID_TESTNET,
+        )
     }
 }
 
@@ -281,7 +289,7 @@ mod tests {
 
     use elements::bitcoin::Network;
 
-    use crate::key::ec::KeyPairString;
+    use crate::key::ec::{BlindingKeyPair, KeyPairString};
 
     use super::*;
 
@@ -290,7 +298,11 @@ mod tests {
         let redeem_script_str = "8201208763a914fc9eeab62b946bd3e9681c082ac2b6d0bccea80f88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750315f411b1752102285c72dca7aaa31d58334e20be181cfa2cb8eb8092a577ef6f77bba068b8c69868ac".to_string();
         let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwkxqf8psf3e56k2k7393r3tkllznsdpphqa33rdvz00va429jq6j2zzg8f59kqhex";
         let expected_timeout = 1176597;
-        let _blinding_key = "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed";
+
+        let blinding_key = BlindingKeyPair::from_secret_string(
+            "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed".to_string(),
+        );
+
         let _id = "axtHXB";
         let my_key_pair = KeyPairString {
             seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1".to_string(),
@@ -317,7 +329,7 @@ mod tests {
         let sh_str = hex::encode(script_hash.to_string());
         println!("ENCODED SCRIPT HASH: {}", sh_str);
         println!("ENCODED HEX: {}", script.to_string());
-        let address = script_elements.to_address(Network::Testnet);
+        let address = script_elements.to_address(Network::Testnet, blinding_key.pubkey);
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
     }
