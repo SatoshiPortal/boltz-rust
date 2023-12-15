@@ -286,22 +286,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_decode_encode_swap_redeem_script() {
+    fn test_liquid_swap_elements() {
         let redeem_script_str = "8201208763a914fc9eeab62b946bd3e9681c082ac2b6d0bccea80f88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750315f411b1752102285c72dca7aaa31d58334e20be181cfa2cb8eb8092a577ef6f77bba068b8c69868ac".to_string();
         let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwkxqf8psf3e56k2k7393r3tkllznsdpphqa33rdvz00va429jq6j2zzg8f59kqhex";
         let expected_timeout = 1176597;
-        let blinding_key = "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed";
-        let id = "axtHXB";
-        let sender_key_pair = KeyPairString {
-            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
-            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d"
+        let _blinding_key = "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed";
+        let _id = "axtHXB";
+        let my_key_pair = KeyPairString {
+            seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1".to_string(),
+            pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986"
                 .to_string(),
         };
         let decoded =
             LiquidReverseSwapScriptElements::from_str(&redeem_script_str.clone()).unwrap();
         println!("{:?}", decoded);
-        assert!(decoded.sender_pubkey == sender_key_pair.pubkey);
-        assert!(decoded.timelock == expected_timeout);
+        assert_eq!(decoded.reciever_pubkey, my_key_pair.pubkey);
+        assert_eq!(decoded.timelock, expected_timeout);
 
         let script_elements = LiquidReverseSwapScriptElements {
             hashlock: decoded.hashlock,
