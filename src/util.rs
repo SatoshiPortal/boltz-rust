@@ -1,6 +1,6 @@
+use secp256k1::rand::{thread_rng, Rng};
 use std::io;
 use std::io::Write;
-use secp256k1::rand::{thread_rng,Rng};
 
 pub fn rnd_str() -> String {
     let mut rng = thread_rng();

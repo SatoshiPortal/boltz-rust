@@ -1,13 +1,11 @@
 use crate::e::{ErrorKind, S5Error};
+use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::Secp256k1;
-use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
-use bitcoin::secp256k1::{KeyPair, PublicKey, SecretKey};
+
 use serde::{Deserialize, Serialize};
-use std::ffi::CString;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::os::raw::c_char;
 use std::str::FromStr;
 
 /// FFI Output
@@ -29,16 +27,16 @@ impl ChildKeys {
             Ok(xprv) => xprv,
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
         };
-    
+
         let fingerprint = root.fingerprint(&secp);
         let network = root.network;
-    
+
         let coin = match network {
             Network::Bitcoin => "0",
             Network::Testnet => "1",
             _ => "1",
         };
-    
+
         let hardened_path = format!(
             "m/{}h/{}h/{}h",
             purpose.to_string(),
@@ -58,9 +56,9 @@ impl ChildKeys {
             Ok(xprv) => xprv,
             Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
         };
-    
+
         let child_xpub = ExtendedPubKey::from_priv(&secp, &child_xprv);
-    
+
         Ok(ChildKeys {
             fingerprint: fingerprint.to_string(),
             hardened_path,
@@ -84,7 +82,7 @@ impl ChildKeys {
             Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
         };
         let child_xpub = ExtendedPubKey::from_priv(&secp, &child_xprv);
-    
+
         Ok(ChildKeys {
             fingerprint: fingerprint.to_string(),
             hardened_path: derivation_path.to_string(),
@@ -92,7 +90,6 @@ impl ChildKeys {
             xpub: child_xpub.to_string(),
         })
     }
-    
 }
 #[derive(Clone)]
 pub enum DerivationPurpose {

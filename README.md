@@ -136,8 +136,10 @@ This contains the entire flow of the reverse swap procedure above.
 Run all tests, except ignored tests
 
 ```bash
+./test # test helper script
+# OR MANUALLY
 cargo test
-cargo test -- --nocapture # for logs
+cargo test -- --nocapture # for println! logs
 ```
 
 ### ignored tests

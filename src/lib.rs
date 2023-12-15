@@ -1,8 +1,11 @@
-pub mod e;
-pub mod util;
-pub mod electrum;
-pub mod boltz;
-pub mod swaps;
-pub mod key;
-pub mod wallet;
+/*
 
+THIS SHOULD BE GENERATED
+
+*/
+pub mod e;
+pub mod key;
+pub mod network;
+pub mod swaps;
+pub mod util;
+pub mod wallet;

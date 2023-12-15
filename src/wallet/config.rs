@@ -12,7 +12,7 @@ use tempdir::TempDir;
 pub struct TestElectrumWallet {
     mnemonic: String,
     electrum_wallet: ElectrumWallet,
-    tx_status: u64,
+    _tx_status: u64,
     _block_status: (u32, BlockHash),
     _db_root_dir: TempDir,
 }
@@ -57,7 +57,7 @@ impl TestElectrumWallet {
         Self {
             mnemonic,
             electrum_wallet,
-            tx_status,
+            _tx_status: 0,
             _block_status,
             _db_root_dir,
         }
@@ -73,7 +73,7 @@ impl TestElectrumWallet {
         *balance.get(asset).unwrap_or(&0u64)
     }
 
-    fn balance_btc(&self) -> u64 {
+    fn _balance_btc(&self) -> u64 {
         self.balance(&self.policy_asset())
     }
 
@@ -105,7 +105,7 @@ impl TestElectrumWallet {
         utxos: Option<Vec<UnblindedTXO>>,
     ) -> String {
         let asset = asset.unwrap_or(self.policy_asset());
-        let init_sat = self.balance(&asset);
+        let _init_satt = self.balance(&asset);
         //let init_node_balance = self.node_balance(asset.clone());
         let mut create_opt = CreateTransactionOpt::default();
         let fee_rate = 100;
@@ -224,5 +224,4 @@ impl TestElectrumWallet {
             "last output is not a fee"
         );
     }
-
 }

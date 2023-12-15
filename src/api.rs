@@ -1,3 +1,9 @@
+/*
+
+THIS SHOULD BE THE MOD FILE
+
+*/
+
 // pub mod e;
 // pub mod util;
 // pub mod electrum;
@@ -5,4 +11,3 @@
 // pub mod swaps;
 // pub mod key;
 // pub mod wallet;
-

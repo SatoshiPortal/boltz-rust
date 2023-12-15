@@ -1,7 +1,3 @@
-
 #[test]
 
-fn test_liquid_rsi(){
-
-
-}
+fn test_liquid_rsi() {}
