@@ -1,2 +1,2 @@
-pub mod script;
-pub mod tx;
+pub mod liquid;
+pub mod bitcoin;

@@ -32,7 +32,7 @@ impl KeyPairString {
   }
   pub fn from_mnemonic(mnemonic: String, passphrase: String)->KeyPairString{
     let master_key = MasterKey::import(&mnemonic, &passphrase , Network::Testnet).unwrap();
-    let child_key = ChildKeys::from_hardened_account(&master_key.xprv, DerivationPurpose::Native, 0).unwrap();
+    let child_key = ChildKeys::from_hardened_account(&master_key.xprv, DerivationPurpose::Native, 1).unwrap();
     let ec_key = keypair_from_xprv_str(&child_key.xprv).unwrap();
     let string_keypair = KeyPairString::from_keypair(ec_key);
     string_keypair

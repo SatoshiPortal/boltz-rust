@@ -2,11 +2,19 @@
     // extern crate libbullwallet;
 
     use bullwallet::{
-        key::{seed::MasterKey, derivation::{ChildKeys, DerivationPurpose}, ec::{keypair_from_xprv_str, KeyPairString}, preimage::Preimage}, 
+        key::{
+            seed::MasterKey, 
+            derivation::{ChildKeys, DerivationPurpose}, 
+            ec::{keypair_from_xprv_str, KeyPairString}, 
+            preimage::Preimage
+        }, 
+        swaps::{
+            bitcoin::script::OnchainReverseSwapScriptElements, 
+            bitcoin::tx::OnchainSwapTxElements
+        }, 
+        electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE},
         util::{rnd_str, pause_and_wait}, 
         boltz::{BoltzApiClient, CreateSwapRequest, SwapType, PairId, OrderSide, SwapStatusRequest, BOLTZ_TESTNET_URL}, 
-        swaps::{script::OnchainReverseSwapScriptElements, tx::OnchainSwapTxElements}, 
-        electrum::{NetworkConfig, BitcoinNetwork, DEFAULT_TESTNET_NODE}
     };
     use std::{env, str::FromStr};
     use bitcoin::{Network, sighash::SighashCache, Address, OutPoint, TxIn, Witness, Script, TxOut, Transaction, absolute::LockTime};

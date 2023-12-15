@@ -31,7 +31,10 @@ impl BoltzApiClient {
                 let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
                 Ok(get_pairs_response)
             },
-            Err(e) => Err(e)
+            Err(e) => {
+                println!("ERROR: {:?}", e);
+                Err(e)
+            }
         }
     }
     
@@ -46,7 +49,10 @@ impl BoltzApiClient {
                 let get_fee_estimation_response: GetFeeEstimationResponse = serde_json::from_str(&body).unwrap();
                 Ok(get_fee_estimation_response)
             },
-            Err(e) => Err(e)
+            Err(e) => {
+                println!("ERROR: {:?}", e);
+                Err(e)
+            }
         }
     }
     
@@ -65,7 +71,10 @@ pub fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapRespon
             let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
             Ok(create_swap_response)
         },
-        Err(e) => Err(e.into())
+        Err(e) => {
+            println!("ERROR: {:?}", e);
+            Err(e)
+        }
     }
 }
 
@@ -83,7 +92,10 @@ pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusRespon
             let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
             Ok(swap_status_response)
         },
-        Err(e) => Err(e.into())
+        Err(e) => {
+            println!("ERROR: {:?}", e);
+            Err(e)
+        }
     }
 }
     

@@ -1,4 +1,4 @@
-use bitcoin::{Script, Address, ScriptBuf, Network, network, Transaction, OutPoint, TxIn, absolute::LockTime, Witness, Sequence, TxOut, sighash::SighashCache};
+use bitcoin::{Script, Address, Network, Transaction, OutPoint, TxIn, absolute::LockTime, Witness, Sequence, TxOut, sighash::SighashCache};
 use electrum_client::ElectrumApi;
 use secp256k1::{Secp256k1, Message};
 use std::str::FromStr;
@@ -71,10 +71,10 @@ impl OnchainSwapTxElements{
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
         let unsigned_input: TxIn = TxIn { 
+            sequence: sequence, 
             previous_output: self.utxo.unwrap(), 
             script_sig: Script::empty().into(),
-            sequence: sequence, 
-            witness: Witness::new() 
+            witness: Witness::new()
         };
         let output: TxOut = TxOut {
             script_pubkey:self.output_address.payload.script_pubkey(), 
@@ -125,6 +125,10 @@ impl OnchainSwapTxElements{
         signed_tx
         // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
     }
+}
+
+pub struct LiquidSwapTxElements{
+
 }
 
 #[cfg(test)]

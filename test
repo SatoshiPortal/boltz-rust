@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# Function to check if Cargo is installed
+check_cargo() {
+    if command -v cargo >/dev/null 2>&1; then
+        echo "Cargo is installed."
+        return 0
+    else
+        echo "Cargo is not installed."
+        return 1
+    fi
+}
+
+# Function to ask user for confirmation before installation
+confirm_installation() {
+    while true; do
+        read -p "Do you want to install Cargo? (y/n) " yn
+        case $yn in
+            [Yy]* ) return 0;;
+            [Nn]* ) echo "Installation aborted."; exit;;
+            * ) echo "Please answer yes or no.";;
+        esac
+    done
+}
+
+# Function to install Cargo based on the OS
+install_cargo() {
+    case "$1" in
+        "Debian"|"Ubuntu")
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+            ;;
+        "Arch"|"Manjaro")
+            sudo pacman -S rust --noconfirm
+            ;;
+        "Darwin") # macOS
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+            ;;
+        *)
+            echo "Unsupported operating system."
+            exit 1
+            ;;
+    esac
+}
+
+# Detect the operating system
+OS="Unknown"
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$ID
+    fi
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    OS="Darwin"
+fi
+
+# Check if Cargo is installed, and prompt for installation if not
+if ! check_cargo; then
+    echo "Cargo is not installed on your system."
+    confirm_installation
+    echo "Installing Cargo for $OS..."
+    install_cargo "$OS"
+fi
+
+# Run cargo test
+cargo test
