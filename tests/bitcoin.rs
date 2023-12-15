@@ -55,10 +55,7 @@ fn test_bitcoin_rsi() {
         .map(|pair_info| pair_info.hash.clone())
         .unwrap();
 
-    let request = CreateSwapRequest::new_reverse(
-        SwapType::ReverseSubmarine,
-        PairId::BtcBtc,
-        OrderSide::Buy,
+    let request = CreateSwapRequest::new_btc_reverse(
         pair_hash,
         preimage.clone().sha256,
         keypair.pubkey.clone(),
