@@ -1,23 +1,23 @@
 use std::str::FromStr;
 
+use bitcoin::hashes::hash160::Hash;
+use bitcoin::PublicKey;
 use elements::{
     address::Address as EAddress,
-    bitcoin::{LockTime, PublicKey},
-    hashes::hash160::Hash,
     opcodes::all::*,
     script::{Builder as EBuilder, Instruction, Script as EScript},
-    secp256k1_zkp::{PublicKey as ZKPublicKey, SecretKey as ZKSecretKey},
-    AddressParams,
+    secp256k1_zkp::PublicKey as ZKPublicKey,
+    AddressParams, LockTime,
 };
 #[derive(Debug, PartialEq)]
-pub struct LiquidSwapScriptElements {
+pub struct LBtcSubScriptElements {
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
 }
 
-impl FromStr for LiquidSwapScriptElements {
+impl FromStr for LBtcSubScriptElements {
     type Err = String; // Change this to a more suitable error type as needed
 
     fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
@@ -66,7 +66,7 @@ impl FromStr for LiquidSwapScriptElements {
             && timelock.is_some()
             && sender_pubkey.is_some()
         {
-            Ok(LiquidSwapScriptElements {
+            Ok(LBtcSubScriptElements {
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
@@ -80,7 +80,7 @@ impl FromStr for LiquidSwapScriptElements {
         }
     }
 }
-impl LiquidSwapScriptElements {
+impl LBtcSubScriptElements {
     pub fn to_script(&self) -> EScript {
         /*
             HASH160 <hash of the preimage>
@@ -95,8 +95,9 @@ impl LiquidSwapScriptElements {
         let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
         let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
         let locktime = LockTime::from_consensus(self.timelock);
-        let hashvalue = Hash::from_str(&self.hashlock).unwrap();
-        let hashbytes: [u8; 20] = hashvalue.as_ref().try_into().unwrap();
+        let hashvalue: Hash = Hash::from_str(&self.hashlock).unwrap();
+        let hashbytes_slice: &[u8] = hashvalue.as_ref();
+        let hashbytes: [u8; 20] = hashbytes_slice.try_into().expect("Hash must be 20 bytes");
 
         let script = EBuilder::new()
             .push_opcode(OP_HASH160)
@@ -123,8 +124,8 @@ impl LiquidSwapScriptElements {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct LiquidReverseSwapScriptElements {
+#[derive(Debug, PartialEq, Clone)]
+pub struct LBtcRevScriptElements {
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
@@ -133,7 +134,7 @@ pub struct LiquidReverseSwapScriptElements {
     pub signature: Option<String>,
 }
 
-impl FromStr for LiquidReverseSwapScriptElements {
+impl FromStr for LBtcRevScriptElements {
     type Err = String; // Change this to a more suitable error type as needed
 
     fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
@@ -182,7 +183,7 @@ impl FromStr for LiquidReverseSwapScriptElements {
             && timelock.is_some()
             && sender_pubkey.is_some()
         {
-            Ok(LiquidReverseSwapScriptElements {
+            Ok(LBtcRevScriptElements {
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
@@ -198,14 +199,14 @@ impl FromStr for LiquidReverseSwapScriptElements {
         }
     }
 }
-impl LiquidReverseSwapScriptElements {
+impl LBtcRevScriptElements {
     pub fn new(
         hashlock: String,
         reciever_pubkey: String,
         timelock: u32,
         sender_pubkey: String,
     ) -> Self {
-        LiquidReverseSwapScriptElements {
+        LBtcRevScriptElements {
             hashlock,
             reciever_pubkey,
             timelock,
@@ -234,8 +235,9 @@ impl LiquidReverseSwapScriptElements {
         let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
         let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
         let locktime = LockTime::from_consensus(self.timelock);
-        let hashvalue = Hash::from_str(&self.hashlock).unwrap();
-        let hashbytes: [u8; 20] = hashvalue.as_ref().try_into().unwrap();
+        let hashvalue: Hash = Hash::from_str(&self.hashlock).unwrap();
+        let hashbytes_slice: &[u8] = hashvalue.as_ref();
+        let hashbytes: [u8; 20] = hashbytes_slice.try_into().expect("Hash must be 20 bytes");
 
         let script = EBuilder::new()
             .push_opcode(OP_SIZE)
@@ -284,14 +286,10 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 
 #[cfg(test)]
 mod tests {
-
-    use std::str::FromStr;
-
-    use elements::bitcoin::Network;
-
-    use crate::key::ec::{BlindingKeyPair, KeyPairString};
-
     use super::*;
+    use crate::key::ec::{BlindingKeyPair, KeyPairString};
+    use elements::bitcoin::Network;
+    use std::str::FromStr;
 
     #[test]
     fn test_liquid_swap_elements() {
@@ -309,13 +307,12 @@ mod tests {
             pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986"
                 .to_string(),
         };
-        let decoded =
-            LiquidReverseSwapScriptElements::from_str(&redeem_script_str.clone()).unwrap();
+        let decoded = LBtcRevScriptElements::from_str(&redeem_script_str.clone()).unwrap();
         println!("{:?}", decoded);
         assert_eq!(decoded.reciever_pubkey, my_key_pair.pubkey);
         assert_eq!(decoded.timelock, expected_timeout);
 
-        let script_elements = LiquidReverseSwapScriptElements {
+        let script_elements = LBtcRevScriptElements {
             hashlock: decoded.hashlock,
             reciever_pubkey: decoded.reciever_pubkey,
             sender_pubkey: decoded.sender_pubkey,

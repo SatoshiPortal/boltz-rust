@@ -36,9 +36,5 @@ bip39 = "1.0.0-rc1"
 secp256k1 = {version = "0.27.0", features = ["rand", "global-context", "rand-std"]}
 bitcoin = {version = "0.30.0", features = ["rand", "base64"]}
 lightning-invoice = "0.26.0"
-elements = { version = "0.20.0", features = ["serde"] }
+elements = { version = "0.23.0", features = ["serde"] }
 electrum-client = "0.18.0"
-
-bewallet = { git = "https://github.com/LeoComandini/BEWallet.git" }
-
-

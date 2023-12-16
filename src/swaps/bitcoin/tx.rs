@@ -7,14 +7,17 @@ use secp256k1::{Message, Secp256k1};
 use std::str::FromStr;
 
 use crate::{
+    e::S5Error,
     key::{ec::KeyPairString, preimage::Preimage},
     network::electrum::{BitcoinNetwork, NetworkConfig},
+    swaps::boltz::SwapTxKind,
 };
 
-use super::script::OnchainSwapScriptElements;
+use super::script::BtcRevScriptElements;
 
-pub struct OnchainSwapTxElements {
-    script_elements: OnchainSwapScriptElements,
+pub struct BtcRevTxElements {
+    kind: SwapTxKind,
+    script_elements: BtcRevScriptElements,
     output_address: Address,
     absolute_fees: u32,
     network: Network,
@@ -22,17 +25,18 @@ pub struct OnchainSwapTxElements {
     utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
 }
 
-impl OnchainSwapTxElements {
-    pub fn new(
-        redeem_script: String,
+impl BtcRevTxElements {
+    pub fn new_claim(
+        network: Network,
         output_address: String,
         absolute_fees: u32,
-        network: Network,
-    ) -> OnchainSwapTxElements {
+        redeem_script: String,
+    ) -> BtcRevTxElements {
         let address = Address::from_str(&output_address).unwrap();
         address.is_valid_for_network(network);
-        OnchainSwapTxElements {
-            script_elements: OnchainSwapScriptElements::from_str(&redeem_script).unwrap(),
+        BtcRevTxElements {
+            kind: SwapTxKind::Claim,
+            script_elements: BtcRevScriptElements::from_str(&redeem_script).unwrap(),
             output_address: address.assume_checked(),
             absolute_fees,
             network: network,
@@ -69,23 +73,40 @@ impl OnchainSwapTxElements {
             }
         }
     }
-
     fn _has_utxo(&self) -> bool {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
-    pub fn build_tx(&self, keys: KeyPairString, preimage: Preimage) -> Transaction {
+    pub fn drain_tx(
+        &self,
+        keys: KeyPairString,
+        preimage: Preimage,
+    ) -> Result<Transaction, S5Error> {
         // if !self.has_utxo(){ Error::new() }
+        match self.kind {
+            SwapTxKind::Claim => Ok(self.sign_claim_tx(keys, preimage)),
+            SwapTxKind::Refund => {
+                self.sign_refund_tx(keys);
+                Err(S5Error::new(
+                    crate::e::ErrorKind::Wallet,
+                    "Refund transaction signing not supported yet",
+                ))
+            }
+        }
+        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
+    }
+    fn sign_claim_tx(&self, keys: KeyPairString, preimage: Preimage) -> Transaction {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
-
+        // why send the preimage when its in the Tx
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo.unwrap(),
             script_sig: Script::empty().into(),
             witness: Witness::new(),
         };
+        let output_amount = self.utxo_value.unwrap() - self.absolute_fees as u64;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload.script_pubkey(),
-            value: self.utxo_value.unwrap() - self.absolute_fees as u64,
+            value: output_amount,
         };
 
         let unsigned_tx = Transaction {
@@ -135,7 +156,9 @@ impl OnchainSwapTxElements {
             output: vec![output.clone()],
         };
         signed_tx
-        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
+    }
+    fn sign_refund_tx(&self, _keys: KeyPairString) -> () {
+        ()
     }
 }
 
@@ -174,7 +197,7 @@ mod tests {
 
         let address = Address::p2wsh(&script, Network::Testnet);
         println!("PAY THIS ADDRESS: {}", address);
-        pause_and_wait();
+        pause_and_wait("Pay the address and then continue!");
 
         let electrum_client = NetworkConfig::default()
             .unwrap()

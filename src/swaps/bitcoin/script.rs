@@ -9,14 +9,14 @@ use bitcoin::{
 use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160::Hash};
 
 #[derive(Debug, PartialEq)]
-pub struct OnchainSwapScriptElements {
+pub struct BtcSubScriptElements {
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
 }
 
-impl FromStr for OnchainSwapScriptElements {
+impl FromStr for BtcSubScriptElements {
     type Err = String; // Change this to a more suitable error type as needed
 
     fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
@@ -65,7 +65,7 @@ impl FromStr for OnchainSwapScriptElements {
             && timelock.is_some()
             && sender_pubkey.is_some()
         {
-            Ok(OnchainSwapScriptElements {
+            Ok(BtcSubScriptElements {
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
@@ -79,7 +79,7 @@ impl FromStr for OnchainSwapScriptElements {
         }
     }
 }
-impl OnchainSwapScriptElements {
+impl BtcSubScriptElements {
     pub fn to_script(&self) -> ScriptBuf {
         /*
             HASH160 <hash of the preimage>
@@ -122,7 +122,7 @@ impl OnchainSwapScriptElements {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct OnchainReverseSwapScriptElements {
+pub struct BtcRevScriptElements {
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
@@ -131,7 +131,7 @@ pub struct OnchainReverseSwapScriptElements {
     pub signature: Option<String>,
 }
 
-impl FromStr for OnchainReverseSwapScriptElements {
+impl FromStr for BtcRevScriptElements {
     type Err = String; // Change this to a more suitable error type as needed
 
     fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
@@ -181,7 +181,7 @@ impl FromStr for OnchainReverseSwapScriptElements {
             && timelock.is_some()
             && sender_pubkey.is_some()
         {
-            Ok(OnchainReverseSwapScriptElements {
+            Ok(BtcRevScriptElements {
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
@@ -197,14 +197,14 @@ impl FromStr for OnchainReverseSwapScriptElements {
         }
     }
 }
-impl OnchainReverseSwapScriptElements {
+impl BtcRevScriptElements {
     pub fn new(
         hashlock: String,
         reciever_pubkey: String,
         timelock: u32,
         sender_pubkey: String,
     ) -> Self {
-        OnchainReverseSwapScriptElements {
+        BtcRevScriptElements {
             hashlock,
             reciever_pubkey,
             timelock,
@@ -282,12 +282,9 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 
 #[cfg(test)]
 mod tests {
-
-    use std::str::FromStr;
-
-    use crate::key::ec::KeyPairString;
-
     use super::*;
+    use crate::key::ec::KeyPairString;
+    use std::str::FromStr;
 
     #[test]
     fn test_decode_script() {
@@ -348,12 +345,12 @@ mod tests {
             pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d"
                 .to_string(),
         };
-        let decoded = OnchainSwapScriptElements::from_str(&redeem_script_str.clone()).unwrap();
+        let decoded = BtcSubScriptElements::from_str(&redeem_script_str.clone()).unwrap();
         println!("{:?}", decoded);
         assert!(decoded.sender_pubkey == sender_key_pair.pubkey);
         assert!(decoded.timelock == expected_timeout);
 
-        let encoded = OnchainSwapScriptElements {
+        let encoded = BtcSubScriptElements {
             hashlock: decoded.hashlock,
             reciever_pubkey: decoded.reciever_pubkey,
             sender_pubkey: decoded.sender_pubkey,

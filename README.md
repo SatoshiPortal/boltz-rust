@@ -168,7 +168,7 @@ For all ignored unit tests read the tests before running.
 
 - [x] NormalSwap  (BTC): HappyCase
 - [ ] NormalSwap  (BTC): DisputeCase
-- [ ] ReverseSwap (BTC): HappyCase
+- [x] ReverseSwap (BTC): HappyCase
 - [x] ReverseSwap (BTC): DisputeCase
 - [ ] NormalSwap  (L-BTC): HappyCase
 - [ ] NormalSwap  (L-BTC): DisputeCase

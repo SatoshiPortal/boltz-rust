@@ -5,19 +5,17 @@ use bullwallet::{
     key::{ec::KeyPairString, preimage::Preimage},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
-        boltz::{
-            BoltzApiClient, CreateSwapRequest, OrderSide, PairId, SwapType, BOLTZ_TESTNET_URL,
-        },
-        liquid::script::LiquidReverseSwapScriptElements,
+        boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
+        liquid::script::LBtcRevScriptElements,
     },
 };
-use elements::Address;
+// use elements::Address;
 
 #[test]
 #[ignore]
 fn test_liquid_rsi() {
     // https://liquidtestnet.com/faucet
-    const RETURN_ADDRESS: &str =
+    const _RETURN_ADDRESS: &str =
         "vjTyPZRBt2WVo8nnFrkQSp4x6xRHt5DVmdtvNaHbMaierD41uz7fk4Jr9V9vgsPHD74WA61Ne67popRQ";
     let out_amount = 50_000;
 
@@ -40,7 +38,7 @@ fn test_liquid_rsi() {
         None,
     )
     .unwrap();
-    let electrum_client = network_config.electrum_url.build_client().unwrap();
+    let _electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let pair_hash = boltz_pairs
@@ -71,9 +69,9 @@ fn test_liquid_rsi() {
         .timeout_block_height
         .unwrap()
         .clone();
-    let id = response.as_ref().unwrap().id.as_str();
-    let invoice = response.as_ref().unwrap().invoice.clone().unwrap();
-    let lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
+    let _id = response.as_ref().unwrap().id.as_str();
+    let _invoice = response.as_ref().unwrap().invoice.clone().unwrap();
+    let _lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
     let redeem_script_string = response
         .as_ref()
         .unwrap()
@@ -82,18 +80,20 @@ fn test_liquid_rsi() {
         .unwrap()
         .clone();
 
-    // let boltz_script_elements =
-    //     LiquidReverseSwapScriptElements::from_str(&redeem_script_string).unwrap();
+    let boltz_script_elements = LBtcRevScriptElements::from_str(&redeem_script_string).unwrap();
 
-    // let constructed_script_elements = LiquidReverseSwapScriptElements::new(
-    //     preimage.hash160.to_string(),
-    //     keypair.pubkey.clone(),
-    //     timeout as u32,
-    //     boltz_script_elements.sender_pubkey.clone(),
-    // );
-    // let boltz_rs = hex::encode(boltz_script_elements.to_script().to_bytes());
-    // let our_rs = hex::encode(constructed_script_elements.to_script().to_bytes());
-    // println!("{}", boltz_rs);
-    // assert_eq!(constructed_script_elements, boltz_script_elements);
-    // println!("{:?} , {:?}", constructed_script_elements, boltz_script_elements);
+    let constructed_script_elements = LBtcRevScriptElements::new(
+        preimage.hash160.to_string(),
+        keypair.pubkey.clone(),
+        timeout as u32,
+        boltz_script_elements.sender_pubkey.clone(),
+    );
+    let boltz_rs = hex::encode(boltz_script_elements.to_script().to_bytes());
+    let _our_rs = hex::encode(constructed_script_elements.to_script().to_bytes());
+    println!("{}", boltz_rs);
+    assert_eq!(constructed_script_elements, boltz_script_elements);
+    println!(
+        "{:?} , {:?}",
+        constructed_script_elements, boltz_script_elements
+    );
 }
