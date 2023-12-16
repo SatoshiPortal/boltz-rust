@@ -184,10 +184,7 @@ mod tests {
         let preimage = "a45380303a1b87ec9d0de25f5eba4f6bfbf79b0396e15b72df4914fdb1124634";
         let preimage_bytes = hex::decode(preimage).unwrap();
         let preimage_hash = hash160::Hash::hash(&preimage_bytes);
-        // let hashvalue = Hash::from_str(&self.hashlock).unwrap();
         let hashbytes: [u8; 20] = *preimage_hash.as_ref();
-        // let hashcheck = ripemd160::Hash::from_slice(&hashbytes).unwrap();
-        // assert_eq!(hashcheck, preimage_hash);
 
         let script = Builder::new()
             .push_opcode(OP_HASH160)

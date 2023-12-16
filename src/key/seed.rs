@@ -7,7 +7,6 @@ use bitcoin::secp256k1::Secp256k1;
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
-/// FFI Output
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MasterKey {
     pub fingerprint: String,

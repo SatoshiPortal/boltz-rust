@@ -22,11 +22,7 @@ impl FromStr for BtcSubScriptElements {
     fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
         let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
         let script = Script::from_bytes(&script_bytes);
-        // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
-        // println!("ADDRESS DECODED: {:?}",address);
-        // let script_hash = script.script_hash();
-        // let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
-        // println!("DECODED SCRIPT HASH: {}",sh_str);
+
         let instructions = script.instructions();
         let mut last_op = OP_0;
         let mut hashlock = None;

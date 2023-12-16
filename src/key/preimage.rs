@@ -35,7 +35,6 @@ impl Preimage {
     }
 
     pub fn from_str(preimage: &str) -> Preimage {
-        // let preimage = preimage.to_string();
         let sha256 = sha256::Hash::hash(&hex::decode(preimage).unwrap()).to_string();
         let hash160 = hash160::Hash::hash(&hex::decode(preimage).unwrap()).to_string();
         let preimage_bytes: Vec<u8> = hex::decode(preimage).unwrap();
