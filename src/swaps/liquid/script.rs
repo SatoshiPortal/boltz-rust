@@ -9,6 +9,8 @@ use elements::{
     secp256k1_zkp::PublicKey as ZKPublicKey,
     AddressParams, LockTime,
 };
+
+use crate::key::ec::BlindingKeyPair;
 #[derive(Debug, PartialEq)]
 pub struct LBtcSubScriptElements {
     pub hashlock: String,
@@ -264,13 +266,12 @@ impl LBtcRevScriptElements {
     pub fn to_address(
         &self,
         _network: elements::bitcoin::Network,
-        blinder_pubkey: String,
+        blinding_key: BlindingKeyPair,
     ) -> EAddress {
         let script = self.to_script();
-        let blinder_pubkey = ZKPublicKey::from_str(&blinder_pubkey).unwrap();
         EAddress::p2wsh(
             &script,
-            Some(blinder_pubkey),
+            Some(blinding_key.to_typed().public_key()),
             &AddressParams::LIQUID_TESTNET,
         )
     }
@@ -322,11 +323,8 @@ mod tests {
         };
 
         let script = script_elements.to_script();
-        let script_hash = script.script_hash();
-        let sh_str = hex::encode(script_hash.to_string());
-        println!("ENCODED SCRIPT HASH: {}", sh_str);
         println!("ENCODED HEX: {}", script.to_string());
-        let address = script_elements.to_address(Network::Testnet, blinding_key.pubkey);
+        let address = script_elements.to_address(Network::Testnet, blinding_key);
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
     }

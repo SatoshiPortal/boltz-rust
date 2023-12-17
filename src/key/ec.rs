@@ -13,22 +13,28 @@ use super::derivation::{ChildKeys, DerivationPurpose};
 use super::seed::MasterKey;
 
 use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;
-use elements::secp256k1_zkp::{PublicKey as ZKPublicKey, SecretKey as ZKSecretKey};
+use elements::secp256k1_zkp::{
+    KeyPair as ZKKeyPair, PublicKey as ZKPublicKey, SecretKey as ZKSecretKey,
+};
 pub struct BlindingKeyPair {
-    _seckey: String,
+    seckey: String,
     pub pubkey: String,
 }
 impl BlindingKeyPair {
     pub fn from_secret_string(blinding_key: String) -> Self {
         let zksecp = ZKSecp256k1::new();
-
         let blinding_key_bytes = hex::decode(&blinding_key).unwrap();
         let zkseckey: ZKSecretKey = ZKSecretKey::from_slice(&blinding_key_bytes).unwrap();
         let zkspubkey = zkseckey.public_key(&zksecp);
         BlindingKeyPair {
-            _seckey: blinding_key,
+            seckey: blinding_key,
             pubkey: zkspubkey.to_string(),
         }
+    }
+    pub fn to_typed(&self) -> ZKKeyPair {
+        let secp = Secp256k1::new();
+        let seckey = SecretKey::from_str(&self.seckey).unwrap();
+        ZKKeyPair::from_secret_key(&secp, &seckey)
     }
 }
 

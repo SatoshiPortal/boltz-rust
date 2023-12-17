@@ -5,7 +5,7 @@ version = "0.2.0"
 edition = "2021"
 
 [lib]
-name = "bullwallet"
+name = "boltzclient"
 path = "src/lib.rs"
 doctest = false
 crate-type = ["staticlib", "cdylib", "rlib"] 

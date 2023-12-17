@@ -14,7 +14,10 @@ use std::str::FromStr;
 
 use crate::{
     e::S5Error,
-    key::{ec::KeyPairString, preimage::Preimage},
+    key::{
+        ec::{BlindingKeyPair, KeyPairString},
+        preimage::Preimage,
+    },
     network::electrum::NetworkConfig,
     swaps::boltz::SwapTxKind,
 };
@@ -50,7 +53,34 @@ impl LBtcRevTxElements {
             utxo_value: None,
         }
     }
-    pub fn fetch_utxo(&mut self, expected_value: u64) -> () {
+
+    pub fn drain_tx(
+        &mut self,
+        keys: KeyPairString,
+        preimage: Preimage,
+        blinding_keys: BlindingKeyPair,
+    ) -> Result<Transaction, S5Error> {
+        self.fetch_utxo();
+        if !self.has_utxo() {
+            return Err(S5Error::new(
+                crate::e::ErrorKind::Wallet,
+                "No utxos available yet",
+            ));
+        }
+        match self.kind {
+            SwapTxKind::Claim => Ok(self.sign_claim_tx(keys, preimage, blinding_keys)),
+            SwapTxKind::Refund => {
+                self.sign_refund_tx(keys);
+                Err(S5Error::new(
+                    crate::e::ErrorKind::Wallet,
+                    "Refund transaction signing not supported yet",
+                ))
+            }
+        }
+        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
+    }
+
+    fn fetch_utxo(&mut self) -> () {
         let electrum_client = NetworkConfig::default_liquid()
             .unwrap()
             .electrum_url
@@ -66,40 +96,25 @@ impl LBtcRevTxElements {
             let elements_txid: Txid = Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap();
             let outpoint_0 = OutPoint::new(elements_txid, utxos[0].tx_pos as u32);
             let utxo_value = utxos[0].value;
-            if utxo_value == expected_value {
-                self.utxo = Some(outpoint_0);
-                self.utxo_value = Some(utxo_value);
-                ()
-            } else {
-                ()
-                // this should appropriately error stating exptected value is not a match
-            }
+            self.utxo = Some(outpoint_0);
+            self.utxo_value = Some(utxo_value);
             ()
         }
     }
-
-    fn _has_utxo(&self) -> bool {
+    fn has_utxo(&self) -> bool {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
-    pub fn drain_tx(
+
+    pub fn _check_utxo_value(&self, expected_value: u64) -> bool {
+        self.has_utxo() && self.utxo_value.unwrap() == expected_value
+    }
+
+    fn sign_claim_tx(
         &self,
         keys: KeyPairString,
         preimage: Preimage,
-    ) -> Result<Transaction, S5Error> {
-        // if !self.has_utxo(){ Error::new() }
-        match self.kind {
-            SwapTxKind::Claim => Ok(self.sign_claim_tx(keys, preimage)),
-            SwapTxKind::Refund => {
-                self.sign_refund_tx(keys);
-                Err(S5Error::new(
-                    crate::e::ErrorKind::Wallet,
-                    "Refund transaction signing not supported yet",
-                ))
-            }
-        }
-        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
-    }
-    fn sign_claim_tx(&self, keys: KeyPairString, preimage: Preimage) -> Transaction {
+        blinding_keys: BlindingKeyPair,
+    ) -> Transaction {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
         let unsigned_input: TxIn = TxIn {
@@ -143,7 +158,7 @@ impl LBtcRevTxElements {
 
         let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
         script_witness.push(hex::decode(&signature.serialize_der().to_string()).unwrap());
-        script_witness.push(preimage.preimage_bytes.to_vec());
+        script_witness.push(preimage.preimage_bytes);
         script_witness.push(self.script_elements.to_script().as_bytes().to_vec());
 
         let amount_rangeproof = None;
@@ -186,13 +201,13 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_liquid_transaction() {
+    fn test_liquid_rev_tx() {
         const RETURN_ADDRESS: &str =
             "vjTyPZRBt2WVo8nnFrkQSp4x6xRHt5DVmdtvNaHbMaierD41uz7fk4Jr9V9vgsPHD74WA61Ne67popRQ";
 
         let redeem_script_str = "8201208763a914fc9eeab62b946bd3e9681c082ac2b6d0bccea80f88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750315f411b1752102285c72dca7aaa31d58334e20be181cfa2cb8eb8092a577ef6f77bba068b8c69868ac".to_string();
         let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwkxqf8psf3e56k2k7393r3tkllznsdpphqa33rdvz00va429jq6j2zzg8f59kqhex";
-        let _expected_timeout = 1176597;
+        let expected_timeout = 1176597;
 
         let blinding_key = BlindingKeyPair::from_secret_string(
             "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed".to_string(),
@@ -206,18 +221,17 @@ mod tests {
         };
         let script_elements = LBtcRevScriptElements::from_str(&redeem_script_str.clone()).unwrap();
 
-        let address = script_elements.to_address(Network::Testnet, blinding_key.pubkey);
+        let address = script_elements.to_address(Network::Testnet, blinding_key);
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
 
-        let mut tx_elements = LBtcRevTxElements::new_claim(
+        let tx_elements = LBtcRevTxElements::new_claim(
             redeem_script_str,
             RETURN_ADDRESS.to_string(),
             300,
             Network::Testnet,
         );
 
-        tx_elements.fetch_utxo(100_000);
         println!("{:?}", tx_elements);
     }
 }

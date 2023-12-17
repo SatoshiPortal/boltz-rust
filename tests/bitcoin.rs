@@ -2,7 +2,7 @@
 // extern crate libbullwallet;
 
 use bitcoin::{Address, Network};
-use bullwallet::{
+use boltzclient::{
     key::{ec::KeyPairString, preimage::Preimage},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{

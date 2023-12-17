@@ -433,6 +433,25 @@ impl CreateSwapRequest {
             channel: None,
         }
     }
+    pub fn new_lbtc_submarine(
+        pair_hash: String,
+        invoice: String,
+        refund_public_key: String,
+    ) -> CreateSwapRequest {
+        CreateSwapRequest {
+            swap_type: SwapType::Submarine,
+            pair_id: PairId::LBtcBtc,
+            order_side: OrderSide::Sell,
+            pair_hash,
+            invoice: Some(invoice),
+            refund_public_key: Some(refund_public_key),
+            preimage_hash: None,
+            claim_public_key: None,
+            timeout_block_height: None,
+            onchain_amount: None,
+            channel: None,
+        }
+    }
 
     pub fn new_lbtc_reverse(
         pair_hash: String,
@@ -482,6 +501,7 @@ pub struct CreateSwapResponse {
     pub refund_public_key: Option<String>,
     pub blinding_key: Option<String>,
     pub address: Option<String>,
+    pub expected_amount: Option<u64>,
 }
 
 impl CreateSwapResponse {

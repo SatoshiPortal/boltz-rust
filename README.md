@@ -1,13 +1,17 @@
 # bullbitcoin-rnd
 
+```
+This repo will soon be converted into a boltz-client library which can be used in rust and flutter clients.
+```
+
 The goal of this  is to develop a working boltz client that supports:
-project
+
+
 - [ ] normal submarine swaps: Chain->LN for both Bitcoin & Liquid
 Here we will pay an onchain script address for boltz and boltz will pay our LN invoice.
 
 - [ ] reverse submarine swaps LN->Chain for both Bitcoin & Liquid
 Here we will pay an LN invoice to boltz and boltz will fund an onchain script for us to sweep.
-
 
 ## Script
 
@@ -46,8 +50,8 @@ REVERSE SWAP:
 This script captures the following spending conditions:
 
 ```
-Either; a preimage and the reciever's signature is required // happy case
-Or; after a timeout the senders signature is required. // dispute
+Either; a preimage and the reciever's signature is required // happy case (claimTx)
+Or; after a timeout the senders signature is required. // dispute (refundTx)
 ```
 
 The `reciever` will be able to claim the funds on chain,
@@ -87,11 +91,11 @@ For the sake of unifying the implementation challenge, we will look at the stand
 - [x] pay the `invoice` (use local clightning)
 - [ ] boltz will confirm `invoice` paid and send funds to the `address` creating a utxo that we can spend
 - [x] construct a transaction/psbt to spend this utxo
-- [ ] solve spending conditions: hashlock + signature
-- [ ] sweep the utxo to your existing bitcoin wallet
-- [ ] once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice` 
+- [x] solve spending conditions: hashlock + signature
+- [x] sweep the utxo to your existing bitcoin wallet
+- [x] once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice` 
 
-### Liquid (UTXO Chain)
+### Liquid (WIP)
 
 The swap procedure will be similar for liquid with a few additions like using a blindingKey for confidential transactions.
 
@@ -166,12 +170,11 @@ For all ignored unit tests read the tests before running.
 
 ## Milestones
 
-- [x] NormalSwap  (BTC): HappyCase
-- [ ] NormalSwap  (BTC): DisputeCase
-- [x] ReverseSwap (BTC): HappyCase
-- [x] ReverseSwap (BTC): DisputeCase
-- [ ] NormalSwap  (L-BTC): HappyCase
-- [ ] NormalSwap  (L-BTC): DisputeCase
-- [ ] ReverseSwap (L-BTC): HappyCase
-- [ ] ReverseSwap (L-BTC): DisputeCase
-- [ ] Elements.Liquid wallet (BEWallet)
+- [x] NormalSwap  (BTC): Claim
+- [ ] NormalSwap  (BTC): Refund
+- [x] ReverseSwap (BTC): Claim
+- [x] ReverseSwap (BTC): Refund
+- [x] NormalSwap  (L-BTC): Claim
+- [ ] NormalSwap  (L-BTC): Refund
+- [ ] ReverseSwap (L-BTC): Claim
+- [ ] ReverseSwap (L-BTC): Refund
