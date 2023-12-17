@@ -76,7 +76,7 @@ fn test_liquid_ssi() {
     println!("*******FUND*********************");
     println!("*******SWAP*********************");
     println!("*******SCRIPT*******************");
-    println!("{}", funding_address);
+    println!("PAY: {} TO: {}", expected_amount, funding_address);
     println!("");
     println!("Once you have paid the address, the invoice will get paid after 1 conf.");
     println!("********************************");
@@ -88,7 +88,7 @@ fn test_liquid_ssi() {
 fn test_liquid_rsi() {
     // https://liquidtestnet.com/faucet
     const _RETURN_ADDRESS: &str =
-        "vjTyPZRBt2WVo8nnFrkQSp4x6xRHt5DVmdtvNaHbMaierD41uz7fk4Jr9V9vgsPHD74WA61Ne67popRQ";
+        "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
     let out_amount = 50_000;
 
     dotenv().ok();
@@ -124,10 +124,11 @@ fn test_liquid_rsi() {
         pair_hash,
         preimage.clone().sha256,
         keypair.pubkey.clone(),
-        // timeout as u64,
         out_amount,
     );
     let response = boltz_client.create_swap(request);
+    // println!("{:?}", response);
+
     assert!(response.is_ok());
     println!("{:?}", preimage.clone());
     assert!(response
@@ -153,19 +154,15 @@ fn test_liquid_rsi() {
         .clone();
 
     let boltz_script_elements = LBtcRevScriptElements::from_str(&redeem_script_string).unwrap();
-
     let constructed_script_elements = LBtcRevScriptElements::new(
         preimage.hash160.to_string(),
         keypair.pubkey.clone(),
         timeout as u32,
         boltz_script_elements.sender_pubkey.clone(),
     );
-    let boltz_rs = hex::encode(boltz_script_elements.to_script().to_bytes());
-    let _our_rs = hex::encode(constructed_script_elements.to_script().to_bytes());
-    println!("{}", boltz_rs);
+
     assert_eq!(constructed_script_elements, boltz_script_elements);
-    println!(
-        "{:?} , {:?}",
-        constructed_script_elements, boltz_script_elements
-    );
+    println!("{:?}", constructed_script_elements);
+
+    
 }

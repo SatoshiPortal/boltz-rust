@@ -4,6 +4,7 @@ use electrum_client::ElectrumApi;
 use bitcoin::script::Script as BitcoinScript;
 use elements::{
     confidential::{Nonce, Value},
+    pset::serialize::Serialize,
     sighash::SighashCache,
     Address, AssetId, AssetIssuance, LockTime, OutPoint, Script, Sequence, Transaction, TxIn,
     TxInWitness, TxOut, TxOutWitness, Txid,
@@ -36,6 +37,11 @@ pub struct LBtcRevTxElements {
 }
 
 impl LBtcRevTxElements {
+    pub fn manual_utxo_update(&mut self, utxo: OutPoint, value: u64) -> LBtcRevTxElements {
+        self.utxo = Some(utxo);
+        self.utxo_value = Some(value);
+        self.clone()
+    }
     pub fn new_claim(
         redeem_script: String,
         output_address: String,
@@ -60,7 +66,7 @@ impl LBtcRevTxElements {
         preimage: Preimage,
         blinding_keys: BlindingKeyPair,
     ) -> Result<Transaction, S5Error> {
-        self.fetch_utxo();
+        // self.fetch_utxo();
         if !self.has_utxo() {
             return Err(S5Error::new(
                 crate::e::ErrorKind::Wallet,
@@ -80,7 +86,7 @@ impl LBtcRevTxElements {
         // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
     }
 
-    fn fetch_utxo(&mut self) -> () {
+    fn _fetch_utxo(&mut self) -> () {
         let electrum_client = NetworkConfig::default_liquid()
             .unwrap()
             .electrum_url
@@ -203,35 +209,82 @@ mod tests {
     #[ignore]
     fn test_liquid_rev_tx() {
         const RETURN_ADDRESS: &str =
-            "vjTyPZRBt2WVo8nnFrkQSp4x6xRHt5DVmdtvNaHbMaierD41uz7fk4Jr9V9vgsPHD74WA61Ne67popRQ";
+            "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
 
-        let redeem_script_str = "8201208763a914fc9eeab62b946bd3e9681c082ac2b6d0bccea80f88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750315f411b1752102285c72dca7aaa31d58334e20be181cfa2cb8eb8092a577ef6f77bba068b8c69868ac".to_string();
-        let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwkxqf8psf3e56k2k7393r3tkllznsdpphqa33rdvz00va429jq6j2zzg8f59kqhex";
-        let expected_timeout = 1176597;
+        let redeem_script_str = "8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac".to_string();
+        let expected_address = "tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln";
+        let expected_timeout = 1179263;
 
         let blinding_key = BlindingKeyPair::from_secret_string(
-            "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed".to_string(),
+            "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
         );
 
-        let _id = "axtHXB";
+        let _id = "s9EBbv";
         let _my_key_pair = KeyPairString {
             seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1".to_string(),
             pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986"
                 .to_string(),
         };
+        let preimage = Preimage {
+            preimage: "a323c8c5abadca53bb4b732d62d0486ba49ecab7e340d2b44aac13ac813fed29"
+                .to_string(),
+            sha256: "2c705049974f29e308d9c8d5c5ec216d6c435cae52777c53dcceefda8b52922c".to_string(),
+            hash160: "8514cc9235824c914d94fda549e45d6dec629b97".to_string(),
+            preimage_bytes: [
+                163, 35, 200, 197, 171, 173, 202, 83, 187, 75, 115, 45, 98, 208, 72, 107, 164, 158,
+                202, 183, 227, 64, 210, 180, 74, 172, 19, 172, 129, 63, 237, 41,
+            ]
+            .to_vec(),
+            sha256_bytes: [
+                44, 112, 80, 73, 151, 79, 41, 227, 8, 217, 200, 213, 197, 236, 33, 109, 108, 67,
+                92, 174, 82, 119, 124, 83, 220, 206, 239, 218, 139, 82, 146, 44,
+            ],
+            hash160_bytes: [
+                133, 20, 204, 146, 53, 130, 76, 145, 77, 148, 253, 165, 73, 228, 93, 109, 236, 98,
+                155, 151,
+            ],
+        };
+
         let script_elements = LBtcRevScriptElements::from_str(&redeem_script_str.clone()).unwrap();
 
-        let address = script_elements.to_address(Network::Testnet, blinding_key);
+        let address = script_elements.to_address(Network::Testnet, blinding_key.clone());
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
 
-        let tx_elements = LBtcRevTxElements::new_claim(
+        let mut tx_elements = LBtcRevTxElements::new_claim(
             redeem_script_str,
             RETURN_ADDRESS.to_string(),
             300,
             Network::Testnet,
         );
 
+        let outpoint = OutPoint {
+            txid: Txid::from_str(
+                "6a05897e425229a199abb2d3d5e5bccadafe41597d07c211dc9330e93bf3ac49",
+            )
+            .unwrap(),
+            vout: 0,
+        };
+        let out_value = 50_000;
+
+        tx_elements = tx_elements.manual_utxo_update(outpoint, out_value);
         println!("{:?}", tx_elements);
+        let signed = tx_elements.drain_tx(_my_key_pair, preimage, blinding_key);
+        println!("{:?}", hex::encode(signed.unwrap().serialize()));
     }
 }
+
+/*
+ *
+ *
+ * KeyPairString { seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1", pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986" }
+{"info":[],"warnings":[],"pairs":{"BTC/BTC":{"hash":"a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5","rate":1,"limits":{"maximal":25000000,"minimal":50000,"maximalZeroConf":{"baseAsset":0,"quoteAsset":0}},"fees":{"percentage":0.5,"percentageSwapIn":0.1,"minerFees":{"baseAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}},"L-BTC/BTC":{"hash":"04df6e4b5a91d62a4e1a7ecb88ca462851d835c4bae955a6c5baad8e047b14e9","rate":1,"limits":{"maximal":25000000,"minimal":1000,"maximalZeroConf":{"baseAsset":100000,"quoteAsset":0}},"fees":{"percentage":0.25,"percentageSwapIn":0.1,"minerFees":{"baseAsset":{"normal":147,"reverse":{"claim":152,"lockup":276}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}},"RBTC/BTC":{"hash":"17acb1892ddaaaf60bf44a6e88a86405922d44f29265cc2ebe9f0f137277aa24","rate":1,"limits":{"maximal":4294967,"minimal":10000,"maximalZeroConf":{"baseAsset":0,"quoteAsset":0}},"fees":{"percentage":0.5,"percentageSwapIn":0.5,"minerFees":{"baseAsset":{"normal":162,"reverse":{"claim":162,"lockup":302}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}}}}
+{"id":"s9EBbv","invoice":"lntb504030n1pjhu7w9sp5a2vkmm292fr6mlsjcdpdr3d5zjffttj66nucq9czmkez42pgzdpspp593c9qjvhfu57xzxeer2utmppd4kyxh9w2fmhc57uemha4z6jjgkqdpz2djkuepqw3hjqnpdgf2yxgrpv3j8yetnwvxqyp2xqcqz959qxpqysgqztrywvj30fqhsq6aawf4ew69y6vwea8ykt4qyendmc3vgn6la2534syaqrx296ud04gvaprex9ns687ljnk6s4d5xqrj2v2pfsqtvkqparpzcd","blindingKey":"bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d","redeemScript":"8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac","lockupAddress":"tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln","timeoutBlockHeight":1179263}
+Ok(CreateSwapResponse { id: "s9EBbv", invoice: Some("lntb504030n1pjhu7w9sp5a2vkmm292fr6mlsjcdpdr3d5zjffttj66nucq9czmkez42pgzdpspp593c9qjvhfu57xzxeer2utmppd4kyxh9w2fmhc57uemha4z6jjgkqdpz2djkuepqw3hjqnpdgf2yxgrpv3j8yetnwvxqyp2xqcqz959qxpqysgqztrywvj30fqhsq6aawf4ew69y6vwea8ykt4qyendmc3vgn6la2534syaqrx296ud04gvaprex9ns687ljnk6s4d5xqrj2v2pfsqtvkqparpzcd"), redeem_script: Some("8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac"), timeout_block_height: Some(1179263), onchain_amount: None, lockup_address: Some("tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln"), miner_fee_invoice: None, service_fee_percentage: None, preimage: None, claim_address: None, claim_public_key: None, private_key: None, refund_address: None, refund_public_key: None, blinding_key: Some("bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d"), address: None, expected_amount: None })
+Preimage { preimage: "a323c8c5abadca53bb4b732d62d0486ba49ecab7e340d2b44aac13ac813fed29", sha256: "2c705049974f29e308d9c8d5c5ec216d6c435cae52777c53dcceefda8b52922c", hash160: "8514cc9235824c914d94fda549e45d6dec629b97", preimage_bytes: [163, 35, 200, 197, 171, 173, 202, 83, 187, 75, 115, 45, 98, 208, 72, 107, 164, 158, 202, 183, 227, 64, 210, 180, 74, 172, 19, 172, 129, 63, 237, 41], sha256_bytes: [44, 112, 80, 73, 151, 79, 41, 227, 8, 217, 200, 213, 197, 236, 33, 109, 108, 67, 92, 174, 82, 119, 124, 83, 220, 206, 239, 218, 139, 82, 146, 44], hash160_bytes: [133, 20, 204, 146, 53, 130, 76, 145, 77, 148, 253, 165, 73, 228, 93, 109, 236, 98, 155, 151] }
+8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac
+LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None } , LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None }
+
+
+
+ */

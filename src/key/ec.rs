@@ -16,6 +16,8 @@ use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;
 use elements::secp256k1_zkp::{
     KeyPair as ZKKeyPair, PublicKey as ZKPublicKey, SecretKey as ZKSecretKey,
 };
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlindingKeyPair {
     seckey: String,
     pub pubkey: String,

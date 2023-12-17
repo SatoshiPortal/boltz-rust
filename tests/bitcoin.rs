@@ -152,6 +152,7 @@ fn test_bitcoin_rsi() {
         out_amount,
     );
     let response = boltz_client.create_swap(request);
+    // println!("{:?}", response);
     assert!(response.is_ok());
     assert!(response
         .as_ref()
