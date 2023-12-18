@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 # Function to check if Cargo is installed
 check_cargo() {
     if command -v cargo >/dev/null 2>&1; then
@@ -42,10 +43,11 @@ install_cargo() {
     esac
 }
 
-# Detect the operating system
+
 OS="Unknown"
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     if [ -f /etc/os-release ]; then
+        # shellcheck disable=SC1091
         . /etc/os-release
         OS=$ID
     fi
@@ -53,7 +55,6 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     OS="Darwin"
 fi
 
-# Check if Cargo is installed, and prompt for installation if not
 if ! check_cargo; then
     echo "Cargo is not installed on your system."
     confirm_installation
@@ -61,5 +62,78 @@ if ! check_cargo; then
     install_cargo "$OS"
 fi
 
-# Run cargo test
-cargo test
+run_cargo_test_with_flags() {
+    echo "Running cargo test for $1 with flags..."
+    cargo test "$1" -- --nocapture --include-ignored
+}
+
+run_cargo_test() {
+    echo "Running cargo test for $1..."
+    cargo test "$1"
+}
+
+function notice() {
+    local test_name=$1
+    local test_path=""
+
+    # Determine the path based on the test name
+    case $test_name in
+        "test_bitcoin_ssi"|"test_bitcoin_rsi")
+            test_path="tests/bitcoin.rs"
+            ;;
+        "test_liquid_ssi"|"test_liquid_rsi")
+            test_path="tests/liquid.rs"
+            ;;
+        *)
+            test_path="Not applicable for unit tests"
+            ;;
+    esac
+
+    # ASCII art and message
+    echo -e "\e[1m\e[34m" # Bold and blue text
+    echo -e "\e[0m" # Reset text formatting
+    echo -e "\e[1mNotice: Update variables in $test_name before running:\e[0m"
+    echo -e "Path to test file: \e[33m$test_path\e[0m"
+    echo -e "\e[1m\e[34m+----------------------------------------------------+\e[0m\n"
+
+    read -p "Type 'yes' to proceed or any other key to exit: " user_input
+    if [[ $user_input != "yes" ]]; then
+        echo "Exiting..."
+        exit 1
+    fi
+}
+
+echo "Please choose a test to run:"
+echo "1) Bitcoin Submarine"
+echo "2) Bitcoin Reverse Submarine"
+echo "3) Liquid Submarine"
+echo "4) Liquid Reverse Submarine"
+echo "5) Unit Tests"
+
+read -p "Enter the number of your choice: " choice
+
+case $choice in
+    1)
+        notice "test_bitcoin_ssi"
+        echo "fuku"
+        # run_cargo_test_with_flags "test_bitcoin_ssi"
+        ;;
+    2)
+        notice "test_bitcoin_rsi"
+        run_cargo_test_with_flags "test_bitcoin_rsi"
+        ;;
+    3)
+        notice "test_liquid_ssi"
+        run_cargo_test_with_flags "test_liquid_ssi"
+        ;;
+    4)
+        notice "test_liquid_rsi"
+        run_cargo_test_with_flags "test_liquid_rsi"
+        ;;
+    5)
+        run_cargo_test ""
+        ;;
+    *)
+        echo "Invalid choice. Please run the script again and select a valid option."
+        ;;
+esac

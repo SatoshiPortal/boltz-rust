@@ -63,6 +63,7 @@ fn test_bitcoin_ssi() {
         keypair.pubkey.clone(),
     );
     let response = boltz_client.create_swap(request);
+    println!("{:?}", response);
     assert!(response.is_ok());
 
     let _timeout = response

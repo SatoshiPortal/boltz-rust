@@ -12,14 +12,14 @@ use elements::{
 
 use crate::key::ec::BlindingKeyPair;
 #[derive(Debug, PartialEq)]
-pub struct LBtcSubScriptElements {
+pub struct LBtcSubSwapScript {
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
 }
 
-impl FromStr for LBtcSubScriptElements {
+impl FromStr for LBtcSubSwapScript {
     type Err = String; // Change this to a more suitable error type as needed
 
     fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
@@ -68,7 +68,7 @@ impl FromStr for LBtcSubScriptElements {
             && timelock.is_some()
             && sender_pubkey.is_some()
         {
-            Ok(LBtcSubScriptElements {
+            Ok(LBtcSubSwapScript {
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
@@ -82,7 +82,7 @@ impl FromStr for LBtcSubScriptElements {
         }
     }
 }
-impl LBtcSubScriptElements {
+impl LBtcSubSwapScript {
     pub fn to_script(&self) -> EScript {
         /*
             HASH160 <hash of the preimage>
@@ -127,7 +127,7 @@ impl LBtcSubScriptElements {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct LBtcRevScriptElements {
+pub struct LBtcRevSwapScript {
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
@@ -136,7 +136,7 @@ pub struct LBtcRevScriptElements {
     pub signature: Option<String>,
 }
 
-impl FromStr for LBtcRevScriptElements {
+impl FromStr for LBtcRevSwapScript {
     type Err = String; // Change this to a more suitable error type as needed
 
     fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
@@ -185,7 +185,7 @@ impl FromStr for LBtcRevScriptElements {
             && timelock.is_some()
             && sender_pubkey.is_some()
         {
-            Ok(LBtcRevScriptElements {
+            Ok(LBtcRevSwapScript {
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
@@ -201,14 +201,14 @@ impl FromStr for LBtcRevScriptElements {
         }
     }
 }
-impl LBtcRevScriptElements {
+impl LBtcRevSwapScript {
     pub fn new(
         hashlock: String,
         reciever_pubkey: String,
         timelock: u32,
         sender_pubkey: String,
     ) -> Self {
-        LBtcRevScriptElements {
+        LBtcRevSwapScript {
             hashlock,
             reciever_pubkey,
             timelock,
@@ -218,7 +218,7 @@ impl LBtcRevScriptElements {
         }
     }
 
-    pub fn to_script(&self) -> EScript {
+    pub fn to_typed(&self) -> EScript {
         // Script ~= ScriptBufs
         /*
             OP_SIZE
@@ -263,12 +263,8 @@ impl LBtcRevScriptElements {
         script
     }
 
-    pub fn to_address(
-        &self,
-        _network: elements::bitcoin::Network,
-        blinding_key: BlindingKeyPair,
-    ) -> EAddress {
-        let script = self.to_script();
+    pub fn to_address(&self, blinding_key: BlindingKeyPair) -> EAddress {
+        let script = self.to_typed();
         EAddress::p2wsh(
             &script,
             Some(blinding_key.to_typed().public_key()),
@@ -289,7 +285,6 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 mod tests {
     use super::*;
     use crate::key::ec::{BlindingKeyPair, KeyPairString};
-    use elements::bitcoin::Network;
     use std::str::FromStr;
 
     #[test]
@@ -308,12 +303,12 @@ mod tests {
             pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986"
                 .to_string(),
         };
-        let decoded = LBtcRevScriptElements::from_str(&redeem_script_str.clone()).unwrap();
+        let decoded = LBtcRevSwapScript::from_str(&redeem_script_str.clone()).unwrap();
         println!("{:?}", decoded);
         assert_eq!(decoded.reciever_pubkey, my_key_pair.pubkey);
         assert_eq!(decoded.timelock, expected_timeout);
 
-        let script_elements = LBtcRevScriptElements {
+        let script_elements = LBtcRevSwapScript {
             hashlock: decoded.hashlock,
             reciever_pubkey: decoded.reciever_pubkey,
             sender_pubkey: decoded.sender_pubkey,
@@ -322,9 +317,9 @@ mod tests {
             signature: None,
         };
 
-        let script = script_elements.to_script();
+        let script = script_elements.to_typed();
         println!("ENCODED HEX: {}", script.to_string());
-        let address = script_elements.to_address(Network::Testnet, blinding_key);
+        let address = script_elements.to_address(blinding_key);
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
     }

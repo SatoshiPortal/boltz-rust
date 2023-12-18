@@ -4,7 +4,6 @@ use electrum_client::ElectrumApi;
 use bitcoin::script::Script as BitcoinScript;
 use elements::{
     confidential::{Nonce, Value},
-    pset::serialize::Serialize,
     sighash::SighashCache,
     Address, AssetId, AssetIssuance, LockTime, OutPoint, Script, Sequence, Transaction, TxIn,
     TxInWitness, TxOut, TxOutWitness, Txid,
@@ -23,21 +22,21 @@ use crate::{
     swaps::boltz::SwapTxKind,
 };
 
-use super::script::LBtcRevScriptElements;
+use super::script::LBtcRevSwapScript;
 
 #[derive(Debug, Clone)]
-pub struct LBtcRevTxElements {
+pub struct LBtcRevSwapTx {
+    _network: Network,
     kind: SwapTxKind,
-    script_elements: LBtcRevScriptElements,
+    script_elements: LBtcRevSwapScript,
     output_address: Address,
     absolute_fees: u32,
-    _network: Network,
     utxo: Option<OutPoint>,
     utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
 }
 
-impl LBtcRevTxElements {
-    pub fn manual_utxo_update(&mut self, utxo: OutPoint, value: u64) -> LBtcRevTxElements {
+impl LBtcRevSwapTx {
+    pub fn manual_utxo_update(&mut self, utxo: OutPoint, value: u64) -> LBtcRevSwapTx {
         self.utxo = Some(utxo);
         self.utxo_value = Some(value);
         self.clone()
@@ -47,11 +46,11 @@ impl LBtcRevTxElements {
         output_address: String,
         absolute_fees: u32,
         network: Network,
-    ) -> LBtcRevTxElements {
+    ) -> LBtcRevSwapTx {
         let address = Address::from_str(&output_address).unwrap();
-        LBtcRevTxElements {
+        LBtcRevSwapTx {
             kind: SwapTxKind::Claim,
-            script_elements: LBtcRevScriptElements::from_str(&redeem_script).unwrap(),
+            script_elements: LBtcRevSwapScript::from_str(&redeem_script).unwrap(),
             output_address: address,
             absolute_fees,
             _network: network,
@@ -92,7 +91,7 @@ impl LBtcRevTxElements {
             .electrum_url
             .build_client()
             .unwrap();
-        let binding = self.script_elements.clone().to_script().to_v0_p2wsh();
+        let binding = self.script_elements.clone().to_typed().to_v0_p2wsh();
         let script_p2wsh = binding.as_bytes();
         let bitcoin_script = BitcoinScript::from_bytes(script_p2wsh);
         let utxos = electrum_client.script_list_unspent(bitcoin_script).unwrap();
@@ -119,7 +118,7 @@ impl LBtcRevTxElements {
         &self,
         keys: KeyPairString,
         preimage: Preimage,
-        blinding_keys: BlindingKeyPair,
+        _blinding_keys: BlindingKeyPair,
     ) -> Transaction {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
@@ -154,7 +153,7 @@ impl LBtcRevTxElements {
         let sighash = Message::from_slice(
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
-                &self.script_elements.to_script(),
+                &self.script_elements.to_typed(),
                 Value::Explicit(self.utxo_value.unwrap()),
                 elements::EcdsaSighashType::All,
             )[..],
@@ -165,7 +164,7 @@ impl LBtcRevTxElements {
         let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
         script_witness.push(hex::decode(&signature.serialize_der().to_string()).unwrap());
         script_witness.push(preimage.preimage_bytes);
-        script_witness.push(self.script_elements.to_script().as_bytes().to_vec());
+        script_witness.push(self.script_elements.to_typed().as_bytes().to_vec());
 
         let amount_rangeproof = None;
         let inflation_keys_rangeproof = None;
@@ -174,7 +173,7 @@ impl LBtcRevTxElements {
             amount_rangeproof,
             inflation_keys_rangeproof,
             script_witness: script_witness.clone(),
-            pegin_witness: script_witness,
+            pegin_witness: vec![],
         };
 
         let signed_txin = TxIn {
@@ -204,7 +203,11 @@ mod tests {
     use crate::key::ec::BlindingKeyPair;
 
     use super::*;
+    use elements::pset::serialize::Serialize;
 
+    /// https://liquidtestnet.com/utils
+    /// https://blockstream.info/liquidtestnet
+    ///
     #[test]
     #[ignore]
     fn test_liquid_rev_tx() {
@@ -213,7 +216,7 @@ mod tests {
 
         let redeem_script_str = "8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac".to_string();
         let expected_address = "tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln";
-        let expected_timeout = 1179263;
+        let _expected_timeout = 1179263;
 
         let blinding_key = BlindingKeyPair::from_secret_string(
             "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
@@ -245,13 +248,13 @@ mod tests {
             ],
         };
 
-        let script_elements = LBtcRevScriptElements::from_str(&redeem_script_str.clone()).unwrap();
+        let script_elements = LBtcRevSwapScript::from_str(&redeem_script_str.clone()).unwrap();
 
-        let address = script_elements.to_address(Network::Testnet, blinding_key.clone());
+        let address = script_elements.to_address(blinding_key.clone());
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
 
-        let mut tx_elements = LBtcRevTxElements::new_claim(
+        let mut tx_elements = LBtcRevSwapTx::new_claim(
             redeem_script_str,
             RETURN_ADDRESS.to_string(),
             300,
@@ -270,7 +273,8 @@ mod tests {
         tx_elements = tx_elements.manual_utxo_update(outpoint, out_value);
         println!("{:?}", tx_elements);
         let signed = tx_elements.drain_tx(_my_key_pair, preimage, blinding_key);
-        println!("{:?}", hex::encode(signed.unwrap().serialize()));
+        println!("{:?}", hex::encode(signed.clone().unwrap().serialize()));
+        // println!("{:?}", signed.unwrap())
     }
 }
 

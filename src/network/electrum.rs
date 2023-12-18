@@ -6,8 +6,8 @@ const _LIQUID_POLICY_ASSET_STR: &str =
 const LIQUID_TESTNET_POLICY_ASSET_STR: &str =
     "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 
-pub const DEFAULT_TESTNET_NODE: &str = "electrum.bullbitcoin.com:60002";
-pub const DEFAULT_LIQUID_TESTNET_NODE: &str = "blockstream.info:14";
+pub const DEFAULT_TESTNET_NODE: &str = "10.0.1.244:60002";
+pub const DEFAULT_LIQUID_TESTNET_NODE: &str = "10.0.1.244:61000";
 
 pub const DEFAULT_MAINNET_NODE: &str = "electrum.bullbitcoin.com:50002";
 
@@ -54,7 +54,7 @@ impl NetworkConfig {
         NetworkConfig::new(
             BitcoinNetwork::BitcoinTestnet,
             DEFAULT_TESTNET_NODE,
-            true,
+            false,
             true,
             false,
             None,
@@ -64,7 +64,7 @@ impl NetworkConfig {
         NetworkConfig::new(
             BitcoinNetwork::LiquidTestnet,
             DEFAULT_LIQUID_TESTNET_NODE,
-            true,
+            false,
             true,
             false,
             Some(LIQUID_TESTNET_POLICY_ASSET_STR),

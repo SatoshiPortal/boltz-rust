@@ -131,6 +131,7 @@ impl BtcRevTxElements {
         .unwrap();
         let signature = secp.sign_ecdsa(&sighash, &keys.to_typed().secret_key());
 
+        // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
         witness.push_bitcoin_signature(
             &signature.serialize_der(),

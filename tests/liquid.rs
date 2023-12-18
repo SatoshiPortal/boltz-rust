@@ -6,7 +6,7 @@ use boltzclient::{
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
-        liquid::script::{LBtcRevScriptElements, LBtcSubScriptElements},
+        liquid::script::{LBtcRevSwapScript, LBtcSubSwapScript},
     },
 };
 // use elements::Address;
@@ -19,7 +19,7 @@ fn test_liquid_ssi() {
     // https://liquidtestnet.com/faucet
     let invoice = "lntb500u1pjhuau2pp5540kmv38f5227y7pvw7gs8jsk3htl66hlazv4qxpakmnq2x87wxsdqdd338gcmnwashqxqyjw5qcqp2sp5mj7q54kusg04fscuq9sgqwzwen0jj3304vsuug9pchj3w9vme7tsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq8svlp8g70e5ngyzkylqyzdca4wandfdjjk330hu7xynkvmkjqr6j5439k4w40gmzh2t5lywf50yf3jj4j4xz8p5vryezjyrtt2avenqqdwss2n";
 
-    let out_amount = 50_000;
+    let _out_amount = 50_000;
 
     dotenv().ok();
     // SECRETS
@@ -69,7 +69,7 @@ fn test_liquid_ssi() {
         .unwrap()
         .clone();
 
-    let boltz_script_elements = LBtcSubScriptElements::from_str(&redeem_script_string).unwrap();
+    let boltz_script_elements = LBtcSubSwapScript::from_str(&redeem_script_string).unwrap();
 
     println!("{:?}", boltz_script_elements);
 
@@ -153,8 +153,8 @@ fn test_liquid_rsi() {
         .unwrap()
         .clone();
 
-    let boltz_script_elements = LBtcRevScriptElements::from_str(&redeem_script_string).unwrap();
-    let constructed_script_elements = LBtcRevScriptElements::new(
+    let boltz_script_elements = LBtcRevSwapScript::from_str(&redeem_script_string).unwrap();
+    let constructed_script_elements = LBtcRevSwapScript::new(
         preimage.hash160.to_string(),
         keypair.pubkey.clone(),
         timeout as u32,
@@ -163,6 +163,4 @@ fn test_liquid_rsi() {
 
     assert_eq!(constructed_script_elements, boltz_script_elements);
     println!("{:?}", constructed_script_elements);
-
-    
 }

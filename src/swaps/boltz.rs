@@ -35,7 +35,7 @@ impl BoltzApiClient {
         match response {
             Ok(resp) => {
                 let body = resp.into_string()?;
-                println!("{}", body);
+                // println!("{}", body);
                 let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
                 Ok(get_pairs_response)
             }
@@ -53,7 +53,6 @@ impl BoltzApiClient {
         match response {
             Ok(resp) => {
                 let body = resp.into_string()?;
-                println!("{}", body);
                 let get_fee_estimation_response: GetFeeEstimationResponse =
                     serde_json::from_str(&body).unwrap();
                 Ok(get_fee_estimation_response)
@@ -76,7 +75,6 @@ impl BoltzApiClient {
         match response {
             Ok(resp) => {
                 let body = resp.into_string().unwrap();
-                println!("{}", body);
                 let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
                 Ok(create_swap_response)
             }
