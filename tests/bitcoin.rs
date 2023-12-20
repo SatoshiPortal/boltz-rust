@@ -24,7 +24,7 @@ use std::{env, str::FromStr};
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice = "lntb500n1pjhevffpp5pkjxerpae05qve5c3azajfguqx36sejefupjzx9hhm287azg0f0sdqydehqxqyjw5qcqp2sp5gqzmltv6t289gghd5a6tp3avndzmta39ynm8za23lkcyzfpuv89srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqjnfmhvgafmjrkct0rmwj9mxj6gsjv9uwqv7853mf3n78vmv0uwh85ahr0et4dkalcsmh4crqsundjv0wqdntlcefeg4cnfj0dtjqz0gqqdh5lm";
+    let invoice = "lntb500u1pjhl4y5pp5jsexaz0aqsl9058qyy4544encu4wh6rr09q00u3f2kfy0923m3pqdqvw3jhxarfdensxqyjw5qcqp2sp5550x894m9lcl5jt3vad8hl4g767yuujjv8zhce4fzmc20kacns9srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqhjsq5qykk8vw5m47mkrlck43j7wmzdc8pd38y7gqqm4vyjlawuph73umqkp8969z5jv8ljlz7x65d0ewrlz4a7m6wuld275ft4pmxespj7q6uu";
     // ensure the payment hash is the one boltz uses in their swap script
 
     let _out_amount = 50_000;
@@ -112,7 +112,7 @@ fn test_bitcoin_ssi() {
 #[test]
 #[ignore]
 fn test_bitcoin_rsi() {
-    const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
+    const RETURN_ADDRESS: &str = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu";
     let out_amount = 50_000;
 
     dotenv().ok();
@@ -240,6 +240,7 @@ fn test_bitcoin_rsi() {
             break;
         }
     }
+
     let absolute_fees = 300;
     let mut swap_tx_elements = BtcRevTxElements::new_claim(
         Network::Testnet,
@@ -247,6 +248,7 @@ fn test_bitcoin_rsi() {
         absolute_fees,
         redeem_script_string,
     );
+
     swap_tx_elements.fetch_utxo(DEFAULT_TESTNET_NODE.to_string(), out_amount);
     let signed_tx = swap_tx_elements.drain_tx(keypair, preimage).unwrap();
     let txid = electrum_client.transaction_broadcast(&signed_tx).unwrap();

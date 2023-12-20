@@ -4,12 +4,14 @@ use electrum_client::ElectrumApi;
 use bitcoin::script::Script as BitcoinScript;
 use elements::{
     confidential::{Nonce, Value},
+    hex::ToHex,
+    secp256k1_zkp::{Generator, PedersenCommitment, RangeProof, Secp256k1, Tag, Tweak},
     sighash::SighashCache,
     Address, AssetId, AssetIssuance, LockTime, OutPoint, Script, Sequence, Transaction, TxIn,
     TxInWitness, TxOut, TxOutWitness, Txid,
 };
 
-use secp256k1::{Message, Secp256k1};
+use secp256k1::{AllPreallocated, Message, PublicKey};
 use std::str::FromStr;
 
 use crate::{
@@ -23,6 +25,12 @@ use crate::{
 };
 
 use super::script::LBtcRevSwapScript;
+
+pub const DUST_VALUE: u64 = 546;
+// 3-input ASP
+pub const DEFAULT_SURJECTIONPROOF_SIZE: u64 = 135;
+// 52-bit rangeproof
+pub const DEFAULT_RANGEPROOF_SIZE: u64 = 4174;
 
 #[derive(Debug, Clone)]
 pub struct LBtcRevSwapTx {
@@ -131,13 +139,22 @@ impl LBtcRevSwapTx {
             asset_issuance: AssetIssuance::default(),
         };
         // let txout_witness = TxOutWitness::from(0);
+        let secp = Secp256k1::new();
+        let blinding_factor =
+            Tweak::from_slice(_blinding_keys.to_typed().secret_key().as_ref()).unwrap();
+        let generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
+        let nonce = Nonce::Confidential(PublicKey::from_str(&_blinding_keys.pubkey).unwrap());
+        let explicit_asset = elements::confidential::Asset::Explicit(AssetId::LIQUID_BTC);
+        let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
+        let value_pedersen_commitment =
+            create_pedersen_commitment(&secp, output_value, blinding_factor, generator);
+        let blinded_value = elements::confidential::Value::Confidential(value_pedersen_commitment);
+
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
-            value: elements::confidential::Value::Explicit(
-                self.utxo_value.unwrap() - self.absolute_fees as u64,
-            ),
-            asset: elements::confidential::Asset::Explicit(AssetId::LIQUID_BTC),
-            nonce: Nonce::Null,
+            value: blinded_value,
+            asset: explicit_asset,
+            nonce: nonce,
             witness: TxOutWitness::default(),
         };
 
@@ -149,7 +166,6 @@ impl LBtcRevSwapTx {
         };
 
         // SIGN TRANSACTION
-        let secp = Secp256k1::new();
         let sighash = Message::from_slice(
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
@@ -166,11 +182,33 @@ impl LBtcRevSwapTx {
         script_witness.push(preimage.preimage_bytes);
         script_witness.push(self.script_elements.to_typed().as_bytes().to_vec());
 
-        let amount_rangeproof = None;
-        let inflation_keys_rangeproof = None;
+        let min_value: u64 = 1; // Minimum value for the range proof, adjust as needed
+        let exp: i32 = 0; // Exponent for the range proof
+        let min_bits: u8 = 36; // Minimum number of bits for the range proof
+
+        // Assuming you have these values correctly set up
+        let message: &[u8] = &[]; // Optional message for range proof
+        let additional_commitment: &[u8] = &[]; // Additional commitment data
+        let additional_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
+
+        let amount_rangeproof = RangeProof::new(
+            &secp,
+            min_value,
+            value_pedersen_commitment,
+            output_value,
+            blinding_factor,
+            message,
+            additional_commitment,
+            keys.to_typed().secret_key(),
+            exp,
+            min_bits,
+            additional_generator,
+        )
+        .unwrap(); // help me with this chat
+        let inflation_keys_rangeproof = None; // help me with this chat
 
         let witness = TxInWitness {
-            amount_rangeproof,
+            amount_rangeproof: Some(Box::new(amount_rangeproof)),
             inflation_keys_rangeproof,
             script_witness: script_witness.clone(),
             pegin_witness: vec![],
@@ -198,6 +236,25 @@ impl LBtcRevSwapTx {
     }
 }
 
+fn mock_generator() -> elements::secp256k1_zkp::Generator {
+    let mut a = [2u8; 33];
+    a[0] = 10;
+    elements::secp256k1_zkp::Generator::from_slice(&a).unwrap()
+}
+
+fn create_pedersen_commitment(
+    secp: &Secp256k1<secp256k1::All>,
+    value: u64,
+    blinding_factor: Tweak,
+    generator: Generator,
+) -> PedersenCommitment {
+    PedersenCommitment::new(secp, value, blinding_factor, generator)
+}
+
+fn mock_pubkey() -> elements::secp256k1_zkp::PublicKey {
+    let a = [2u8; 33];
+    elements::secp256k1_zkp::PublicKey::from_slice(&a).unwrap()
+}
 #[cfg(test)]
 mod tests {
     use crate::key::ec::BlindingKeyPair;

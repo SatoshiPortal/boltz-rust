@@ -100,9 +100,10 @@ impl BtcRevTxElements {
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo.unwrap(),
-            script_sig: Script::empty().into(),
+            script_sig: Script::empty().into(), // empty
             witness: Witness::new(),
         };
+
         let output_amount = self.utxo_value.unwrap() - self.absolute_fees as u64;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload.script_pubkey(),
@@ -118,18 +119,16 @@ impl BtcRevTxElements {
 
         // SIGN TRANSACTION
         let secp = Secp256k1::new();
-        let sighash = Message::from_slice(
-            &SighashCache::new(unsigned_tx.clone())
-                .segwit_signature_hash(
-                    0,
-                    &self.script_elements.to_script(),
-                    self.utxo_value.unwrap(),
-                    bitcoin::sighash::EcdsaSighashType::All,
-                )
-                .unwrap()[..],
-        )
-        .unwrap();
-        let signature = secp.sign_ecdsa(&sighash, &keys.to_typed().secret_key());
+        let sighash = &SighashCache::new(unsigned_tx.clone())
+            .segwit_signature_hash(
+                0,
+                &self.script_elements.to_script(),
+                self.utxo_value.unwrap(),
+                bitcoin::sighash::EcdsaSighashType::All,
+            )
+            .unwrap()[..];
+        let sighash_message = Message::from_slice(sighash).unwrap();
+        let signature = secp.sign_ecdsa(&sighash_message, &keys.to_typed().secret_key());
 
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();

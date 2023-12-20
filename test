@@ -115,8 +115,7 @@ read -p "Enter the number of your choice: " choice
 case $choice in
     1)
         notice "test_bitcoin_ssi"
-        echo "fuku"
-        # run_cargo_test_with_flags "test_bitcoin_ssi"
+        run_cargo_test_with_flags "test_bitcoin_ssi"
         ;;
     2)
         notice "test_bitcoin_rsi"
