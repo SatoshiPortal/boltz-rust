@@ -1,19 +1,21 @@
-use secp256k1::hashes::{hash160, sha256, Hash};
+use std::str::FromStr;
+
+use secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
 
 use crate::util::rnd_str;
 
 #[derive(Debug, Clone)]
-pub struct Preimage {
-    pub preimage: String,
+pub struct PreimageStates {
+    pub preimage: Option<String>,
+    pub preimage_bytes: Option<Vec<u8>>,
     pub sha256: String,
     pub hash160: String,
-    pub preimage_bytes: Vec<u8>,
     pub sha256_bytes: [u8; 32],
     pub hash160_bytes: [u8; 20],
 }
 
-impl Preimage {
-    pub fn new() -> Preimage {
+impl PreimageStates {
+    pub fn new() -> PreimageStates {
         let preimage = rnd_str();
         let sha256 = sha256::Hash::hash(&hex::decode(preimage.clone()).unwrap()).to_string();
         let hash160 = hash160::Hash::hash(&hex::decode(preimage.clone()).unwrap()).to_string();
@@ -24,17 +26,17 @@ impl Preimage {
         let hash160_bytes =
             hash160::Hash::hash(&hex::decode(preimage.clone()).unwrap()).to_byte_array();
 
-        Preimage {
-            preimage,
+        PreimageStates {
+            preimage: Some(preimage),
             sha256,
             hash160,
-            preimage_bytes,
+            preimage_bytes: Some(preimage_bytes),
             sha256_bytes,
             hash160_bytes,
         }
     }
 
-    pub fn from_str(preimage: &str) -> Preimage {
+    pub fn from_str(preimage: &str) -> PreimageStates {
         let sha256 = sha256::Hash::hash(&hex::decode(preimage).unwrap()).to_string();
         let hash160 = hash160::Hash::hash(&hex::decode(preimage).unwrap()).to_string();
         let preimage_bytes: Vec<u8> = hex::decode(preimage).unwrap();
@@ -42,13 +44,27 @@ impl Preimage {
         let sha256_bytes = sha256::Hash::hash(&hex::decode(preimage).unwrap()).to_byte_array();
         let hash160_bytes = hash160::Hash::hash(&hex::decode(preimage).unwrap()).to_byte_array();
 
-        Preimage {
-            preimage: preimage.to_string(),
+        PreimageStates {
+            preimage: Some(preimage.to_string()),
+            preimage_bytes: Some(preimage_bytes),
             sha256,
             hash160,
-            preimage_bytes,
             sha256_bytes,
             hash160_bytes,
+        }
+    }
+
+    pub fn from_sha256_str(preimage_sha256: &str) -> PreimageStates {
+        let sha256 = sha256::Hash::from_str(preimage_sha256).unwrap();
+        let hash160 = ripemd160::Hash::hash(sha256.as_byte_array());
+
+        PreimageStates {
+            preimage: None,
+            sha256: sha256.to_string(),
+            hash160: hash160.to_string(),
+            preimage_bytes: None,
+            sha256_bytes: sha256.to_byte_array(),
+            hash160_bytes: hash160.to_byte_array(),
         }
     }
 }

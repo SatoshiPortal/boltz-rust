@@ -3,11 +3,14 @@
 
 use bitcoin::{Address, Network};
 use boltzclient::{
-    key::{ec::KeyPairString, preimage::Preimage},
+    key::{ec::KeyPairString, preimage::PreimageStates},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
-        bitcoin::script::BtcRevScriptElements,
-        bitcoin::{script::BtcSubScriptElements, tx::BtcRevTxElements},
+        bitcoin::lightning::*,
+        bitcoin::{
+            script::{BtcRevScriptElements, BtcSubScriptElements},
+            tx::BtcRevTxElements,
+        },
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
     },
     util::pause_and_wait,
@@ -24,9 +27,9 @@ use std::{env, str::FromStr};
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice = "lntb500u1pjhl4y5pp5jsexaz0aqsl9058qyy4544encu4wh6rr09q00u3f2kfy0923m3pqdqvw3jhxarfdensxqyjw5qcqp2sp5550x894m9lcl5jt3vad8hl4g767yuujjv8zhce4fzmc20kacns9srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqhjsq5qykk8vw5m47mkrlck43j7wmzdc8pd38y7gqqm4vyjlawuph73umqkp8969z5jv8ljlz7x65d0ewrlz4a7m6wuld275ft4pmxespj7q6uu";
+    let invoice_str = "lntb560u1pjcgewzpp5nxa299kz6js0d5p7t74xkn5agz428utuagqrd366v0tu509rmecqdpgxguzq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp52jn3xkfejjznp9xvv7gjyznem5yys7d6xf5w5uhwxqmmfpxma3fsxp4wat5kl7n73z6fwx7ktqxhhlxdutnem08t90mztcjjk3l034xk20sfpj5n374f6g88qhhgpmzcxz37t04camaqwzr3np65cfp7ugcpdn4a94";
     // ensure the payment hash is the one boltz uses in their swap script
-
+    let preimage = preimage_from_invoice_str(invoice_str).unwrap();
     let _out_amount = 50_000;
 
     dotenv().ok();
@@ -59,10 +62,15 @@ fn test_bitcoin_ssi() {
 
     let request = CreateSwapRequest::new_btc_submarine(
         pair_hash,
-        invoice.to_string(),
+        invoice_str.to_string(),
         keypair.pubkey.clone(),
     );
     let response = boltz_client.create_swap(request);
+    assert!(response
+        .as_ref()
+        .unwrap()
+        .validate_script_preimage(preimage.hash160));
+
     println!("{:?}", response);
     assert!(response.is_ok());
 
@@ -123,7 +131,7 @@ fn test_bitcoin_rsi() {
     };
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string());
     println!("****SECRETS****:{:?}", keypair);
-    let preimage = Preimage::new();
+    let preimage = PreimageStates::new();
     println!("****SECRETS****:{:?}", preimage.clone());
     // SECRETS
     let network_config = NetworkConfig::new(
@@ -158,7 +166,7 @@ fn test_bitcoin_rsi() {
     assert!(response
         .as_ref()
         .unwrap()
-        .validate_preimage(preimage.clone().sha256));
+        .validate_invoice_preimage(preimage.clone().sha256));
 
     let timeout = response
         .as_ref()
@@ -267,8 +275,9 @@ fn test_recover_bitcoin_rsi() {
         seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1".to_string(),
         pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986".to_string(),
     };
-    let preimage =
-        Preimage::from_str("898396fe53c58375cf8a5a8cfead2a285dc4b5b84cd149800914fc60c9f3a70b");
+    let preimage = PreimageStates::from_str(
+        "898396fe53c58375cf8a5a8cfead2a285dc4b5b84cd149800914fc60c9f3a70b",
+    );
 
     let redeem_script = "8201208763a9143b2b7485171679c84f6540a8b907c2c830e9a60b88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775030bce26b1752103778dc69769e3cbdd9091d05a5e027ebc1919675d0725d2c1f2259f821a3e6a2668ac".to_string();
 

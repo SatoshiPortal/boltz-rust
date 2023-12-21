@@ -18,7 +18,7 @@ use crate::{
     e::S5Error,
     key::{
         ec::{BlindingKeyPair, KeyPairString},
-        preimage::Preimage,
+        preimage::PreimageStates,
     },
     network::electrum::NetworkConfig,
     swaps::boltz::SwapTxKind,
@@ -70,7 +70,7 @@ impl LBtcRevSwapTx {
     pub fn drain_tx(
         &mut self,
         keys: KeyPairString,
-        preimage: Preimage,
+        preimage: PreimageStates,
         blinding_keys: BlindingKeyPair,
     ) -> Result<Transaction, S5Error> {
         // self.fetch_utxo();
@@ -125,7 +125,7 @@ impl LBtcRevSwapTx {
     fn sign_claim_tx(
         &self,
         keys: KeyPairString,
-        preimage: Preimage,
+        preimage: PreimageStates,
         _blinding_keys: BlindingKeyPair,
     ) -> Transaction {
         /*
@@ -203,7 +203,7 @@ impl LBtcRevSwapTx {
 
         let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
         script_witness.push(hex::decode(&signature.serialize_der().to_string()).unwrap());
-        script_witness.push(preimage.preimage_bytes);
+        script_witness.push(preimage.preimage_bytes.unwrap());
         script_witness.push(self.script_elements.to_typed().as_bytes().to_vec());
 
         let min_value: u64 = DUST_VALUE;
@@ -299,16 +299,19 @@ mod tests {
             pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986"
                 .to_string(),
         };
-        let preimage = Preimage {
-            preimage: "a323c8c5abadca53bb4b732d62d0486ba49ecab7e340d2b44aac13ac813fed29"
-                .to_string(),
+        let preimage = PreimageStates {
+            preimage: Some(
+                "a323c8c5abadca53bb4b732d62d0486ba49ecab7e340d2b44aac13ac813fed29".to_string(),
+            ),
             sha256: "2c705049974f29e308d9c8d5c5ec216d6c435cae52777c53dcceefda8b52922c".to_string(),
             hash160: "8514cc9235824c914d94fda549e45d6dec629b97".to_string(),
-            preimage_bytes: [
-                163, 35, 200, 197, 171, 173, 202, 83, 187, 75, 115, 45, 98, 208, 72, 107, 164, 158,
-                202, 183, 227, 64, 210, 180, 74, 172, 19, 172, 129, 63, 237, 41,
-            ]
-            .to_vec(),
+            preimage_bytes: Some(
+                [
+                    163, 35, 200, 197, 171, 173, 202, 83, 187, 75, 115, 45, 98, 208, 72, 107, 164,
+                    158, 202, 183, 227, 64, 210, 180, 74, 172, 19, 172, 129, 63, 237, 41,
+                ]
+                .to_vec(),
+            ),
             sha256_bytes: [
                 44, 112, 80, 73, 151, 79, 41, 227, 8, 217, 200, 213, 197, 236, 33, 109, 108, 67,
                 92, 174, 82, 119, 124, 83, 220, 206, 239, 218, 139, 82, 146, 44,

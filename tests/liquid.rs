@@ -2,7 +2,7 @@ use dotenv::dotenv;
 use std::{env, str::FromStr};
 
 use boltzclient::{
-    key::{ec::KeyPairString, preimage::Preimage},
+    key::{ec::KeyPairString, preimage::PreimageStates},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
@@ -99,7 +99,7 @@ fn test_liquid_rsi() {
     };
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string());
     println!("{:?}", keypair);
-    let preimage = Preimage::new();
+    let preimage = PreimageStates::new();
     // SECRETS
     let network_config = NetworkConfig::new(
         BitcoinNetwork::BitcoinTestnet,
@@ -134,7 +134,7 @@ fn test_liquid_rsi() {
     assert!(response
         .as_ref()
         .unwrap()
-        .validate_preimage(preimage.clone().sha256));
+        .validate_invoice_preimage(preimage.clone().sha256));
 
     let timeout = response
         .as_ref()

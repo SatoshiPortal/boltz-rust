@@ -34,7 +34,7 @@ impl FromStr for BtcSubScriptElements {
             match instruction {
                 Ok(Instruction::Op(opcode)) => {
                     last_op = opcode;
-                    println!("{:?}", opcode)
+                    // println!("{:?}", opcode)
                 }
 
                 Ok(Instruction::PushBytes(bytes)) => {
@@ -50,7 +50,7 @@ impl FromStr for BtcSubScriptElements {
                     if last_op == OP_DROP {
                         sender_pubkey = Some(hex::encode(bytes.as_bytes()));
                     }
-                    println!("{:?}", bytes)
+                    // println!("{:?}", bytes)
                 }
                 Err(e) => println!("Error: {:?}", e),
             }

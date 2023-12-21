@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use crate::{
     e::S5Error,
-    key::{ec::KeyPairString, preimage::Preimage},
+    key::{ec::KeyPairString, preimage::PreimageStates},
     network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::boltz::SwapTxKind,
 };
@@ -79,7 +79,7 @@ impl BtcRevTxElements {
     pub fn drain_tx(
         &self,
         keys: KeyPairString,
-        preimage: Preimage,
+        preimage: PreimageStates,
     ) -> Result<Transaction, S5Error> {
         // if !self.has_utxo(){ Error::new() }
         match self.kind {
@@ -94,7 +94,7 @@ impl BtcRevTxElements {
         }
         // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
     }
-    fn sign_claim_tx(&self, keys: KeyPairString, preimage: Preimage) -> Transaction {
+    fn sign_claim_tx(&self, keys: KeyPairString, preimage: PreimageStates) -> Transaction {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         // why send the preimage when its in the Tx
         let unsigned_input: TxIn = TxIn {
@@ -136,7 +136,7 @@ impl BtcRevTxElements {
             &signature.serialize_der(),
             bitcoin::sighash::EcdsaSighashType::All,
         );
-        witness.push(preimage.preimage_bytes);
+        witness.push(preimage.preimage_bytes.unwrap());
         witness.push(self.script_elements.to_script().as_bytes());
 
         // https://github.com/bitcoin-teleport/teleport-transactions/blob/master/src/wallet_sync.rs#L255
