@@ -518,7 +518,7 @@ impl CreateSwapResponse {
                         return false;
                     }
                 };
-                println!("{}-m----m-{}", script_elements.hashlock, preimage_hash160);
+                // println!("{}-m----m-{}", script_elements.hashlock, preimage_hash160);
                 if &script_elements.hashlock == &preimage_hash160 {
                     true
                 } else {

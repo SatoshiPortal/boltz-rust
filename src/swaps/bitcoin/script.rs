@@ -283,55 +283,6 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_decode_script() {
-        let script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
-        let script_bytes = hex::decode(script_str).unwrap().to_owned();
-        let script = Script::from_bytes(&script_bytes);
-        println!("is p2pk: {}", script.is_p2pk());
-        println!("is p2sh: {}", script.is_p2sh());
-        println!("is p2pkh: {}", script.is_p2pkh());
-        println!("is v0_p2wpkh: {}", script.is_v0_p2wpkh());
-        println!("is v0_p2wsh: {}", script.is_v0_p2wsh());
-        println!("is p2tr: {}", script.is_v1_p2tr());
-        println!("is opreturn: {}", script.is_op_return());
-        println!("is witness_program: {}", script.is_witness_program());
-        println!(
-            "is provably unspendable: {}",
-            script.is_provably_unspendable()
-        );
-        let instructions = script.instructions();
-        let mut last_op = OP_0;
-        for instruction in instructions {
-            match instruction {
-                Ok(Instruction::Op(opcode)) => {
-                    last_op = opcode;
-                    println!("Opcode: {:?}", opcode)
-                }
-                Ok(Instruction::PushBytes(bytes)) => {
-                    if last_op == OP_HASH160 {
-                        println!("HashLock: {:?}", hex::encode(bytes.as_bytes()));
-                    }
-                    if last_op == OP_EQUALVERIFY {
-                        println!("Reciever PubKey: {:?}", hex::encode(bytes.as_bytes()));
-                    }
-                    if last_op == OP_ELSE {
-                        println!(
-                            "TimeLock: {:?}",
-                            bytes_to_u32_little_endian(bytes.as_bytes())
-                        );
-                        // println!("TimeLock: {:?}", Height::try_from(bytes.as_bytes()));
-                    }
-                    if last_op == OP_DROP {
-                        println!("Sender Pubkey: {:?}", hex::encode(bytes.as_bytes()));
-                    }
-                    println!("PushBytes: {:?}", bytes.as_bytes());
-                }
-                Err(e) => println!("Error: {:?}", e),
-            }
-        }
-    }
-
-    #[test]
     fn test_decode_encode_swap_redeem_script() {
         let redeem_script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
         let expected_address = "2MxkD9NtLhU4iRAUw8G6B83SiHxDESGfDac";

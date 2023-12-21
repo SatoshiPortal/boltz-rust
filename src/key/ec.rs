@@ -57,14 +57,28 @@ impl KeyPairString {
         let seckey = SecretKey::from_str(&self.seckey).unwrap();
         KeyPair::from_secret_key(&secp, &seckey)
     }
-    pub fn from_mnemonic(mnemonic: String, passphrase: String) -> KeyPairString {
-        let master_key = MasterKey::import(&mnemonic, &passphrase, Network::Testnet).unwrap();
+    pub fn from_mnemonic(
+        mnemonic: String,
+        passphrase: String,
+        account: u64,
+    ) -> Result<KeyPairString, S5Error> {
+        if account == 0 {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "Account 0 is reserved for your main wallet.",
+            ));
+        }
+
+        let master_key = match MasterKey::import(&mnemonic, &passphrase, Network::Testnet) {
+            Ok(result) => result,
+            Err(e) => return Err(e),
+        };
+
         let child_key =
-            ChildKeys::from_hardened_account(&master_key.xprv, DerivationPurpose::Native, 1)
-                .unwrap();
-        let ec_key = keypair_from_xprv_str(&child_key.xprv).unwrap();
+            ChildKeys::from_hardened_account(&master_key.xprv, DerivationPurpose::Native, account)?;
+        let ec_key = keypair_from_xprv_str(&child_key.xprv)?;
         let string_keypair = KeyPairString::from_keypair(ec_key);
-        string_keypair
+        Ok(string_keypair)
     }
 }
 

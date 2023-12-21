@@ -5,6 +5,7 @@ use boltzclient::{
     key::{ec::KeyPairString, preimage::PreimageStates},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
+        bitcoin::lightning::preimage_from_invoice_str,
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
         liquid::script::{LBtcRevSwapScript, LBtcSubSwapScript},
     },
@@ -17,7 +18,9 @@ use boltzclient::{
 #[ignore]
 fn test_liquid_ssi() {
     // https://liquidtestnet.com/faucet
-    let invoice = "lntb500u1pjhuau2pp5540kmv38f5227y7pvw7gs8jsk3htl66hlazv4qxpakmnq2x87wxsdqdd338gcmnwashqxqyjw5qcqp2sp5mj7q54kusg04fscuq9sgqwzwen0jj3304vsuug9pchj3w9vme7tsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq8svlp8g70e5ngyzkylqyzdca4wandfdjjk330hu7xynkvmkjqr6j5439k4w40gmzh2t5lywf50yf3jj4j4xz8p5vryezjyrtt2avenqqdwss2n";
+    let invoice_str = "lntb560u1pjcfqampp59kxkg8nywg50a37ks8v6qau9nv0dmkf825pfxwl3mn8mw4u08p9qdpgxguzq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp5g6p5xc5l5qyk98txtescxw3a768rpcjshf5at9n9jkamxzthsr2ssjxc9hw90kqp0e000xq7y0vwec434xu094adnp2zlq4esjkzecryt7net4cv2mjqjx7euxzetyrkl339dygl3cnmr8h2fq43yuvfnqsqhhukdw";
+
+    let preimage = preimage_from_invoice_str(invoice_str).unwrap();
 
     let _out_amount = 50_000;
 
@@ -27,7 +30,7 @@ fn test_liquid_ssi() {
         Ok(result) => result,
         Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
     };
-    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string());
+    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("{:?}", keypair);
     // SECRETS
     let network_config = NetworkConfig::new(
@@ -51,11 +54,15 @@ fn test_liquid_ssi() {
 
     let request = CreateSwapRequest::new_lbtc_submarine(
         pair_hash,
-        invoice.to_string(),
+        invoice_str.to_string(),
         keypair.pubkey.clone(),
     );
     let response = boltz_client.create_swap(request);
     assert!(response.is_ok());
+    assert!(response
+        .as_ref()
+        .unwrap()
+        .validate_script_preimage(preimage.hash160));
 
     let _id = response.as_ref().unwrap().id.as_str();
     let funding_address = response.as_ref().unwrap().address.clone().unwrap();
@@ -97,7 +104,7 @@ fn test_liquid_rsi() {
         Ok(result) => result,
         Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
     };
-    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string());
+    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("{:?}", keypair);
     let preimage = PreimageStates::new();
     // SECRETS

@@ -15,9 +15,9 @@ Here we will pay an LN invoice to boltz and boltz will fund an onchain script fo
 
 ## Script
 
-This requires building a `one-time use and dispose wallet` for the following bitcoin script (p2shwsh ONLY):
+This requires building a `one-time use and dispose wallet` for the following bitcoin script:
 
-NORMAL SWAP:
+BOLTZ NORMAL SWAP: p2shwsh
 
 ```
     HASH160 <hash of the preimage> 
@@ -30,7 +30,7 @@ NORMAL SWAP:
     CHECKSIG
 ```
 
-REVERSE SWAP:
+BOLTZ REVERSE SWAP: p2sh
 
 ```
     SIZE
@@ -65,7 +65,9 @@ We are the sender in case of a normal swap and boltz in the case of a reverse sw
 There is no requirement for a database as we will not persist and data.
 
 We simply create keys, build a script, generate a single address correspoding to this key, watch the address for a payment and spend the utxo by building a transaction, solving the spending conditions and broadcasting. 
-We do not need to store transaction history or address indexes etc.
+We do not need to store transaction history or address indexes etc. This has to be handled by the client. 
+
+The client must ensure that they are rotating the keys and preimages being used. There are helper structs and methods for this.
 
 In case of `normal swaps`; In the happy case, everything goes well, boltz pays our invoice and claims the onchain funds.
 The client (us) will ONLY be required to create the swap script and spend it in case boltz cheats and we need to claim back funds onchain from the script after a timeout. 

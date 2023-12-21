@@ -41,7 +41,7 @@ impl FromStr for LBtcSubSwapScript {
             match instruction {
                 Ok(Instruction::Op(opcode)) => {
                     last_op = opcode;
-                    println!("{:?}", opcode)
+                    // println!("{:?}", opcode)
                 }
 
                 Ok(Instruction::PushBytes(bytes)) => {
@@ -57,7 +57,7 @@ impl FromStr for LBtcSubSwapScript {
                     if last_op == OP_DROP {
                         sender_pubkey = Some(hex::encode(bytes));
                     }
-                    println!("{:?}", bytes)
+                    // println!("{:?}", bytes)
                 }
                 Err(e) => println!("Error: {:?}", e),
             }
@@ -304,7 +304,7 @@ mod tests {
                 .to_string(),
         };
         let decoded = LBtcRevSwapScript::from_str(&redeem_script_str.clone()).unwrap();
-        println!("{:?}", decoded);
+        // println!("{:?}", decoded);
         assert_eq!(decoded.reciever_pubkey, my_key_pair.pubkey);
         assert_eq!(decoded.timelock, expected_timeout);
 
@@ -317,10 +317,10 @@ mod tests {
             signature: None,
         };
 
-        let script = script_elements.to_typed();
-        println!("ENCODED HEX: {}", script.to_string());
+        // let script = script_elements.to_typed();
+        // println!("ENCODED HEX: {}", script.to_string());
         let address = script_elements.to_address(blinding_key);
-        println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
+        // println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
     }
 }

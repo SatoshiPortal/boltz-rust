@@ -38,7 +38,7 @@ fn test_bitcoin_ssi() {
         Ok(result) => result,
         Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
     };
-    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string());
+    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("****SECRETS****:{:?}", keypair);
     // SECRETS
     let network_config = NetworkConfig::new(
@@ -129,7 +129,7 @@ fn test_bitcoin_rsi() {
         Ok(result) => result,
         Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
     };
-    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string());
+    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("****SECRETS****:{:?}", keypair);
     let preimage = PreimageStates::new();
     println!("****SECRETS****:{:?}", preimage.clone());
