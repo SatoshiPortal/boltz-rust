@@ -128,8 +128,26 @@ impl LBtcRevSwapTx {
         preimage: Preimage,
         _blinding_keys: BlindingKeyPair,
     ) -> Transaction {
-        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+        /*
+         *
+         * NOTES:
+         *
+         * decodetransaction additional fields in liquid
+            "is_pegin": false,
+            "value-minimum": 0.00000001,
+            "value-maximum": 687.19476736,
+            "ct-exponent": 0,
+            "ct-bits": 36,
+            "valuecommitment": "0844778d24db8b3454924e3b77d2aa00b4bd57bc20cb852a65238a336b93db7ac6",
+            "assetcommitment": "0b96a62e05fcf65a50ad58643a603f21bb033172336c653840accbae54e9fe7dd7",
+            "commitmentnonce": "02acc6606bdd8c65bdaeadf1eefec726d0d3b777586922b6255c557bb8e43ac946",
+            "commitmentnonce_fully_valid": true,
 
+
+        In Liquid, the fee is explicitly stated as a vout. It is not derived from deducting the vout total from the vin total like in Bitcoin.
+         *
+         */
+        let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo.unwrap(),
@@ -138,22 +156,28 @@ impl LBtcRevSwapTx {
             is_pegin: false,
             asset_issuance: AssetIssuance::default(),
         };
-        // let txout_witness = TxOutWitness::from(0);
+
         let secp = Secp256k1::new();
         let blinding_factor =
             Tweak::from_slice(_blinding_keys.to_typed().secret_key().as_ref()).unwrap();
-        let generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
         let nonce = Nonce::Confidential(PublicKey::from_str(&_blinding_keys.pubkey).unwrap());
-        let explicit_asset = elements::confidential::Asset::Explicit(AssetId::LIQUID_BTC);
+        let asset_generator = Generator::new_blinded(
+            &secp,
+            Tag::default(),
+            // Tag::from(hex::decode(AssetId::LIQUID_BTC.to_hex()).unwrap().as_ref()), // as &[u8; 32]
+            blinding_factor,
+        );
         let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
+        let value_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
         let value_pedersen_commitment =
-            create_pedersen_commitment(&secp, output_value, blinding_factor, generator);
+            PedersenCommitment::new(&secp, output_value, blinding_factor, value_generator);
         let blinded_value = elements::confidential::Value::Confidential(value_pedersen_commitment);
+        let blinded_asset = elements::confidential::Asset::Confidential(asset_generator);
 
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
             value: blinded_value,
-            asset: explicit_asset,
+            asset: blinded_asset,
             nonce: nonce,
             witness: TxOutWitness::default(),
         };
@@ -170,7 +194,7 @@ impl LBtcRevSwapTx {
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
                 &self.script_elements.to_typed(),
-                Value::Explicit(self.utxo_value.unwrap()),
+                blinded_value,
                 elements::EcdsaSighashType::All,
             )[..],
         )
@@ -182,13 +206,11 @@ impl LBtcRevSwapTx {
         script_witness.push(preimage.preimage_bytes);
         script_witness.push(self.script_elements.to_typed().as_bytes().to_vec());
 
-        let min_value: u64 = 1; // Minimum value for the range proof, adjust as needed
-        let exp: i32 = 0; // Exponent for the range proof
-        let min_bits: u8 = 36; // Minimum number of bits for the range proof
-
-        // Assuming you have these values correctly set up
-        let message: &[u8] = &[]; // Optional message for range proof
-        let additional_commitment: &[u8] = &[]; // Additional commitment data
+        let min_value: u64 = DUST_VALUE;
+        let exp: i32 = 0;
+        let min_bits: u8 = 36;
+        let message: &[u8] = &[];
+        let additional_commitment: &[u8] = &[];
         let additional_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
 
         let amount_rangeproof = RangeProof::new(
@@ -204,8 +226,9 @@ impl LBtcRevSwapTx {
             min_bits,
             additional_generator,
         )
-        .unwrap(); // help me with this chat
-        let inflation_keys_rangeproof = None; // help me with this chat
+        .unwrap();
+
+        let inflation_keys_rangeproof = None;
 
         let witness = TxInWitness {
             amount_rangeproof: Some(Box::new(amount_rangeproof)),
@@ -240,15 +263,6 @@ fn mock_generator() -> elements::secp256k1_zkp::Generator {
     let mut a = [2u8; 33];
     a[0] = 10;
     elements::secp256k1_zkp::Generator::from_slice(&a).unwrap()
-}
-
-fn create_pedersen_commitment(
-    secp: &Secp256k1<secp256k1::All>,
-    value: u64,
-    blinding_factor: Tweak,
-    generator: Generator,
-) -> PedersenCommitment {
-    PedersenCommitment::new(secp, value, blinding_factor, generator)
 }
 
 fn mock_pubkey() -> elements::secp256k1_zkp::PublicKey {
