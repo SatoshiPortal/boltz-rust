@@ -1,0 +1,36 @@
+key:
+    - SecretKey:
+        - type: String
+        - methods: 
+            - from_mnemonic(mnemonic String, account u32)
+    - PublicKey:
+        - type: String
+        - methods: 
+            - from_
+    - PreImage:
+        - type: {
+            preimage: Option<String>, // None for normal swaps as we do not know the preimage
+            sha256: String,
+            hash160: String,
+        }
+    - BlindingSecretKey:
+        - type: String
+    - BlindingPublicKey:
+        - type: String
+    - Invoice:
+        - type: String
+
+swaps:
+    boltz: (can be done natively in dart)
+        - BoltzClient:
+        - BoltzRequest:        
+        - BoltzResponse:
+
+    - bitcoin: 
+        - BTCSwapScript:
+        - BTCSwapTx:
+
+    - liquid:
+        - LBTCSwapScript:
+        - LBTCSwapTx:
+

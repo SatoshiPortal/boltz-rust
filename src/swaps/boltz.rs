@@ -8,7 +8,8 @@ use ureq::Error;
 
 use crate::e::S5Error;
 
-use super::bitcoin::script::BtcSubScriptElements;
+use crate::network::electrum::BitcoinNetwork;
+use crate::swaps::bitcoin::BtcSwapScript;
 
 pub const BOLTZ_TESTNET_URL: &str = "https://testnet.boltz.exchange/api";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
@@ -313,7 +314,7 @@ impl FromStr for RevSwapStates {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SwapType {
     Submarine,
@@ -484,7 +485,7 @@ pub struct CreateSwapResponse {
 }
 
 impl CreateSwapResponse {
-    pub fn validate_invoice_preimage(&self, preimage_sha256: String) -> bool {
+    pub fn validate_invoice_preimage256(&self, preimage_sha256: String) -> bool {
         match &self.invoice {
             Some(invoice_str) => {
                 let invoice = match Bolt11Invoice::from_str(&invoice_str) {
@@ -508,16 +509,18 @@ impl CreateSwapResponse {
             None => false,
         }
     }
-    pub fn validate_script_preimage(&self, preimage_hash160: String) -> bool {
+    pub fn validate_script_preimage160(&self, preimage_hash160: String) -> bool {
         match &self.redeem_script {
             Some(rs) => {
-                let script_elements = match BtcSubScriptElements::from_str(&rs) {
-                    Ok(se) => se,
-                    Err(e) => {
-                        println!("Error parsing sub script elements:{:?}", e);
-                        return false;
-                    }
-                };
+                let script_elements =
+                    match BtcSwapScript::submarine_from_str(BitcoinNetwork::BitcoinTestnet, &rs) {
+                        // network doesnt matter here, we just want the hashlock extracted
+                        Ok(se) => se,
+                        Err(e) => {
+                            println!("Error parsing sub script elements:{:?}", e);
+                            return false;
+                        }
+                    };
                 // println!("{}-m----m-{}", script_elements.hashlock, preimage_hash160);
                 if &script_elements.hashlock == &preimage_hash160 {
                     true
@@ -665,7 +668,7 @@ mod tests {
         assert!(response
             .as_ref()
             .unwrap()
-            .validate_invoice_preimage(preimage_hash));
+            .validate_invoice_preimage256(preimage_hash));
         let id = response.unwrap().id;
         let request = SwapStatusRequest { id: id };
         let response = client.swap_status(request);
@@ -701,7 +704,7 @@ mod tests {
         assert!(response
             .as_ref()
             .unwrap()
-            .validate_invoice_preimage(preimage_hash));
+            .validate_invoice_preimage256(preimage_hash));
         let id = response.unwrap().id;
         let request = SwapStatusRequest { id: id };
         let response = client.swap_status(request);

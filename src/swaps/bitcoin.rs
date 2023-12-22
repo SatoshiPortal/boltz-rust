@@ -1,0 +1,635 @@
+use std::str::FromStr;
+
+use bitcoin::{
+    blockdata::script::{Builder, Instruction, Script, ScriptBuf},
+    opcodes::{all::*, OP_0},
+    Address, OutPoint, PublicKey,
+};
+use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
+use electrum_client::ElectrumApi;
+use secp256k1::{Message, Secp256k1};
+
+use crate::{
+    e::{ErrorKind, S5Error},
+    key::{ec::KeyPairString, preimage::PreimageStates},
+    network::electrum::{BitcoinNetwork, NetworkConfig},
+    swaps::boltz::SwapTxKind,
+};
+
+use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160::Hash};
+
+use super::boltz::SwapType;
+
+#[derive(Debug, PartialEq)]
+pub struct BtcSwapScript {
+    pub network: BitcoinNetwork,
+    pub swap_type: SwapType,
+    pub hashlock: String,
+    pub reciever_pubkey: String,
+    pub timelock: u32,
+    pub sender_pubkey: String,
+}
+
+impl BtcSwapScript {
+    pub fn new(
+        network: BitcoinNetwork,
+        swap_type: SwapType,
+        hashlock: String,
+        reciever_pubkey: String,
+        timelock: u32,
+        sender_pubkey: String,
+    ) -> Self {
+        BtcSwapScript {
+            network,
+            swap_type,
+            hashlock,
+            reciever_pubkey,
+            timelock,
+            sender_pubkey,
+        }
+    }
+    pub fn submarine_from_str(
+        network: BitcoinNetwork,
+        redeem_script_str: &str,
+    ) -> Result<Self, S5Error> {
+        let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
+        let script = Script::from_bytes(&script_bytes);
+
+        let instructions = script.instructions();
+        let mut last_op = OP_0;
+        let mut hashlock = None;
+        let mut reciever_pubkey = None;
+        let mut timelock = None;
+        let mut sender_pubkey = None;
+
+        for instruction in instructions {
+            match instruction {
+                Ok(Instruction::Op(opcode)) => {
+                    last_op = opcode;
+                    // println!("{:?}", opcode)
+                }
+
+                Ok(Instruction::PushBytes(bytes)) => {
+                    if last_op == OP_HASH160 {
+                        hashlock = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    if last_op == OP_IF {
+                        reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    if last_op == OP_ELSE {
+                        timelock = Some(bytes_to_u32_little_endian(&bytes.as_bytes()));
+                    }
+                    if last_op == OP_DROP {
+                        sender_pubkey = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    // println!("{:?}", bytes)
+                }
+                Err(e) => println!("Error: {:?}", e),
+            }
+        }
+
+        if hashlock.is_some()
+            && sender_pubkey.is_some()
+            && timelock.is_some()
+            && sender_pubkey.is_some()
+        {
+            Ok(BtcSwapScript {
+                network: network,
+                swap_type: SwapType::Submarine,
+                hashlock: hashlock.unwrap(),
+                reciever_pubkey: reciever_pubkey.unwrap(),
+                timelock: timelock.unwrap(),
+                sender_pubkey: sender_pubkey.unwrap(),
+            })
+        } else {
+            Err(S5Error::new(
+                ErrorKind::Input,
+                &format!(
+                    "Could not extract all elements: {:?} {:?} {:?} {:?}",
+                    hashlock, reciever_pubkey, timelock, sender_pubkey
+                ),
+            ))
+        }
+    }
+
+    pub fn reverse_from_str(
+        network: BitcoinNetwork,
+        redeem_script_str: &str,
+    ) -> Result<Self, S5Error> {
+        let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
+        let script = Script::from_bytes(&script_bytes);
+        // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
+        // println!("ADDRESS DECODED: {:?}",address);
+        // let script_hash = script.script_hash();
+        // let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
+        // println!("DECODED SCRIPT HASH: {}",sh_str);
+        let instructions = script.instructions();
+        let mut last_op = OP_0;
+        let mut hashlock = None;
+        let mut reciever_pubkey = None;
+        let mut timelock = None;
+        let mut sender_pubkey = None;
+
+        for instruction in instructions {
+            match instruction {
+                Ok(Instruction::Op(opcode)) => {
+                    last_op = opcode;
+                    // println!("{:?}", opcode)
+                }
+
+                Ok(Instruction::PushBytes(bytes)) => {
+                    if last_op == OP_HASH160 {
+                        hashlock = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    if last_op == OP_EQUALVERIFY {
+                        reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
+                    }
+                    if last_op == OP_DROP {
+                        if bytes.len() == 3 as usize {
+                            timelock = Some(bytes_to_u32_little_endian(&bytes.as_bytes()));
+                        } else {
+                            sender_pubkey = Some(hex::encode(bytes.as_bytes()));
+                        }
+                    }
+                    // println!("{:?}: LENGTH: {}", bytes, bytes.len() )
+                }
+                Err(e) => println!("Error: {:?}", e),
+            }
+        }
+
+        if hashlock.is_some()
+            && sender_pubkey.is_some()
+            && timelock.is_some()
+            && sender_pubkey.is_some()
+        {
+            Ok(BtcSwapScript {
+                network: network,
+                swap_type: SwapType::ReverseSubmarine,
+                hashlock: hashlock.unwrap(),
+                reciever_pubkey: reciever_pubkey.unwrap(),
+                timelock: timelock.unwrap(),
+                sender_pubkey: sender_pubkey.unwrap(),
+            })
+        } else {
+            Err(S5Error::new(
+                ErrorKind::Input,
+                &format!(
+                    "Could not extract all script elements. Check your redeem script and swap_type."
+                ),
+            ))
+        }
+    }
+
+    fn to_script(&self) -> ScriptBuf {
+        match self.swap_type {
+            SwapType::Submarine => {
+                /*
+                    HASH160 <hash of the preimage>
+                    EQUAL
+                    IF <reciever public key>
+                    ELSE <timeout block height>
+                    CHECKLOCKTIMEVERIFY
+                    DROP <sender public key>
+                    ENDIF
+                    CHECKSIG
+                */
+                let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
+                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+                let locktime = LockTime::from_consensus(self.timelock);
+                let hashvalue = Hash::from_str(&self.hashlock).unwrap();
+                let hashbytes: [u8; 20] = *hashvalue.as_ref();
+
+                let script = Builder::new()
+                    .push_opcode(OP_HASH160)
+                    .push_slice(hashbytes)
+                    .push_opcode(OP_EQUAL)
+                    .push_opcode(OP_IF)
+                    .push_key(&reciever_pubkey)
+                    .push_opcode(OP_ELSE)
+                    .push_lock_time(locktime)
+                    .push_opcode(OP_CLTV)
+                    .push_opcode(OP_DROP)
+                    .push_key(&sender_pubkey)
+                    .push_opcode(OP_ENDIF)
+                    .push_opcode(OP_CHECKSIG)
+                    .into_script();
+
+                script
+            }
+            SwapType::ReverseSubmarine => {
+                /*
+                    OP_SIZE
+                    [32]
+                    OP_EQUAL
+                    OP_IF
+                    OP_HASH160 <hash of the preimage>
+                    OP_EQUALVERIFY <reciever public key>
+                    OP_ELSE
+                    OP_DROP <timeout block height>
+                    OP_CLTV
+                    OP_DROP <sender public key>
+                    OP_ENDIF
+                    OP_CHECKSIG
+                */
+                let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
+                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+                let locktime = LockTime::from_consensus(self.timelock);
+                let hashvalue = Hash::from_str(&self.hashlock).unwrap();
+                let hashbytes: [u8; 20] = *hashvalue.as_ref();
+
+                let script = Builder::new()
+                    .push_opcode(OP_SIZE)
+                    .push_slice([32])
+                    .push_opcode(OP_EQUAL)
+                    .push_opcode(OP_IF)
+                    .push_opcode(OP_HASH160)
+                    .push_slice(hashbytes)
+                    .push_opcode(OP_EQUALVERIFY)
+                    .push_key(&reciever_pubkey)
+                    .push_opcode(OP_ELSE)
+                    .push_opcode(OP_DROP)
+                    .push_lock_time(locktime)
+                    .push_opcode(OP_CLTV)
+                    .push_opcode(OP_DROP)
+                    .push_key(&sender_pubkey)
+                    .push_opcode(OP_ENDIF)
+                    .push_opcode(OP_CHECKSIG)
+                    .into_script();
+
+                script
+            }
+        }
+    }
+
+    pub fn to_address(&self) -> Address {
+        match self.swap_type {
+            SwapType::Submarine => {
+                let script = self.to_script();
+                let network = match self.network {
+                    BitcoinNetwork::Bitcoin => Network::Bitcoin,
+                    _ => Network::Testnet,
+                };
+                Address::p2shwsh(&script, network)
+            }
+            SwapType::ReverseSubmarine => {
+                let script = self.to_script();
+                let network = match self.network {
+                    BitcoinNetwork::Bitcoin => Network::Bitcoin,
+                    _ => Network::Testnet,
+                };
+                Address::p2wsh(&script, network)
+            }
+        }
+    }
+    pub fn get_balance(&self, electrum_url: String) -> Result<(u64, i64), S5Error> {
+        let electrum_client =
+            NetworkConfig::new(self.network, &electrum_url, true, true, false, None)
+                .unwrap()
+                .electrum_url
+                .build_client()
+                .unwrap();
+
+        let script_balance = electrum_client
+            .script_get_balance(&self.to_script())
+            .unwrap();
+        Ok((script_balance.confirmed, script_balance.unconfirmed))
+    }
+}
+
+fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
+    let mut result = 0u32;
+    for (i, &byte) in bytes.iter().enumerate() {
+        result |= (byte as u32) << (8 * i);
+    }
+    result
+}
+
+// fn find_difference(s1: &str, s2: &str) -> Vec<(usize, char, char)> {
+//     s1.char_indices()
+//         .zip(s2.chars())
+//         .filter(|((_, char1), char2)| char1 != char2)
+//         .map(|((i, char1), char2)| (i, char1, char2))
+//         .collect()
+// }
+
+pub struct BtcSwapTx {
+    kind: SwapTxKind,
+    script_elements: BtcSwapScript,
+    output_address: Address,
+    absolute_fees: u32,
+    network: Network,
+    utxo: Option<OutPoint>,
+    utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
+}
+
+impl BtcSwapTx {
+    /// BTC Swap claim Tx is constructed for successful reverse swaps
+    pub fn new_claim(
+        network: Network,
+        output_address: String,
+        absolute_fees: u32,
+        redeem_script: String,
+    ) -> BtcSwapTx {
+        let address = Address::from_str(&output_address).unwrap();
+        address.is_valid_for_network(network);
+        let boltz_network = match network {
+            Network::Bitcoin => BitcoinNetwork::Bitcoin,
+            _ => BitcoinNetwork::BitcoinTestnet,
+        };
+        BtcSwapTx {
+            kind: SwapTxKind::Claim,
+            script_elements: BtcSwapScript::reverse_from_str(boltz_network, &redeem_script)
+                .unwrap(),
+            output_address: address.assume_checked(),
+            absolute_fees,
+            network: network,
+            utxo: None,
+            utxo_value: None,
+        }
+    }
+    /// BTC Swap refund Tx is constructed only for a failed submarine swap
+    pub fn new_refund(
+        network: Network,
+        output_address: String,
+        absolute_fees: u32,
+        redeem_script: String,
+    ) -> BtcSwapTx {
+        let address = Address::from_str(&output_address).unwrap();
+        address.is_valid_for_network(network);
+        let boltz_network = match network {
+            Network::Bitcoin => BitcoinNetwork::Bitcoin,
+            _ => BitcoinNetwork::BitcoinTestnet,
+        };
+        BtcSwapTx {
+            kind: SwapTxKind::Refund,
+            script_elements: BtcSwapScript::submarine_from_str(boltz_network, &redeem_script)
+                .unwrap(), // this will error often
+            // handle error
+            output_address: address.assume_checked(),
+            absolute_fees,
+            network: network,
+            utxo: None,
+            utxo_value: None,
+        }
+    }
+    pub fn fetch_utxo(&mut self, electrum_url: String, expected_value: u64) -> () {
+        let network = match &self.network {
+            Network::Bitcoin => BitcoinNetwork::Bitcoin,
+            _ => BitcoinNetwork::BitcoinTestnet,
+        };
+        let electrum_client = NetworkConfig::new(network, &electrum_url, true, true, false, None)
+            .unwrap()
+            .electrum_url
+            .build_client()
+            .unwrap();
+
+        let utxos = electrum_client
+            .script_list_unspent(&self.script_elements.to_script().to_v0_p2wsh())
+            .unwrap();
+        if utxos.len() == 0 {
+            ()
+        } else {
+            let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
+            let utxo_value = utxos[0].value;
+            if utxo_value == expected_value {
+                self.utxo = Some(outpoint_0);
+                self.utxo_value = Some(utxo_value);
+                ()
+            } else {
+                ()
+                // this should appropriately error stating exptected value is not a match
+            }
+        }
+    }
+    fn _has_utxo(&self) -> bool {
+        self.utxo.is_some() && self.utxo_value.is_some()
+    }
+    pub fn drain_tx(
+        &self,
+        keys: KeyPairString,
+        preimage: PreimageStates,
+    ) -> Result<Transaction, S5Error> {
+        // if !self.has_utxo(){ Error::new() }
+        match self.kind {
+            SwapTxKind::Claim => Ok(self.sign_claim_tx(keys, preimage)),
+            SwapTxKind::Refund => {
+                self.sign_refund_tx(keys);
+                Err(S5Error::new(
+                    crate::e::ErrorKind::Wallet,
+                    "Refund transaction signing not supported yet",
+                ))
+            }
+        }
+        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
+    }
+    fn sign_claim_tx(&self, keys: KeyPairString, preimage: PreimageStates) -> Transaction {
+        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+        // why send the preimage when its in the Tx
+        let unsigned_input: TxIn = TxIn {
+            sequence: sequence,
+            previous_output: self.utxo.unwrap(),
+            script_sig: Script::empty().into(), // empty
+            witness: Witness::new(),
+        };
+
+        let output_amount = self.utxo_value.unwrap() - self.absolute_fees as u64;
+        let output: TxOut = TxOut {
+            script_pubkey: self.output_address.payload.script_pubkey(),
+            value: output_amount,
+        };
+
+        let unsigned_tx = Transaction {
+            version: 1,
+            lock_time: LockTime::from_consensus(self.script_elements.timelock),
+            input: vec![unsigned_input],
+            output: vec![output.clone()],
+        };
+
+        // SIGN TRANSACTION
+        let secp = Secp256k1::new();
+        let sighash = &SighashCache::new(unsigned_tx.clone())
+            .segwit_signature_hash(
+                0,
+                &self.script_elements.to_script(),
+                self.utxo_value.unwrap(),
+                bitcoin::sighash::EcdsaSighashType::All,
+            )
+            .unwrap()[..];
+        let sighash_message = Message::from_slice(sighash).unwrap();
+        let signature = secp.sign_ecdsa(&sighash_message, &keys.to_typed().secret_key());
+
+        // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
+        let mut witness = Witness::new();
+        witness.push_bitcoin_signature(
+            &signature.serialize_der(),
+            bitcoin::sighash::EcdsaSighashType::All,
+        );
+        witness.push(preimage.preimage_bytes.unwrap());
+        witness.push(self.script_elements.to_script().as_bytes());
+
+        // https://github.com/bitcoin-teleport/teleport-transactions/blob/master/src/wallet_sync.rs#L255
+        // println!("{:?}", witness);
+        // BUILD SIGNED TX w/ WITNESS
+        let signed_txin = TxIn {
+            previous_output: self.utxo.unwrap(),
+            script_sig: Script::empty().into(),
+            sequence: sequence,
+            witness: witness,
+        };
+
+        let signed_tx = Transaction {
+            version: 1,
+            lock_time: LockTime::from_consensus(self.script_elements.timelock),
+            input: vec![signed_txin],
+            output: vec![output.clone()],
+        };
+        signed_tx
+    }
+    fn sign_refund_tx(&self, _keys: KeyPairString) -> () {
+        // submarine
+        ()
+    }
+}
+
+pub struct LiquidSwapTxElements {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::network::electrum::NetworkConfig;
+    use crate::util::pause_and_wait;
+    use bitcoin::opcodes::all::{OP_EQUAL, OP_HASH160};
+    use bitcoin::script::Builder;
+    use bitcoin::{
+        absolute::LockTime, Address, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxOut,
+        Witness,
+    };
+    use electrum_client::ElectrumApi;
+    use secp256k1::hashes::{hash160, Hash};
+    use std::str::FromStr;
+
+    #[test]
+    #[ignore]
+    fn test_transaction() {
+        let preimage = "a45380303a1b87ec9d0de25f5eba4f6bfbf79b0396e15b72df4914fdb1124634";
+        let preimage_bytes = hex::decode(preimage).unwrap();
+        let preimage_hash = hash160::Hash::hash(&preimage_bytes);
+        let hashbytes: [u8; 20] = *preimage_hash.as_ref();
+
+        let script = Builder::new()
+            .push_opcode(OP_HASH160)
+            .push_slice(hashbytes)
+            .push_opcode(OP_EQUAL)
+            .into_script();
+
+        let address = Address::p2wsh(&script, Network::Testnet);
+        println!("PAY THIS ADDRESS: {}", address);
+        pause_and_wait("Pay the address and then continue!");
+
+        let electrum_client = NetworkConfig::default()
+            .unwrap()
+            .electrum_url
+            .build_client()
+            .unwrap();
+
+        let utxos = electrum_client
+            .script_list_unspent(&script.to_v0_p2wsh())
+            .unwrap();
+        let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
+        let utxo_value = utxos[0].value;
+
+        assert_eq!(utxo_value, 1_000);
+        println!("{:?}", utxos[0]);
+
+        let mut witness = Witness::new();
+
+        // witness.push(OP_0);
+        witness.push(preimage_bytes);
+        witness.push(script.to_bytes());
+        // println!("{:?}",script.to_v0_p2wsh());
+        let input: TxIn = TxIn {
+            previous_output: outpoint_0,
+            script_sig: Script::empty().into(),
+            sequence: Sequence::from_consensus(0xFFFFFFFF),
+            witness: witness,
+        };
+        const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
+        let return_address = Address::from_str(RETURN_ADDRESS).unwrap();
+        let output_value = 700;
+
+        let output: TxOut = TxOut {
+            script_pubkey: return_address.payload.script_pubkey(),
+            value: output_value,
+        };
+
+        let tx = Transaction {
+            version: 1,
+            lock_time: LockTime::from_consensus(0),
+            input: vec![input],
+            output: vec![output.clone()],
+        };
+
+        let txid = electrum_client.transaction_broadcast(&tx).unwrap();
+        println!("{}", txid);
+
+        // let mut utxo_map = HashMap::new();
+        // utxo_map.insert(outpoint_0, output);
+
+        // let verify_result = tx.verify(|outpoint| {
+        //     utxo_map.get(outpoint).cloned()
+        // });
+
+        // match verify_result {
+        //     Ok(_) => println!("Transaction verified successfully!"),
+        //     Err(e) =>{
+        //         println!("Verification failed: {:?}", e.to_string())
+        //     }
+        // }
+        // assert!(verify_result.is_ok());
+        // let unsigned_tx = Transaction{
+        //     version : 1,
+        //     lock_time: LockTime::from_consensus(script_elements.timelock),
+        //     input: vec![unsigned_input],
+        //     output: vec![output.clone()],
+        // };
+    }
+
+    use crate::key::ec::KeyPairString;
+
+    #[test]
+    fn test_decode_encode_swap_redeem_script() {
+        let redeem_script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
+        let expected_address = "2MxkD9NtLhU4iRAUw8G6B83SiHxDESGfDac";
+        let expected_timeout = 2542048;
+        let sender_key_pair = KeyPairString {
+            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
+            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d"
+                .to_string(),
+        };
+        let decoded = BtcSwapScript::submarine_from_str(
+            BitcoinNetwork::BitcoinTestnet,
+            &redeem_script_str.clone(),
+        )
+        .unwrap();
+        println!("{:?}", decoded);
+        assert!(decoded.sender_pubkey == sender_key_pair.pubkey);
+        assert!(decoded.timelock == expected_timeout);
+
+        let encoded = BtcSwapScript {
+            network: BitcoinNetwork::BitcoinTestnet,
+            swap_type: SwapType::Submarine,
+            hashlock: decoded.hashlock,
+            reciever_pubkey: decoded.reciever_pubkey,
+            sender_pubkey: decoded.sender_pubkey,
+            timelock: decoded.timelock,
+        }
+        .to_script();
+        let script_hash = encoded.script_hash();
+        let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
+        println!("ENCODED SCRIPT HASH: {}", sh_str);
+        println!("ENCODED HEX: {}", encoded.to_hex_string());
+        let address = Address::p2shwsh(&encoded, bitcoin::Network::Testnet);
+        println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
+        assert!(address.to_string() == expected_address);
+    }
+}

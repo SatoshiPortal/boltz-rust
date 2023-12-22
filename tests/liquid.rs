@@ -5,9 +5,8 @@ use boltzclient::{
     key::{ec::KeyPairString, preimage::PreimageStates},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
-        bitcoin::lightning::preimage_from_invoice_str,
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
-        liquid::script::{LBtcRevSwapScript, LBtcSubSwapScript},
+        liquid::{LBtcRevSwapScript, LBtcSubSwapScript},
     },
 };
 // use elements::Address;
@@ -20,7 +19,7 @@ fn test_liquid_ssi() {
     // https://liquidtestnet.com/faucet
     let invoice_str = "lntb560u1pjcfqampp59kxkg8nywg50a37ks8v6qau9nv0dmkf825pfxwl3mn8mw4u08p9qdpgxguzq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp5g6p5xc5l5qyk98txtescxw3a768rpcjshf5at9n9jkamxzthsr2ssjxc9hw90kqp0e000xq7y0vwec434xu094adnp2zlq4esjkzecryt7net4cv2mjqjx7euxzetyrkl339dygl3cnmr8h2fq43yuvfnqsqhhukdw";
 
-    let preimage = preimage_from_invoice_str(invoice_str).unwrap();
+    let preimage = PreimageStates::from_invoice_str(invoice_str).unwrap();
 
     let _out_amount = 50_000;
 
@@ -62,7 +61,7 @@ fn test_liquid_ssi() {
     assert!(response
         .as_ref()
         .unwrap()
-        .validate_script_preimage(preimage.hash160));
+        .validate_script_preimage160(preimage.hash160));
 
     let _id = response.as_ref().unwrap().id.as_str();
     let funding_address = response.as_ref().unwrap().address.clone().unwrap();
@@ -141,7 +140,7 @@ fn test_liquid_rsi() {
     assert!(response
         .as_ref()
         .unwrap()
-        .validate_invoice_preimage(preimage.clone().sha256));
+        .validate_invoice_preimage256(preimage.clone().sha256));
 
     let timeout = response
         .as_ref()

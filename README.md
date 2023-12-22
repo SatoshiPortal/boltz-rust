@@ -136,8 +136,9 @@ Core wallet functions for liquid
 
 ## test
 
-The best place to start diving into this repo is `src/lib.rs` and check out `test_rsi`. 
-This contains the entire flow of the reverse swap procedure above.
+The best place to start diving into this repo is `tests` directory. This contains integration tests for bitcoin and liquid.
+
+They contain the entire example of usage of the library. 
 
 Run all tests, except ignored tests
 

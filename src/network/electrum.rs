@@ -109,7 +109,7 @@ impl NetworkConfig {
 mod tests {
     use std::str::FromStr;
 
-    use crate::{key::ec::BlindingKeyPair, swaps::liquid::script::LBtcRevSwapScript};
+    use crate::{key::ec::BlindingKeyPair, swaps::liquid::LBtcRevSwapScript};
 
     use super::*;
     use bitcoin::{Script, ScriptBuf};

@@ -1,8 +1,12 @@
 use std::str::FromStr;
 
+use lightning_invoice::Bolt11Invoice;
 use secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
 
-use crate::util::rnd_str;
+use crate::{
+    e::{ErrorKind, S5Error},
+    util::rnd_str,
+};
 
 #[derive(Debug, Clone)]
 pub struct PreimageStates {
@@ -66,5 +70,21 @@ impl PreimageStates {
             sha256_bytes: sha256.to_byte_array(),
             hash160_bytes: hash160.to_byte_array(),
         }
+    }
+    pub fn from_invoice_str(invoice_str: &str) -> Result<PreimageStates, S5Error> {
+        let invoice = match Bolt11Invoice::from_str(&invoice_str) {
+            Ok(invoice) => invoice,
+            Err(e) => {
+                println!("{:?}", e);
+                return Err(S5Error::new(
+                    ErrorKind::Input,
+                    "Could not parse invoice string.",
+                ));
+            }
+        };
+
+        Ok(PreimageStates::from_sha256_str(
+            &invoice.payment_hash().to_string(),
+        ))
     }
 }

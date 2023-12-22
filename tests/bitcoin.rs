@@ -6,12 +6,10 @@ use boltzclient::{
     key::{ec::KeyPairString, preimage::PreimageStates},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
-        bitcoin::lightning::*,
-        bitcoin::{
-            script::{BtcRevScriptElements, BtcSubScriptElements},
-            tx::BtcRevTxElements,
+        bitcoin::{BtcSwapScript, BtcSwapTx},
+        boltz::{
+            BoltzApiClient, CreateSwapRequest, SwapStatusRequest, SwapType, BOLTZ_TESTNET_URL,
         },
-        boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
     },
     util::pause_and_wait,
 };
@@ -29,7 +27,7 @@ use std::{env, str::FromStr};
 fn test_bitcoin_ssi() {
     let invoice_str = "lntb560u1pjcgewzpp5nxa299kz6js0d5p7t74xkn5agz428utuagqrd366v0tu509rmecqdpgxguzq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp52jn3xkfejjznp9xvv7gjyznem5yys7d6xf5w5uhwxqmmfpxma3fsxp4wat5kl7n73z6fwx7ktqxhhlxdutnem08t90mztcjjk3l034xk20sfpj5n374f6g88qhhgpmzcxz37t04camaqwzr3np65cfp7ugcpdn4a94";
     // ensure the payment hash is the one boltz uses in their swap script
-    let preimage = preimage_from_invoice_str(invoice_str).unwrap();
+    let preimage_states = PreimageStates::from_invoice_str(invoice_str).unwrap();
     let _out_amount = 50_000;
 
     dotenv().ok();
@@ -69,12 +67,12 @@ fn test_bitcoin_ssi() {
     assert!(response
         .as_ref()
         .unwrap()
-        .validate_script_preimage(preimage.hash160));
+        .validate_script_preimage160(preimage_states.clone().hash160));
 
     println!("{:?}", response);
     assert!(response.is_ok());
 
-    let _timeout = response
+    let timeout = response
         .as_ref()
         .unwrap()
         .timeout_block_height
@@ -90,21 +88,22 @@ fn test_bitcoin_ssi() {
         .unwrap()
         .clone();
 
-    let boltz_script_elements = BtcSubScriptElements::from_str(&redeem_script_string).unwrap();
+    let boltz_script =
+        BtcSwapScript::submarine_from_str(BitcoinNetwork::BitcoinTestnet, &redeem_script_string)
+            .unwrap();
 
-    // let constructed_script_elements = OnchainSwapScriptElements::new(
-    //     preimage.hash160.to_string(),
-    //     keypair.pubkey.clone(),
-    //     timeout as u32,
-    //     boltz_script_elements.sender_pubkey.clone(),
-    // );
+    let constructed_script = BtcSwapScript::new(
+        BitcoinNetwork::BitcoinTestnet,
+        SwapType::Submarine,
+        preimage_states.hash160.to_string(),
+        keypair.pubkey.clone(),
+        timeout as u32,
+        boltz_script.sender_pubkey.clone(),
+    );
 
-    println!("{:?}", boltz_script_elements);
+    println!("{:?}", boltz_script);
 
-    // assert_eq!(
-    //     lockup_address,
-    //     Address::p2wsh(&constructed_script_elements.to_script(), Network::Testnet).to_string()
-    // );
+    assert_eq!(boltz_script, constructed_script);
 
     println!("*******FUND*********************");
     println!("*******SWAP*********************");
@@ -166,7 +165,7 @@ fn test_bitcoin_rsi() {
     assert!(response
         .as_ref()
         .unwrap()
-        .validate_invoice_preimage(preimage.clone().sha256));
+        .validate_invoice_preimage256(preimage.clone().sha256));
 
     let timeout = response
         .as_ref()
@@ -185,36 +184,33 @@ fn test_bitcoin_rsi() {
         .unwrap()
         .clone();
 
-    let boltz_script_elements = BtcRevScriptElements::from_str(&redeem_script_string).unwrap();
+    let boltz_script =
+        BtcSwapScript::reverse_from_str(BitcoinNetwork::BitcoinTestnet, &redeem_script_string)
+            .unwrap();
 
-    let constructed_script_elements = BtcRevScriptElements::new(
+    let constructed_script = BtcSwapScript::new(
+        BitcoinNetwork::BitcoinTestnet,
+        SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
         keypair.pubkey.clone(),
         timeout as u32,
-        boltz_script_elements.sender_pubkey.clone(),
+        boltz_script.sender_pubkey.clone(),
     );
-    let boltz_rs = hex::encode(boltz_script_elements.to_script().to_bytes());
-    let our_rs = hex::encode(constructed_script_elements.to_script().to_bytes());
-    println!("{}", boltz_rs);
-    assert_eq!(constructed_script_elements, boltz_script_elements);
-    assert_eq!(
-        lockup_address,
-        Address::p2wsh(&constructed_script_elements.to_script(), Network::Testnet).to_string()
-    );
-    assert_eq!(boltz_rs, our_rs);
-    assert!(boltz_rs == redeem_script_string && our_rs == redeem_script_string);
 
-    // println!("{:?} , {:?}", constructed_script_elements, boltz_script_elements);
+    assert_eq!(constructed_script, boltz_script);
+    assert_eq!(lockup_address, constructed_script.to_address().to_string());
 
-    let constructed_address = constructed_script_elements.to_address(Network::Testnet);
+    assert_eq!(constructed_script, boltz_script);
+
+    let constructed_address = constructed_script.to_address();
     println!("{}", constructed_address.to_string());
     assert_eq!(constructed_address.to_string(), lockup_address);
 
-    let script_balance = electrum_client
-        .script_get_balance(&constructed_script_elements.to_script())
+    let script_balance = constructed_script
+        .get_balance(DEFAULT_TESTNET_NODE.to_string())
         .unwrap();
-    assert_eq!(script_balance.unconfirmed, 0);
-    assert_eq!(script_balance.confirmed, 0);
+    assert_eq!(script_balance.0, 0);
+    assert_eq!(script_balance.1, 0);
     println!("*******PAY********************");
     println!("*******LN*********************");
     println!("*******INVOICE****************");
@@ -238,10 +234,13 @@ fn test_bitcoin_rsi() {
             println!("*******BOLTZ******************");
             println!("*******ONCHAIN-TX*************");
             println!("*******DETECTED***************");
-            let script_balance = electrum_client
-                .script_get_balance(&constructed_script_elements.to_script().to_v0_p2wsh())
+            let script_balance = constructed_script
+                .get_balance(DEFAULT_TESTNET_NODE.to_string())
                 .unwrap();
-            println!("{:?}", script_balance);
+            println!(
+                "confirmed: {}, unconfirmed: {}",
+                script_balance.0, script_balance.1
+            );
             pause_and_wait(
                 "!!!!!WE ARE ABOUT TO BREAK: if tx is not shown above, just hang on a moment!!!!!",
             );
@@ -250,7 +249,7 @@ fn test_bitcoin_rsi() {
     }
 
     let absolute_fees = 300;
-    let mut swap_tx_elements = BtcRevTxElements::new_claim(
+    let mut swap_tx_elements = BtcSwapTx::new_claim(
         Network::Testnet,
         RETURN_ADDRESS.to_string(),
         absolute_fees,
@@ -290,7 +289,7 @@ fn test_recover_bitcoin_rsi() {
 
     let network_config = NetworkConfig::default().unwrap();
     let electrum_client = network_config.electrum_url.build_client().unwrap();
-    let mut swap_tx_elements = BtcRevTxElements::new_claim(
+    let mut swap_tx_elements = BtcSwapTx::new_claim(
         Network::Testnet,
         RETURN_ADDRESS.to_string(),
         absolute_fees,
