@@ -370,7 +370,6 @@ impl LBtcRevSwapTx {
 
     fn _fetch_utxo(&mut self) -> () {
         let electrum_client = NetworkConfig::default_liquid()
-            .unwrap()
             .electrum_url
             .build_client()
             .unwrap();

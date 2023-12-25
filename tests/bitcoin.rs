@@ -45,8 +45,7 @@ fn test_bitcoin_ssi() {
         true,
         false,
         None,
-    )
-    .unwrap();
+    );
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
@@ -143,8 +142,7 @@ fn test_bitcoin_rsi() {
         true,
         false,
         None,
-    )
-    .unwrap();
+    );
     let electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
@@ -206,7 +204,7 @@ fn test_bitcoin_rsi() {
 
     assert_eq!(constructed_rev_script, boltz_rev_script);
 
-    let constructed_address = constructed_rev_script.to_address();
+    let constructed_address = constructed_rev_script.to_address().unwrap();
     println!("{}", constructed_address.to_string());
     assert_eq!(constructed_address.to_string(), lockup_address);
 
@@ -253,7 +251,8 @@ fn test_bitcoin_rsi() {
         constructed_rev_script,
         RETURN_ADDRESS.to_string(),
         absolute_fees,
-    );
+    )
+    .unwrap();
 
     rv_claim_tx.fetch_utxo(out_amount).unwrap();
     let signed_tx = rv_claim_tx.drain_tx(keypair, preimage).unwrap();
@@ -286,7 +285,7 @@ fn test_recover_bitcoin_rsi() {
 
     let absolute_fees = 300;
 
-    let network_config = NetworkConfig::default().unwrap();
+    let network_config = NetworkConfig::default();
     let electrum_client = network_config.electrum_url.build_client().unwrap();
     let mut rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(
@@ -297,7 +296,8 @@ fn test_recover_bitcoin_rsi() {
         .unwrap(),
         RETURN_ADDRESS.to_string(),
         absolute_fees,
-    );
+    )
+    .unwrap();
 
     rev_swap_tx.fetch_utxo(out_amount).unwrap();
     let signed_tx = rev_swap_tx.drain_tx(keypair, preimage).unwrap();

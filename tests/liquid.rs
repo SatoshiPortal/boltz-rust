@@ -39,8 +39,7 @@ fn test_liquid_ssi() {
         true,
         false,
         None,
-    )
-    .unwrap();
+    );
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
@@ -114,8 +113,7 @@ fn test_liquid_rsi() {
         true,
         false,
         None,
-    )
-    .unwrap();
+    );
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();

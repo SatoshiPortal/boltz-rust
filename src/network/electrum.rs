@@ -50,7 +50,7 @@ pub struct NetworkConfig {
 }
 
 impl NetworkConfig {
-    pub fn default() -> Result<Self, S5Error> {
+    pub fn default() -> Self {
         NetworkConfig::new(
             BitcoinNetwork::BitcoinTestnet,
             DEFAULT_TESTNET_NODE,
@@ -60,7 +60,7 @@ impl NetworkConfig {
             None,
         )
     }
-    pub fn default_liquid() -> Result<Self, S5Error> {
+    pub fn default_liquid() -> Self {
         NetworkConfig::new(
             BitcoinNetwork::LiquidTestnet,
             DEFAULT_LIQUID_TESTNET_NODE,
@@ -77,12 +77,12 @@ impl NetworkConfig {
         validate_domain: bool,
         spv_enabled: bool,
         policy_asset: Option<&str>,
-    ) -> Result<Self, S5Error> {
+    ) -> Self {
         let electrum_url = match tls {
             true => ElectrumUrl::Tls(electrum_url.into(), validate_domain),
             false => ElectrumUrl::Plaintext(electrum_url.into()),
         };
-        Ok(NetworkConfig {
+        NetworkConfig {
             network: network,
             electrum_url,
             spv_enabled,
@@ -93,7 +93,7 @@ impl NetworkConfig {
                 ),
                 None => None,
             },
-        })
+        }
     }
 
     pub fn network(&self) -> BitcoinNetwork {
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn test_electrum_bitcoin_client() {
-        let network_config = NetworkConfig::default().unwrap();
+        let network_config = NetworkConfig::default();
         let electrum_client = network_config.electrum_url.build_client().unwrap();
         assert!(electrum_client.ping().is_ok());
         // let res = electrum_client.server_features().unwrap();
@@ -135,7 +135,7 @@ mod tests {
         let script_address = script_elements.to_typed();
         let script_address_bitcoin: ScriptBuf =
             Script::from_bytes(script_address.as_bytes()).to_owned();
-        let network_config = NetworkConfig::default_liquid().unwrap();
+        let network_config = NetworkConfig::default_liquid();
         let electrum_client = network_config.electrum_url.build_client().unwrap();
         let utxos = electrum_client
             .script_list_unspent(&script_address_bitcoin.to_v0_p2wsh())
