@@ -23,15 +23,21 @@ pub struct BlindingKeyPair {
     pub pubkey: String,
 }
 impl BlindingKeyPair {
-    pub fn from_secret_string(blinding_key: String) -> Self {
+    pub fn from_secret_string(blinding_key: String) -> Result<Self, S5Error> {
         let zksecp = ZKSecp256k1::new();
-        let blinding_key_bytes = hex::decode(&blinding_key).unwrap();
-        let zkseckey: ZKSecretKey = ZKSecretKey::from_slice(&blinding_key_bytes).unwrap();
+        let blinding_key_bytes = match hex::decode(&blinding_key) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
+        };
+        let zkseckey: ZKSecretKey = match ZKSecretKey::from_slice(&blinding_key_bytes) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
+        };
         let zkspubkey = zkseckey.public_key(&zksecp);
-        BlindingKeyPair {
+        Ok(BlindingKeyPair {
             seckey: blinding_key,
             pubkey: zkspubkey.to_string(),
-        }
+        })
     }
     pub fn to_typed(&self) -> ZKKeyPair {
         let secp = Secp256k1::new();
@@ -69,10 +75,7 @@ impl KeyPairString {
             ));
         }
 
-        let master_key = match MasterKey::import(&mnemonic, &passphrase, Network::Testnet) {
-            Ok(result) => result,
-            Err(e) => return Err(e),
-        };
+        let master_key = MasterKey::import(&mnemonic, &passphrase, Network::Testnet)?;
 
         let child_key =
             ChildKeys::from_hardened_account(&master_key.xprv, DerivationPurpose::Native, account)?;

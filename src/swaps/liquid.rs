@@ -565,7 +565,8 @@ mod tests {
 
         let blinding_key = BlindingKeyPair::from_secret_string(
             "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
-        );
+        )
+        .unwrap();
 
         let _id = "s9EBbv";
         let _my_key_pair = KeyPairString {
@@ -648,7 +649,8 @@ mod tests {
 
         let blinding_key = BlindingKeyPair::from_secret_string(
             "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed".to_string(),
-        );
+        )
+        .unwrap();
 
         let _id = "axtHXB";
         let my_key_pair = KeyPairString {

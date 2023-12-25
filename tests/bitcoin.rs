@@ -274,7 +274,8 @@ fn test_recover_bitcoin_rsi() {
     };
     let preimage = PreimageStates::from_str(
         "898396fe53c58375cf8a5a8cfead2a285dc4b5b84cd149800914fc60c9f3a70b",
-    );
+    )
+    .unwrap();
 
     let redeem_script = "8201208763a9143b2b7485171679c84f6540a8b907c2c830e9a60b88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775030bce26b1752103778dc69769e3cbdd9091d05a5e027ebc1919675d0725d2c1f2259f821a3e6a2668ac".to_string();
 
