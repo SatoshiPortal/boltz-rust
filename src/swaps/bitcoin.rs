@@ -22,8 +22,9 @@ use super::boltz::SwapType;
 
 #[derive(Debug, PartialEq)]
 pub struct BtcSwapScript {
-    pub network: BitcoinNetwork,
-    pub swap_type: SwapType,
+    network: BitcoinNetwork,
+    electrum_url: String,
+    swap_type: SwapType,
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
@@ -33,6 +34,7 @@ pub struct BtcSwapScript {
 impl BtcSwapScript {
     pub fn new(
         network: BitcoinNetwork,
+        electrum_url: String,
         swap_type: SwapType,
         hashlock: String,
         reciever_pubkey: String,
@@ -41,6 +43,7 @@ impl BtcSwapScript {
     ) -> Self {
         BtcSwapScript {
             network,
+            electrum_url,
             swap_type,
             hashlock,
             reciever_pubkey,
@@ -50,6 +53,7 @@ impl BtcSwapScript {
     }
     pub fn submarine_from_str(
         network: BitcoinNetwork,
+        electrum_url: String,
         redeem_script_str: &str,
     ) -> Result<Self, S5Error> {
         let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
@@ -95,6 +99,7 @@ impl BtcSwapScript {
         {
             Ok(BtcSwapScript {
                 network: network,
+                electrum_url: electrum_url,
                 swap_type: SwapType::Submarine,
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
@@ -114,6 +119,7 @@ impl BtcSwapScript {
 
     pub fn reverse_from_str(
         network: BitcoinNetwork,
+        electrum_url: String,
         redeem_script_str: &str,
     ) -> Result<Self, S5Error> {
         let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
@@ -164,6 +170,7 @@ impl BtcSwapScript {
         {
             Ok(BtcSwapScript {
                 network: network,
+                electrum_url: electrum_url,
                 swap_type: SwapType::ReverseSubmarine,
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
@@ -281,9 +288,9 @@ impl BtcSwapScript {
             }
         }
     }
-    pub fn get_balance(&self, electrum_url: String) -> Result<(u64, i64), S5Error> {
+    pub fn get_balance(&self) -> Result<(u64, i64), S5Error> {
         let electrum_client =
-            NetworkConfig::new(self.network, &electrum_url, true, true, false, None)
+            NetworkConfig::new(self.network, &self.electrum_url, true, true, false, None)
                 .unwrap()
                 .electrum_url
                 .build_client()
@@ -314,7 +321,7 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 
 pub struct BtcSwapTx {
     kind: SwapTxKind,
-    script_elements: BtcSwapScript,
+    swap_script: BtcSwapScript,
     output_address: Address,
     absolute_fees: u32,
     network: Network,
@@ -325,21 +332,21 @@ pub struct BtcSwapTx {
 impl BtcSwapTx {
     /// BTC Swap claim Tx is constructed for successful reverse swaps
     pub fn new_claim(
-        network: Network,
+        swap_script: BtcSwapScript,
         output_address: String,
         absolute_fees: u32,
-        redeem_script: String,
     ) -> BtcSwapTx {
+        let network = if swap_script.network == BitcoinNetwork::Bitcoin {
+            Network::Bitcoin
+        } else {
+            Network::Testnet
+        };
         let address = Address::from_str(&output_address).unwrap();
         address.is_valid_for_network(network);
-        let boltz_network = match network {
-            Network::Bitcoin => BitcoinNetwork::Bitcoin,
-            _ => BitcoinNetwork::BitcoinTestnet,
-        };
+
         BtcSwapTx {
             kind: SwapTxKind::Claim,
-            script_elements: BtcSwapScript::reverse_from_str(boltz_network, &redeem_script)
-                .unwrap(),
+            swap_script,
             output_address: address.assume_checked(),
             absolute_fees,
             network: network,
@@ -349,21 +356,22 @@ impl BtcSwapTx {
     }
     /// BTC Swap refund Tx is constructed only for a failed submarine swap
     pub fn new_refund(
-        network: Network,
+        swap_script: BtcSwapScript,
         output_address: String,
         absolute_fees: u32,
-        redeem_script: String,
     ) -> BtcSwapTx {
+        let network = if swap_script.network == BitcoinNetwork::Bitcoin {
+            Network::Bitcoin
+        } else {
+            Network::Testnet
+        };
+
         let address = Address::from_str(&output_address).unwrap();
         address.is_valid_for_network(network);
-        let boltz_network = match network {
-            Network::Bitcoin => BitcoinNetwork::Bitcoin,
-            _ => BitcoinNetwork::BitcoinTestnet,
-        };
+
         BtcSwapTx {
             kind: SwapTxKind::Refund,
-            script_elements: BtcSwapScript::submarine_from_str(boltz_network, &redeem_script)
-                .unwrap(), // this will error often
+            swap_script: swap_script, // this will error often
             // handle error
             output_address: address.assume_checked(),
             absolute_fees,
@@ -372,32 +380,47 @@ impl BtcSwapTx {
             utxo_value: None,
         }
     }
-    pub fn fetch_utxo(&mut self, electrum_url: String, expected_value: u64) -> () {
+    pub fn fetch_utxo(&mut self, expected_value: u64) -> Result<(), S5Error> {
         let network = match &self.network {
             Network::Bitcoin => BitcoinNetwork::Bitcoin,
             _ => BitcoinNetwork::BitcoinTestnet,
         };
-        let electrum_client = NetworkConfig::new(network, &electrum_url, true, true, false, None)
-            .unwrap()
-            .electrum_url
-            .build_client()
-            .unwrap();
+        let electrum_client = NetworkConfig::new(
+            network,
+            &self.swap_script.electrum_url,
+            true,
+            true,
+            false,
+            None,
+        )
+        .unwrap()
+        .electrum_url
+        .build_client()
+        .unwrap();
 
         let utxos = electrum_client
-            .script_list_unspent(&self.script_elements.to_script().to_v0_p2wsh())
+            .script_list_unspent(&self.swap_script.to_script().to_v0_p2wsh())
             .unwrap();
         if utxos.len() == 0 {
-            ()
+            return Err(S5Error::new(
+                ErrorKind::Wallet,
+                &format!("0 utxos found for this script",),
+            ));
         } else {
             let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
             let utxo_value = utxos[0].value;
             if utxo_value == expected_value {
                 self.utxo = Some(outpoint_0);
                 self.utxo_value = Some(utxo_value);
-                ()
+                Ok(())
             } else {
-                ()
-                // this should appropriately error stating exptected value is not a match
+                return Err(S5Error::new(
+                    ErrorKind::Input,
+                    &format!(
+                        "Expected value does not match utxo value. Expected {}, Found {}",
+                        expected_value, utxo_value
+                    ),
+                ));
             }
         }
     }
@@ -440,7 +463,7 @@ impl BtcSwapTx {
 
         let unsigned_tx = Transaction {
             version: 1,
-            lock_time: LockTime::from_consensus(self.script_elements.timelock),
+            lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
@@ -450,7 +473,7 @@ impl BtcSwapTx {
         let sighash = &SighashCache::new(unsigned_tx.clone())
             .segwit_signature_hash(
                 0,
-                &self.script_elements.to_script(),
+                &self.swap_script.to_script(),
                 self.utxo_value.unwrap(),
                 bitcoin::sighash::EcdsaSighashType::All,
             )
@@ -465,7 +488,7 @@ impl BtcSwapTx {
             bitcoin::sighash::EcdsaSighashType::All,
         );
         witness.push(preimage.preimage_bytes.unwrap());
-        witness.push(self.script_elements.to_script().as_bytes());
+        witness.push(self.swap_script.to_script().as_bytes());
 
         // https://github.com/bitcoin-teleport/teleport-transactions/blob/master/src/wallet_sync.rs#L255
         // println!("{:?}", witness);
@@ -479,7 +502,7 @@ impl BtcSwapTx {
 
         let signed_tx = Transaction {
             version: 1,
-            lock_time: LockTime::from_consensus(self.script_elements.timelock),
+            lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![signed_txin],
             output: vec![output.clone()],
         };
@@ -489,14 +512,35 @@ impl BtcSwapTx {
         // submarine
         ()
     }
-}
+    pub fn broadcast(&mut self, signed_tx: Transaction) -> Result<String, S5Error> {
+        let network = match &self.network {
+            Network::Bitcoin => BitcoinNetwork::Bitcoin,
+            _ => BitcoinNetwork::BitcoinTestnet,
+        };
+        let electrum_client = NetworkConfig::new(
+            network,
+            &self.swap_script.electrum_url,
+            true,
+            true,
+            false,
+            None,
+        )
+        .unwrap()
+        .electrum_url
+        .build_client()
+        .unwrap();
 
-pub struct LiquidSwapTxElements {}
+        match electrum_client.transaction_broadcast(&signed_tx) {
+            Ok(txid) => Ok(txid.to_string()),
+            Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::electrum::NetworkConfig;
+    use crate::network::electrum::{NetworkConfig, DEFAULT_TESTNET_NODE};
     use crate::util::pause_and_wait;
     use bitcoin::opcodes::all::{OP_EQUAL, OP_HASH160};
     use bitcoin::script::Builder;
@@ -608,6 +652,7 @@ mod tests {
         };
         let decoded = BtcSwapScript::submarine_from_str(
             BitcoinNetwork::BitcoinTestnet,
+            DEFAULT_TESTNET_NODE.to_owned(),
             &redeem_script_str.clone(),
         )
         .unwrap();
@@ -617,6 +662,7 @@ mod tests {
 
         let encoded = BtcSwapScript {
             network: BitcoinNetwork::BitcoinTestnet,
+            electrum_url: DEFAULT_TESTNET_NODE.to_owned(),
             swap_type: SwapType::Submarine,
             hashlock: decoded.hashlock,
             reciever_pubkey: decoded.reciever_pubkey,

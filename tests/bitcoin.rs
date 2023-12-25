@@ -1,7 +1,7 @@
 // mod bullbitcoin_rnd;
 // extern crate libbullwallet;
 
-use bitcoin::{Address, Network};
+use bitcoin::Network;
 use boltzclient::{
     key::{ec::KeyPairString, preimage::PreimageStates},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
@@ -25,10 +25,9 @@ use std::{env, str::FromStr};
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice_str = "lntb560u1pjcgewzpp5nxa299kz6js0d5p7t74xkn5agz428utuagqrd366v0tu509rmecqdpgxguzq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp52jn3xkfejjznp9xvv7gjyznem5yys7d6xf5w5uhwxqmmfpxma3fsxp4wat5kl7n73z6fwx7ktqxhhlxdutnem08t90mztcjjk3l034xk20sfpj5n374f6g88qhhgpmzcxz37t04camaqwzr3np65cfp7ugcpdn4a94";
+    let invoice_str = "lntb500u1pjcjh3npp5llyysjq9a5cpsjrt535vxdg57fm0fjj89vhp4k5jz8kx8t8p9u3qdq9d9h8gxqyjw5qcqp2sp5ucymlq0czg73wgkzdwc70va8kdj3zt2lfgtq3z5javzkz0ptdlpqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqn09n6lg8uvq7lur4e6r0rzy6jep9ja2tw48pn2m97e39c3652qekmx9mupjr0reun3rtcsxfm8fyksztac0zrn6w5q3phgf7tzfxthcqu9ex3q";
     // ensure the payment hash is the one boltz uses in their swap script
     let preimage_states = PreimageStates::from_invoice_str(invoice_str).unwrap();
-    let _out_amount = 50_000;
 
     dotenv().ok();
     // SECRETS
@@ -88,12 +87,16 @@ fn test_bitcoin_ssi() {
         .unwrap()
         .clone();
 
-    let boltz_script =
-        BtcSwapScript::submarine_from_str(BitcoinNetwork::BitcoinTestnet, &redeem_script_string)
-            .unwrap();
+    let boltz_script = BtcSwapScript::submarine_from_str(
+        BitcoinNetwork::BitcoinTestnet,
+        DEFAULT_TESTNET_NODE.to_owned(),
+        &redeem_script_string,
+    )
+    .unwrap();
 
     let constructed_script = BtcSwapScript::new(
         BitcoinNetwork::BitcoinTestnet,
+        DEFAULT_TESTNET_NODE.to_owned(),
         SwapType::Submarine,
         preimage_states.hash160.to_string(),
         keypair.pubkey.clone(),
@@ -184,31 +187,30 @@ fn test_bitcoin_rsi() {
         .unwrap()
         .clone();
 
-    let boltz_script =
-        BtcSwapScript::reverse_from_str(BitcoinNetwork::BitcoinTestnet, &redeem_script_string)
-            .unwrap();
-
-    let constructed_script = BtcSwapScript::new(
+    let boltz_rev_script = BtcSwapScript::reverse_from_str(
         BitcoinNetwork::BitcoinTestnet,
+        DEFAULT_TESTNET_NODE.to_owned(),
+        &redeem_script_string,
+    )
+    .unwrap();
+
+    let constructed_rev_script = BtcSwapScript::new(
+        BitcoinNetwork::BitcoinTestnet,
+        DEFAULT_TESTNET_NODE.to_owned(),
         SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
         keypair.pubkey.clone(),
         timeout as u32,
-        boltz_script.sender_pubkey.clone(),
+        boltz_rev_script.sender_pubkey.clone(),
     );
 
-    assert_eq!(constructed_script, boltz_script);
-    assert_eq!(lockup_address, constructed_script.to_address().to_string());
+    assert_eq!(constructed_rev_script, boltz_rev_script);
 
-    assert_eq!(constructed_script, boltz_script);
-
-    let constructed_address = constructed_script.to_address();
+    let constructed_address = constructed_rev_script.to_address();
     println!("{}", constructed_address.to_string());
     assert_eq!(constructed_address.to_string(), lockup_address);
 
-    let script_balance = constructed_script
-        .get_balance(DEFAULT_TESTNET_NODE.to_string())
-        .unwrap();
+    let script_balance = constructed_rev_script.get_balance().unwrap();
     assert_eq!(script_balance.0, 0);
     assert_eq!(script_balance.1, 0);
     println!("*******PAY********************");
@@ -234,9 +236,7 @@ fn test_bitcoin_rsi() {
             println!("*******BOLTZ******************");
             println!("*******ONCHAIN-TX*************");
             println!("*******DETECTED***************");
-            let script_balance = constructed_script
-                .get_balance(DEFAULT_TESTNET_NODE.to_string())
-                .unwrap();
+            let script_balance = constructed_rev_script.get_balance().unwrap();
             println!(
                 "confirmed: {}, unconfirmed: {}",
                 script_balance.0, script_balance.1
@@ -249,15 +249,14 @@ fn test_bitcoin_rsi() {
     }
 
     let absolute_fees = 300;
-    let mut swap_tx_elements = BtcSwapTx::new_claim(
-        Network::Testnet,
+    let mut rv_claim_tx = BtcSwapTx::new_claim(
+        constructed_rev_script,
         RETURN_ADDRESS.to_string(),
         absolute_fees,
-        redeem_script_string,
     );
 
-    swap_tx_elements.fetch_utxo(DEFAULT_TESTNET_NODE.to_string(), out_amount);
-    let signed_tx = swap_tx_elements.drain_tx(keypair, preimage).unwrap();
+    rv_claim_tx.fetch_utxo(out_amount).unwrap();
+    let signed_tx = rv_claim_tx.drain_tx(keypair, preimage).unwrap();
     let txid = electrum_client.transaction_broadcast(&signed_tx).unwrap();
     println!("{}", txid);
 }
@@ -289,16 +288,20 @@ fn test_recover_bitcoin_rsi() {
 
     let network_config = NetworkConfig::default().unwrap();
     let electrum_client = network_config.electrum_url.build_client().unwrap();
-    let mut swap_tx_elements = BtcSwapTx::new_claim(
-        Network::Testnet,
+    let mut rev_swap_tx = BtcSwapTx::new_claim(
+        BtcSwapScript::reverse_from_str(
+            BitcoinNetwork::BitcoinTestnet,
+            DEFAULT_TESTNET_NODE.to_owned(),
+            &redeem_script,
+        )
+        .unwrap(),
         RETURN_ADDRESS.to_string(),
         absolute_fees,
-        redeem_script,
     );
 
-    swap_tx_elements.fetch_utxo(DEFAULT_TESTNET_NODE.to_string(), out_amount);
-    let signed_tx = swap_tx_elements.drain_tx(keypair, preimage).unwrap();
-    let txid = electrum_client.transaction_broadcast(&signed_tx).unwrap();
+    rev_swap_tx.fetch_utxo(out_amount).unwrap();
+    let signed_tx = rev_swap_tx.drain_tx(keypair, preimage).unwrap();
+    let txid = rev_swap_tx.broadcast(signed_tx).unwrap();
     println!("{}", txid);
 }
 /*

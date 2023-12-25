@@ -8,7 +8,7 @@ use ureq::Error;
 
 use crate::e::S5Error;
 
-use crate::network::electrum::BitcoinNetwork;
+use crate::network::electrum::{BitcoinNetwork, DEFAULT_TESTNET_NODE};
 use crate::swaps::bitcoin::BtcSwapScript;
 
 pub const BOLTZ_TESTNET_URL: &str = "https://testnet.boltz.exchange/api";
@@ -512,15 +512,18 @@ impl CreateSwapResponse {
     pub fn validate_script_preimage160(&self, preimage_hash160: String) -> bool {
         match &self.redeem_script {
             Some(rs) => {
-                let script_elements =
-                    match BtcSwapScript::submarine_from_str(BitcoinNetwork::BitcoinTestnet, &rs) {
-                        // network doesnt matter here, we just want the hashlock extracted
-                        Ok(se) => se,
-                        Err(e) => {
-                            println!("Error parsing sub script elements:{:?}", e);
-                            return false;
-                        }
-                    };
+                let script_elements = match BtcSwapScript::submarine_from_str(
+                    BitcoinNetwork::BitcoinTestnet,
+                    DEFAULT_TESTNET_NODE.to_owned(),
+                    &rs,
+                ) {
+                    // network doesnt matter here, we just want the hashlock extracted
+                    Ok(se) => se,
+                    Err(e) => {
+                        println!("Error parsing sub script elements:{:?}", e);
+                        return false;
+                    }
+                };
                 // println!("{}-m----m-{}", script_elements.hashlock, preimage_hash160);
                 if &script_elements.hashlock == &preimage_hash160 {
                     true
