@@ -584,7 +584,7 @@ mod tests {
         println!("PAY THIS ADDRESS: {}", address);
         pause_and_wait("Pay the address and then continue!");
 
-        let electrum_client = NetworkConfig::default()
+        let electrum_client = NetworkConfig::default_bitcoin()
             .electrum_url
             .build_client()
             .unwrap();

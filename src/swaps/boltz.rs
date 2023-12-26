@@ -1,17 +1,18 @@
 use lightning_invoice::Bolt11Invoice;
-// use reqwest::{Client, Error};
+use reqwest;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::str::FromStr;
-use ureq::Error;
+use std::time::Duration;
+use ureq::{Agent, AgentBuilder, Error};
 
-use crate::e::S5Error;
+use crate::e::{ErrorKind, S5Error};
 
-use crate::network::electrum::{BitcoinNetwork, DEFAULT_TESTNET_NODE};
+use crate::network::electrum::{BitcoinNetwork, DEFAULT_MAINNET_NODE, DEFAULT_TESTNET_NODE};
 use crate::swaps::bitcoin::BtcSwapScript;
 
-pub const BOLTZ_TESTNET_URL: &str = "https://testnet.boltz.exchange/api";
+pub const BOLTZ_TESTNET_URL: &str = "https://api.testnet.boltz.exchange";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,8 @@ pub enum SwapTxKind {
     Claim,
     Refund,
 }
+
+use reqwest::blocking::Client;
 
 pub struct BoltzApiClient {
     base_url: String,
@@ -31,39 +34,31 @@ impl BoltzApiClient {
         }
     }
 
-    pub fn get_pairs(&self) -> Result<GetPairsResponse, Error> {
+    pub fn get_pairs(&self) -> Result<GetPairsResponse, S5Error> {
         let url = format!("{}/getpairs", self.base_url);
-        let response = ureq::get(&url).call();
 
-        match response {
-            Ok(resp) => {
-                let body = resp.into_string()?;
-                // println!("{}", body);
-                let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
-                Ok(get_pairs_response)
-            }
-            Err(e) => {
-                println!("ERROR: {:?}", e);
-                Err(e)
-            }
+        let res = Client::new().get(&url).send().unwrap();
+
+        if res.status().is_success() {
+            let body = res.text().unwrap();
+            let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
+            Ok(get_pairs_response)
+        } else {
+            Err(S5Error::new(ErrorKind::Network, "Non-successful response"))
         }
     }
 
-    pub fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, Error> {
+    pub fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, S5Error> {
         let url = format!("{}/getfeeestimation", self.base_url);
-        let response = ureq::get(&url).call();
+        let res = Client::new().get(&url).send().unwrap();
 
-        match response {
-            Ok(resp) => {
-                let body = resp.into_string()?;
-                let get_fee_estimation_response: GetFeeEstimationResponse =
-                    serde_json::from_str(&body).unwrap();
-                Ok(get_fee_estimation_response)
-            }
-            Err(e) => {
-                println!("ERROR: {:?}", e);
-                Err(e)
-            }
+        if res.status().is_success() {
+            let body = res.text().unwrap();
+            let get_fee_estimation_response: GetFeeEstimationResponse =
+                serde_json::from_str(&body).unwrap();
+            Ok(get_fee_estimation_response)
+        } else {
+            Err(S5Error::new(ErrorKind::Network, "Non-successful response"))
         }
     }
 
@@ -71,46 +66,29 @@ impl BoltzApiClient {
         let url = format!("{}/createswap", self.base_url);
         let json_request = serde_json::to_string(&request).unwrap();
 
-        let response = ureq::post(&url)
-            .set("Content-Type", "application/json")
-            .send_string(&json_request);
+        let res = Client::new().post(&url).json(&json_request).send().unwrap();
 
-        match response {
-            Ok(resp) => {
-                let body = resp.into_string().unwrap();
-                let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
-                Ok(create_swap_response)
-            }
-            Err(ureq::Error::Status(code, response)) => {
-                let error_body = response.into_string().unwrap_or_else(|_| "".to_string());
-                if code == 400 {
-                    Err(S5Error::new(crate::e::ErrorKind::Input, &error_body))
-                } else {
-                    Err(S5Error::new(crate::e::ErrorKind::Internal, &error_body))
-                }
-            }
-            Err(e) => Err(S5Error::new(crate::e::ErrorKind::Internal, &e.to_string())),
+        if res.status().is_success() {
+            let body = res.text().unwrap();
+            let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
+            Ok(create_swap_response)
+        } else {
+            Err(S5Error::new(ErrorKind::Network, "Non-successful response"))
         }
     }
 
-    pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, Error> {
+    pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, S5Error> {
         let url = format!("{}/swapstatus", self.base_url);
         let json_request = serde_json::to_string(&request).unwrap();
 
-        let response = ureq::post(&url)
-            .set("Content-Type", "application/json")
-            .send_string(&json_request);
+        let res = Client::new().post(&url).json(&json_request).send().unwrap();
 
-        match response {
-            Ok(resp) => {
-                let body = resp.into_string()?;
-                let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
-                Ok(swap_status_response)
-            }
-            Err(e) => {
-                println!("ERROR: {:?}", e);
-                Err(e)
-            }
+        if res.status().is_success() {
+            let body = res.text().unwrap();
+            let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
+            Ok(swap_status_response)
+        } else {
+            Err(S5Error::new(ErrorKind::Network, "Non-successful response"))
         }
     }
 }
@@ -513,8 +491,8 @@ impl CreateSwapResponse {
         match &self.redeem_script {
             Some(rs) => {
                 let script_elements = match BtcSwapScript::submarine_from_str(
-                    BitcoinNetwork::BitcoinTestnet,
-                    DEFAULT_TESTNET_NODE.to_owned(),
+                    BitcoinNetwork::Bitcoin,
+                    DEFAULT_MAINNET_NODE.to_string(),
                     &rs,
                 ) {
                     // network doesnt matter here, we just want the hashlock extracted
@@ -584,7 +562,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             pair_hash,
-            "a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5".to_string()
+            "22567ecdd28deb837edadc555b094a2b1acf633f0754f9c5f15a2db3808c6df5".to_string()
         );
 
         let response = client.get_pairs();
@@ -598,13 +576,13 @@ mod tests {
             .unwrap();
         assert_eq!(
             pair_hash,
-            "04df6e4b5a91d62a4e1a7ecb88ca462851d835c4bae955a6c5baad8e047b14e9".to_string()
+            "9021f628875ca585e804d3cb67cbda8f1ffd8dfad49ce10873698537b9dd8f2d".to_string()
         );
     }
 
     #[test]
     fn test_get_fee_estimation() {
-        let client = BoltzApiClient::new("https://testnet.boltz.exchange/api");
+        let client = BoltzApiClient::new(BOLTZ_MAINNET_URL);
         let response = client.get_fee_estimation();
         assert!(response.is_ok());
     }

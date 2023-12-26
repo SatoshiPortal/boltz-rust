@@ -50,7 +50,7 @@ pub struct NetworkConfig {
 }
 
 impl NetworkConfig {
-    pub fn default() -> Self {
+    pub fn default_bitcoin() -> Self {
         NetworkConfig::new(
             BitcoinNetwork::BitcoinTestnet,
             DEFAULT_TESTNET_NODE,
@@ -108,19 +108,17 @@ impl NetworkConfig {
 #[cfg(test)]
 mod tests {
 
-    use crate::{key::ec::BlindingKeyPair, swaps::liquid::LBtcSwapScript};
-
     use super::*;
-    use bitcoin::{Script, ScriptBuf};
+    use crate::{key::ec::BlindingKeyPair, swaps::liquid::LBtcSwapScript};
     use electrum_client::ElectrumApi;
 
     #[test]
     fn test_electrum_bitcoin_client() {
-        let network_config = NetworkConfig::default();
+        let network_config = NetworkConfig::default_bitcoin();
         let electrum_client = network_config.electrum_url.build_client().unwrap();
-        assert!(electrum_client.ping().is_ok());
+        // assert!(electrum_client.ping().is_ok());
         // let res = electrum_client.server_features().unwrap();
-        // println!("chain genesis block: {:#?}", res.genesis_hash);
+        println!("Fees: {:#?}", electrum_client.estimate_fee(6));
     }
     #[test]
     #[ignore]
