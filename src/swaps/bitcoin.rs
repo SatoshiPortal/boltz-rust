@@ -280,23 +280,14 @@ impl BtcSwapScript {
     }
 
     pub fn to_address(&self) -> Result<Address, S5Error> {
+        let script = self.to_script()?;
+        let network = match self.network {
+            BitcoinNetwork::Bitcoin => Network::Bitcoin,
+            _ => Network::Testnet,
+        };
         match self.swap_type {
-            SwapType::Submarine => {
-                let script = self.to_script()?;
-                let network = match self.network {
-                    BitcoinNetwork::Bitcoin => Network::Bitcoin,
-                    _ => Network::Testnet,
-                };
-                Ok(Address::p2shwsh(&script, network))
-            }
-            SwapType::ReverseSubmarine => {
-                let script = self.to_script()?;
-                let network = match self.network {
-                    BitcoinNetwork::Bitcoin => Network::Bitcoin,
-                    _ => Network::Testnet,
-                };
-                Ok(Address::p2wsh(&script, network))
-            }
+            SwapType::Submarine => Ok(Address::p2shwsh(&script, network)),
+            SwapType::ReverseSubmarine => Ok(Address::p2wsh(&script, network)),
         }
     }
     pub fn get_balance(&self) -> Result<(u64, i64), S5Error> {

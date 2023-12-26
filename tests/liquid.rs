@@ -1,12 +1,14 @@
 use dotenv::dotenv;
-use std::{env, str::FromStr};
+use std::env;
 
 use boltzclient::{
     key::{ec::KeyPairString, preimage::PreimageStates},
-    network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
+    network::electrum::{
+        BitcoinNetwork, NetworkConfig, DEFAULT_LIQUID_TESTNET_NODE, DEFAULT_TESTNET_NODE,
+    },
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
-        liquid::{LBtcRevSwapScript, LBtcSubSwapScript},
+        liquid::LBtcSwapScript,
     },
 };
 // use elements::Address;
@@ -74,7 +76,12 @@ fn test_liquid_ssi() {
         .unwrap()
         .clone();
 
-    let boltz_script_elements = LBtcSubSwapScript::from_str(&redeem_script_string).unwrap();
+    let boltz_script_elements = LBtcSwapScript::submarine_from_str(
+        BitcoinNetwork::LiquidTestnet,
+        DEFAULT_LIQUID_TESTNET_NODE.to_string(),
+        &redeem_script_string,
+    )
+    .unwrap();
 
     println!("{:?}", boltz_script_elements);
 
@@ -157,8 +164,16 @@ fn test_liquid_rsi() {
         .unwrap()
         .clone();
 
-    let boltz_script_elements = LBtcRevSwapScript::from_str(&redeem_script_string).unwrap();
-    let constructed_script_elements = LBtcRevSwapScript::new(
+    let boltz_script_elements = LBtcSwapScript::reverse_from_str(
+        BitcoinNetwork::LiquidTestnet,
+        DEFAULT_LIQUID_TESTNET_NODE.to_string(),
+        &redeem_script_string,
+    )
+    .unwrap();
+    let constructed_script_elements = LBtcSwapScript::new(
+        BitcoinNetwork::LiquidTestnet,
+        DEFAULT_LIQUID_TESTNET_NODE.to_string(),
+        boltzclient::swaps::boltz::SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
         keypair.pubkey.clone(),
         timeout as u32,

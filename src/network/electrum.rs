@@ -107,9 +107,8 @@ impl NetworkConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
 
-    use crate::{key::ec::BlindingKeyPair, swaps::liquid::LBtcRevSwapScript};
+    use crate::{key::ec::BlindingKeyPair, swaps::liquid::LBtcSwapScript};
 
     use super::*;
     use bitcoin::{Script, ScriptBuf};
@@ -127,21 +126,21 @@ mod tests {
     #[ignore]
     fn test_electrum_liquid_client() {
         let redeem_script_str = "8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac".to_string();
-        let expected_address = "tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln";
-        let blinding_key = BlindingKeyPair::from_secret_string(
+        let _expected_address = "tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln";
+        let _blinding_key = BlindingKeyPair::from_secret_string(
             "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
         );
-        let script_elements = LBtcRevSwapScript::from_str(&redeem_script_str.clone()).unwrap();
-        let script_address = script_elements.to_typed();
-        let script_address_bitcoin: ScriptBuf =
-            Script::from_bytes(script_address.as_bytes()).to_owned();
-        let network_config = NetworkConfig::default_liquid();
-        let electrum_client = network_config.electrum_url.build_client().unwrap();
-        let utxos = electrum_client
-            .script_list_unspent(&script_address_bitcoin.to_v0_p2wsh())
-            .unwrap();
+        let script_elements = LBtcSwapScript::reverse_from_str(
+            BitcoinNetwork::LiquidTestnet,
+            DEFAULT_LIQUID_TESTNET_NODE.to_string(),
+            &redeem_script_str.clone(),
+        )
+        .unwrap();
+        let balance = script_elements.get_balance();
+        println!("{:?}", balance);
+        assert!(balance.is_ok());
+
         // assert!(electrum_client.ping().is_ok());
         // let res = electrum_client.server_features().unwrap();
-        println!("UTXOS: {:#?}", utxos);
     }
 }

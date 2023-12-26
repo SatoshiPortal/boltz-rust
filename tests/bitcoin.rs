@@ -1,7 +1,6 @@
 // mod bullbitcoin_rnd;
 // extern crate libbullwallet;
 
-use bitcoin::Network;
 use boltzclient::{
     key::{ec::KeyPairString, preimage::PreimageStates},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
@@ -286,8 +285,6 @@ fn test_recover_bitcoin_rsi() {
 
     let absolute_fees = 300;
 
-    let network_config = NetworkConfig::default();
-    let electrum_client = network_config.electrum_url.build_client().unwrap();
     let mut rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(
             BitcoinNetwork::BitcoinTestnet,

@@ -1,4 +1,3 @@
-use bitcoin::Network;
 use electrum_client::ElectrumApi;
 use std::str::FromStr;
 
@@ -14,9 +13,9 @@ use elements::{
 use secp256k1::Message;
 
 use crate::{
-    e::S5Error,
+    e::{ErrorKind, S5Error},
     key::{ec::KeyPairString, preimage::PreimageStates},
-    network::electrum::NetworkConfig,
+    network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::boltz::SwapTxKind,
 };
 
@@ -37,18 +36,44 @@ use elements::{
 use secp256k1::PublicKey as NoncePublicKey;
 
 use crate::key::ec::BlindingKeyPair;
-#[derive(Debug, PartialEq)]
-pub struct LBtcSubSwapScript {
+
+use super::boltz::SwapType;
+#[derive(Debug, Clone, PartialEq)]
+pub struct LBtcSwapScript {
+    network: BitcoinNetwork,
+    electrum_url: String,
+    swap_type: SwapType,
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
 }
 
-impl FromStr for LBtcSubSwapScript {
-    type Err = String; // Change this to a more suitable error type as needed
-
-    fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
+impl LBtcSwapScript {
+    pub fn new(
+        network: BitcoinNetwork,
+        electrum_url: String,
+        swap_type: SwapType,
+        hashlock: String,
+        reciever_pubkey: String,
+        timelock: u32,
+        sender_pubkey: String,
+    ) -> Self {
+        LBtcSwapScript {
+            network,
+            electrum_url,
+            swap_type,
+            hashlock,
+            reciever_pubkey,
+            timelock,
+            sender_pubkey,
+        }
+    }
+    pub fn submarine_from_str(
+        network: BitcoinNetwork,
+        electrum_url: String,
+        redeem_script_str: &str,
+    ) -> Result<Self, S5Error> {
         // let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
         let script = EScript::from_str(&redeem_script_str).unwrap();
         // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
@@ -94,78 +119,31 @@ impl FromStr for LBtcSubSwapScript {
             && timelock.is_some()
             && sender_pubkey.is_some()
         {
-            Ok(LBtcSubSwapScript {
+            Ok(LBtcSwapScript {
+                network,
+                electrum_url,
+                swap_type: SwapType::Submarine,
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
                 sender_pubkey: sender_pubkey.unwrap(),
             })
         } else {
-            Err(format!(
-                "Could not extract all elements: {:?} {:?} {:?} {:?}",
-                hashlock, reciever_pubkey, timelock, sender_pubkey
+            Err(S5Error::new(
+                ErrorKind::Input,
+                &format!(
+                    "Could not extract all elements: {:?} {:?} {:?} {:?}",
+                    hashlock, reciever_pubkey, timelock, sender_pubkey
+                ),
             ))
         }
     }
-}
-impl LBtcSubSwapScript {
-    pub fn to_script(&self) -> EScript {
-        /*
-            HASH160 <hash of the preimage>
-            EQUAL
-            IF <reciever public key>
-            ELSE <timeout block height>
-            CHECKLOCKTIMEVERIFY
-            DROP <sender public key>
-            ENDIF
-            CHECKSIG
-        */
-        let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
-        let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
-        let locktime = LockTime::from_consensus(self.timelock);
-        let hashvalue: Hash = Hash::from_str(&self.hashlock).unwrap();
-        let hashbytes_slice: &[u8] = hashvalue.as_ref();
-        let hashbytes: [u8; 20] = hashbytes_slice.try_into().expect("Hash must be 20 bytes");
 
-        let script = EBuilder::new()
-            .push_opcode(OP_HASH160)
-            .push_slice(&hashbytes)
-            .push_opcode(OP_EQUAL)
-            .push_opcode(OP_IF)
-            .push_key(&reciever_pubkey)
-            .push_opcode(OP_ELSE)
-            .push_int(locktime.to_consensus_u32() as i64)
-            .push_opcode(OP_CLTV)
-            .push_opcode(OP_DROP)
-            .push_key(&sender_pubkey)
-            .push_opcode(OP_ENDIF)
-            .push_opcode(OP_CHECKSIG)
-            .into_script();
-
-        script
-    }
-
-    pub fn to_address(&self, _network: elements::bitcoin::Network, blinder: String) -> EAddress {
-        let script = self.to_script();
-        let blinder = ZKPublicKey::from_str(&blinder).unwrap();
-        EAddress::p2shwsh(&script, Some(blinder), &AddressParams::LIQUID_TESTNET)
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct LBtcRevSwapScript {
-    pub hashlock: String,
-    pub reciever_pubkey: String,
-    pub timelock: u32,
-    pub sender_pubkey: String,
-    pub preimage: Option<String>,
-    pub signature: Option<String>,
-}
-
-impl FromStr for LBtcRevSwapScript {
-    type Err = String; // Change this to a more suitable error type as needed
-
-    fn from_str(redeem_script_str: &str) -> Result<Self, Self::Err> {
+    pub fn reverse_from_str(
+        network: BitcoinNetwork,
+        electrum_url: String,
+        redeem_script_str: &str,
+    ) -> Result<Self, S5Error> {
         let script = EScript::from_str(&redeem_script_str).unwrap();
         // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
         // println!("ADDRESS DECODED: {:?}",address);
@@ -211,91 +189,136 @@ impl FromStr for LBtcRevSwapScript {
             && timelock.is_some()
             && sender_pubkey.is_some()
         {
-            Ok(LBtcRevSwapScript {
+            Ok(LBtcSwapScript {
+                network,
+                electrum_url,
+                swap_type: SwapType::ReverseSubmarine,
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
                 sender_pubkey: sender_pubkey.unwrap(),
-                preimage: None,
-                signature: None,
             })
         } else {
-            Err(format!(
-                "Could not extract all elements: {:?} {:?} {:?} {:?}",
-                hashlock, reciever_pubkey, timelock, sender_pubkey
+            Err(S5Error::new(
+                ErrorKind::Input,
+                &format!(
+                    "Could not extract all elements: {:?} {:?} {:?} {:?}",
+                    hashlock, reciever_pubkey, timelock, sender_pubkey
+                ),
             ))
         }
     }
-}
-impl LBtcRevSwapScript {
-    pub fn new(
-        hashlock: String,
-        reciever_pubkey: String,
-        timelock: u32,
-        sender_pubkey: String,
-    ) -> Self {
-        LBtcRevSwapScript {
-            hashlock,
-            reciever_pubkey,
-            timelock,
-            sender_pubkey,
-            preimage: None,
-            signature: None,
+    pub fn to_script(&self) -> EScript {
+        /*
+            HASH160 <hash of the preimage>
+            EQUAL
+            IF <reciever public key>
+            ELSE <timeout block height>
+            CHECKLOCKTIMEVERIFY
+            DROP <sender public key>
+            ENDIF
+            CHECKSIG
+        */
+        match self.swap_type {
+            SwapType::Submarine => {
+                let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
+                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+                let locktime = LockTime::from_consensus(self.timelock);
+                let hashvalue: Hash = Hash::from_str(&self.hashlock).unwrap();
+                let hashbytes_slice: &[u8] = hashvalue.as_ref();
+                let hashbytes: [u8; 20] =
+                    hashbytes_slice.try_into().expect("Hash must be 20 bytes");
+
+                let script = EBuilder::new()
+                    .push_opcode(OP_HASH160)
+                    .push_slice(&hashbytes)
+                    .push_opcode(OP_EQUAL)
+                    .push_opcode(OP_IF)
+                    .push_key(&reciever_pubkey)
+                    .push_opcode(OP_ELSE)
+                    .push_int(locktime.to_consensus_u32() as i64)
+                    .push_opcode(OP_CLTV)
+                    .push_opcode(OP_DROP)
+                    .push_key(&sender_pubkey)
+                    .push_opcode(OP_ENDIF)
+                    .push_opcode(OP_CHECKSIG)
+                    .into_script();
+
+                script
+            }
+            SwapType::ReverseSubmarine => {
+                /*
+                    OP_SIZE
+                    [32]
+                    OP_EQUAL
+                    OP_IF
+                    OP_HASH160 <hash of the preimage>
+                    OP_EQUALVERIFY <reciever public key>
+                    OP_ELSE
+                    OP_DROP <timeout block height>
+                    OP_CLTV
+                    OP_DROP <sender public key>
+                    OP_ENDIF
+                    OP_CHECKSIG
+                */
+                let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
+                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+                let locktime = LockTime::from_consensus(self.timelock);
+                let hashvalue: Hash = Hash::from_str(&self.hashlock).unwrap();
+                let hashbytes_slice: &[u8] = hashvalue.as_ref();
+                let hashbytes: [u8; 20] =
+                    hashbytes_slice.try_into().expect("Hash must be 20 bytes");
+
+                let script = EBuilder::new()
+                    .push_opcode(OP_SIZE)
+                    .push_slice(&[32])
+                    .push_opcode(OP_EQUAL)
+                    .push_opcode(OP_IF)
+                    .push_opcode(OP_HASH160)
+                    .push_slice(&hashbytes)
+                    .push_opcode(OP_EQUALVERIFY)
+                    .push_key(&reciever_pubkey)
+                    .push_opcode(OP_ELSE)
+                    .push_opcode(OP_DROP)
+                    .push_int(locktime.to_consensus_u32() as i64)
+                    .push_opcode(OP_CLTV)
+                    .push_opcode(OP_DROP)
+                    .push_key(&sender_pubkey)
+                    .push_opcode(OP_ENDIF)
+                    .push_opcode(OP_CHECKSIG)
+                    .into_script();
+
+                script
+            }
         }
     }
 
-    pub fn to_typed(&self) -> EScript {
-        // Script ~= ScriptBufs
-        /*
-            OP_SIZE
-            [32]
-            OP_EQUAL
-            OP_IF
-            OP_HASH160 <hash of the preimage>
-            OP_EQUALVERIFY <reciever public key>
-            OP_ELSE
-            OP_DROP <timeout block height>
-            OP_CLTV
-            OP_DROP <sender public key>
-            OP_ENDIF
-            OP_CHECKSIG
-        */
-        let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
-        let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
-        let locktime = LockTime::from_consensus(self.timelock);
-        let hashvalue: Hash = Hash::from_str(&self.hashlock).unwrap();
-        let hashbytes_slice: &[u8] = hashvalue.as_ref();
-        let hashbytes: [u8; 20] = hashbytes_slice.try_into().expect("Hash must be 20 bytes");
+    pub fn to_address(&self, blinder: String) -> EAddress {
+        let script = self.to_script();
+        let address_params = match self.network {
+            BitcoinNetwork::Bitcoin => &AddressParams::LIQUID,
+            _ => &AddressParams::LIQUID_TESTNET,
+        };
+        let blinder = ZKPublicKey::from_str(&blinder).unwrap();
 
-        let script = EBuilder::new()
-            .push_opcode(OP_SIZE)
-            .push_slice(&[32])
-            .push_opcode(OP_EQUAL)
-            .push_opcode(OP_IF)
-            .push_opcode(OP_HASH160)
-            .push_slice(&hashbytes)
-            .push_opcode(OP_EQUALVERIFY)
-            .push_key(&reciever_pubkey)
-            .push_opcode(OP_ELSE)
-            .push_opcode(OP_DROP)
-            .push_int(locktime.to_consensus_u32() as i64)
-            .push_opcode(OP_CLTV)
-            .push_opcode(OP_DROP)
-            .push_key(&sender_pubkey)
-            .push_opcode(OP_ENDIF)
-            .push_opcode(OP_CHECKSIG)
-            .into_script();
-
-        script
+        match self.swap_type {
+            SwapType::Submarine => EAddress::p2shwsh(&script, Some(blinder), address_params),
+            SwapType::ReverseSubmarine => EAddress::p2wsh(&script, Some(blinder), address_params),
+        }
     }
-
-    pub fn to_address(&self, blinding_key: BlindingKeyPair) -> EAddress {
-        let script = self.to_typed();
-        EAddress::p2wsh(
-            &script,
-            Some(blinding_key.to_typed().public_key()),
-            &AddressParams::LIQUID_TESTNET,
-        )
+    pub fn get_balance(&self) -> Result<(u64, i64), S5Error> {
+        let electrum_client =
+            NetworkConfig::new(self.network, &self.electrum_url, true, true, false, None)
+                .electrum_url
+                .build_client()?;
+        let elements_script = self.clone().to_script();
+        let script_bytes = elements_script.as_bytes();
+        let bitcoin_script = BitcoinScript::from_bytes(&script_bytes);
+        let script_balance = match electrum_client.script_get_balance(bitcoin_script) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+        };
+        Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
 }
 
@@ -308,38 +331,57 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 }
 
 #[derive(Debug, Clone)]
-pub struct LBtcRevSwapTx {
-    _network: Network,
+pub struct LBtcSwapTx {
     kind: SwapTxKind,
-    script_elements: LBtcRevSwapScript,
+    swap_script: LBtcSwapScript,
     output_address: Address,
     absolute_fees: u32,
     utxo: Option<OutPoint>,
     utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
 }
 
-impl LBtcRevSwapTx {
-    pub fn manual_utxo_update(&mut self, utxo: OutPoint, value: u64) -> LBtcRevSwapTx {
+impl LBtcSwapTx {
+    pub fn manual_utxo_update(&mut self, utxo: OutPoint, value: u64) -> LBtcSwapTx {
         self.utxo = Some(utxo);
         self.utxo_value = Some(value);
         self.clone()
     }
     pub fn new_claim(
-        redeem_script: String,
+        swap_script: LBtcSwapScript,
         output_address: String,
         absolute_fees: u32,
-        network: Network,
-    ) -> LBtcRevSwapTx {
-        let address = Address::from_str(&output_address).unwrap();
-        LBtcRevSwapTx {
+    ) -> Result<LBtcSwapTx, S5Error> {
+        let address = match Address::from_str(&output_address) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+        Ok(LBtcSwapTx {
             kind: SwapTxKind::Claim,
-            script_elements: LBtcRevSwapScript::from_str(&redeem_script).unwrap(),
+            swap_script: swap_script,
             output_address: address,
             absolute_fees,
-            _network: network,
             utxo: None,
             utxo_value: None,
-        }
+        })
+    }
+    pub fn new_refund(
+        swap_script: LBtcSwapScript,
+        output_address: String,
+        absolute_fees: u32,
+    ) -> Result<LBtcSwapTx, S5Error> {
+        let address = match Address::from_str(&output_address) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+
+        Ok(LBtcSwapTx {
+            kind: SwapTxKind::Refund,
+            swap_script: swap_script,
+            output_address: address,
+            absolute_fees,
+            utxo: None,
+            utxo_value: None,
+        })
     }
 
     pub fn drain_tx(
@@ -373,7 +415,7 @@ impl LBtcRevSwapTx {
             .electrum_url
             .build_client()
             .unwrap();
-        let binding = self.script_elements.clone().to_typed().to_v0_p2wsh();
+        let binding = self.swap_script.clone().to_script().to_v0_p2wsh();
         let script_p2wsh = binding.as_bytes();
         let bitcoin_script = BitcoinScript::from_bytes(script_p2wsh);
         let utxos = electrum_client.script_list_unspent(bitcoin_script).unwrap();
@@ -458,7 +500,7 @@ impl LBtcRevSwapTx {
 
         let unsigned_tx = Transaction {
             version: 1,
-            lock_time: LockTime::from_consensus(self.script_elements.timelock),
+            lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
@@ -467,7 +509,7 @@ impl LBtcRevSwapTx {
         let sighash = Message::from_slice(
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
-                &self.script_elements.to_typed(),
+                &&self.swap_script.to_script(),
                 blinded_value,
                 elements::EcdsaSighashType::All,
             )[..],
@@ -478,7 +520,7 @@ impl LBtcRevSwapTx {
         let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
         script_witness.push(hex::decode(&signature.serialize_der().to_string()).unwrap());
         script_witness.push(preimage.preimage_bytes.unwrap());
-        script_witness.push(self.script_elements.to_typed().as_bytes().to_vec());
+        script_witness.push(self.swap_script.to_script().as_bytes().to_vec());
 
         let min_value: u64 = DUST_VALUE;
         let exp: i32 = 0;
@@ -522,7 +564,7 @@ impl LBtcRevSwapTx {
 
         let signed_tx = Transaction {
             version: 1,
-            lock_time: LockTime::from_consensus(self.script_elements.timelock),
+            lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![signed_txin],
             output: vec![output.clone()],
         };
@@ -545,7 +587,7 @@ fn _mock_pubkey() -> elements::secp256k1_zkp::PublicKey {
 }
 #[cfg(test)]
 mod tests {
-    use crate::key::ec::BlindingKeyPair;
+    use crate::{key::ec::BlindingKeyPair, network::electrum::DEFAULT_LIQUID_TESTNET_NODE};
 
     use super::*;
     use elements::pset::serialize::Serialize;
@@ -597,18 +639,19 @@ mod tests {
             ],
         };
 
-        let script_elements = LBtcRevSwapScript::from_str(&redeem_script_str.clone()).unwrap();
+        let script_elements = LBtcSwapScript::reverse_from_str(
+            BitcoinNetwork::LiquidTestnet,
+            DEFAULT_LIQUID_TESTNET_NODE.to_string(),
+            &redeem_script_str.clone(),
+        )
+        .unwrap();
 
-        let address = script_elements.to_address(blinding_key.clone());
+        let address = script_elements.to_address(blinding_key.clone().pubkey);
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
 
-        let mut tx_elements = LBtcRevSwapTx::new_claim(
-            redeem_script_str,
-            RETURN_ADDRESS.to_string(),
-            300,
-            Network::Testnet,
-        );
+        let mut tx_elements =
+            LBtcSwapTx::new_claim(script_elements, RETURN_ADDRESS.to_string(), 300).unwrap();
 
         let outpoint = OutPoint {
             txid: Txid::from_str(
@@ -658,23 +701,29 @@ mod tests {
             pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986"
                 .to_string(),
         };
-        let decoded = LBtcRevSwapScript::from_str(&redeem_script_str.clone()).unwrap();
+        let decoded = LBtcSwapScript::reverse_from_str(
+            BitcoinNetwork::LiquidTestnet,
+            DEFAULT_LIQUID_TESTNET_NODE.to_string(),
+            &redeem_script_str.clone(),
+        )
+        .unwrap();
         // println!("{:?}", decoded);
         assert_eq!(decoded.reciever_pubkey, my_key_pair.pubkey);
         assert_eq!(decoded.timelock, expected_timeout);
 
-        let script_elements = LBtcRevSwapScript {
+        let script_elements = LBtcSwapScript {
             hashlock: decoded.hashlock,
             reciever_pubkey: decoded.reciever_pubkey,
             sender_pubkey: decoded.sender_pubkey,
             timelock: decoded.timelock,
-            preimage: None,
-            signature: None,
+            network: BitcoinNetwork::LiquidTestnet,
+            electrum_url: DEFAULT_LIQUID_TESTNET_NODE.to_string(),
+            swap_type: SwapType::ReverseSubmarine,
         };
 
         // let script = script_elements.to_typed();
         // println!("ENCODED HEX: {}", script.to_string());
-        let address = script_elements.to_address(blinding_key);
+        let address = script_elements.to_address(blinding_key.pubkey);
         // println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
     }
