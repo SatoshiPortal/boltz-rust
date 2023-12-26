@@ -44,7 +44,7 @@ impl BoltzApiClient {
             let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
             Ok(get_pairs_response)
         } else {
-            Err(S5Error::new(ErrorKind::Network, "Non-successful response"))
+            Err(S5Error::new(ErrorKind::Network, &res.text().unwrap()))
         }
     }
 
@@ -58,37 +58,34 @@ impl BoltzApiClient {
                 serde_json::from_str(&body).unwrap();
             Ok(get_fee_estimation_response)
         } else {
-            Err(S5Error::new(ErrorKind::Network, "Non-successful response"))
+            Err(S5Error::new(ErrorKind::Network, &res.text().unwrap()))
         }
     }
 
     pub fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, S5Error> {
         let url = format!("{}/createswap", self.base_url);
-        let json_request = serde_json::to_string(&request).unwrap();
-
-        let res = Client::new().post(&url).json(&json_request).send().unwrap();
+        let res = Client::new().post(&url).json(&request).send().unwrap();
 
         if res.status().is_success() {
             let body = res.text().unwrap();
             let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
             Ok(create_swap_response)
         } else {
-            Err(S5Error::new(ErrorKind::Network, "Non-successful response"))
+            Err(S5Error::new(ErrorKind::Network, &res.text().unwrap()))
         }
     }
 
     pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, S5Error> {
         let url = format!("{}/swapstatus", self.base_url);
-        let json_request = serde_json::to_string(&request).unwrap();
 
-        let res = Client::new().post(&url).json(&json_request).send().unwrap();
+        let res = Client::new().post(&url).json(&request).send().unwrap();
 
         if res.status().is_success() {
             let body = res.text().unwrap();
             let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
             Ok(swap_status_response)
         } else {
-            Err(S5Error::new(ErrorKind::Network, "Non-successful response"))
+            Err(S5Error::new(ErrorKind::Network, &res.text().unwrap()))
         }
     }
 }

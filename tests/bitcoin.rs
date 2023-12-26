@@ -37,14 +37,7 @@ fn test_bitcoin_ssi() {
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("****SECRETS****:{:?}", keypair);
     // SECRETS
-    let network_config = NetworkConfig::new(
-        BitcoinNetwork::BitcoinTestnet,
-        DEFAULT_TESTNET_NODE,
-        true,
-        true,
-        false,
-        None,
-    );
+    let network_config = NetworkConfig::default_bitcoin();
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
@@ -134,14 +127,7 @@ fn test_bitcoin_rsi() {
     let preimage = PreimageStates::new();
     println!("****SECRETS****:{:?}", preimage.clone());
     // SECRETS
-    let network_config = NetworkConfig::new(
-        BitcoinNetwork::BitcoinTestnet,
-        DEFAULT_TESTNET_NODE,
-        true,
-        true,
-        false,
-        None,
-    );
+    let network_config = NetworkConfig::default_bitcoin();
     let electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
@@ -160,7 +146,7 @@ fn test_bitcoin_rsi() {
         out_amount,
     );
     let response = boltz_client.create_swap(request);
-    // println!("{:?}", response);
+    println!("{:?}", response);
     assert!(response.is_ok());
     assert!(response
         .as_ref()

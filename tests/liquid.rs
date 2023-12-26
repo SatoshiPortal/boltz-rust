@@ -34,14 +34,7 @@ fn test_liquid_ssi() {
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("{:?}", keypair);
     // SECRETS
-    let network_config = NetworkConfig::new(
-        BitcoinNetwork::BitcoinTestnet,
-        DEFAULT_TESTNET_NODE,
-        true,
-        true,
-        false,
-        None,
-    );
+    let network_config = NetworkConfig::default_liquid();
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
@@ -58,6 +51,7 @@ fn test_liquid_ssi() {
         keypair.pubkey.clone(),
     );
     let response = boltz_client.create_swap(request);
+    println!("{:?}", response);
     assert!(response.is_ok());
     assert!(response
         .as_ref()
@@ -113,14 +107,7 @@ fn test_liquid_rsi() {
     println!("{:?}", keypair);
     let preimage = PreimageStates::new();
     // SECRETS
-    let network_config = NetworkConfig::new(
-        BitcoinNetwork::BitcoinTestnet,
-        DEFAULT_TESTNET_NODE,
-        true,
-        true,
-        false,
-        None,
-    );
+    let network_config = NetworkConfig::default_liquid();
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();

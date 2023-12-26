@@ -7,7 +7,7 @@ const LIQUID_TESTNET_POLICY_ASSET_STR: &str =
     "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 
 pub const DEFAULT_TESTNET_NODE: &str = "electrum.bullbitcoin.com:60002";
-pub const DEFAULT_LIQUID_TESTNET_NODE: &str = "electrs.sideswap.io:12002";
+pub const DEFAULT_LIQUID_TESTNET_NODE: &str = "blockstream.info:465";
 
 pub const DEFAULT_MAINNET_NODE: &str = "electrum.bullbitcoin.com:50002";
 
@@ -54,7 +54,7 @@ impl NetworkConfig {
         NetworkConfig::new(
             BitcoinNetwork::BitcoinTestnet,
             DEFAULT_TESTNET_NODE,
-            false,
+            true,
             true,
             false,
             None,
@@ -64,7 +64,7 @@ impl NetworkConfig {
         NetworkConfig::new(
             BitcoinNetwork::LiquidTestnet,
             DEFAULT_LIQUID_TESTNET_NODE,
-            false,
+            true,
             true,
             false,
             Some(LIQUID_TESTNET_POLICY_ASSET_STR),
@@ -113,32 +113,13 @@ mod tests {
     use electrum_client::ElectrumApi;
 
     #[test]
-    fn test_electrum_bitcoin_client() {
+    fn test_electrum_default_clients() {
         let network_config = NetworkConfig::default_bitcoin();
         let electrum_client = network_config.electrum_url.build_client().unwrap();
-        // assert!(electrum_client.ping().is_ok());
-        // let res = electrum_client.server_features().unwrap();
-        println!("Fees: {:#?}", electrum_client.estimate_fee(6));
-    }
-    #[test]
-    #[ignore]
-    fn test_electrum_liquid_client() {
-        let redeem_script_str = "8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac".to_string();
-        let _expected_address = "tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln";
-        let _blinding_key = BlindingKeyPair::from_secret_string(
-            "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
-        );
-        let script_elements = LBtcSwapScript::reverse_from_str(
-            BitcoinNetwork::LiquidTestnet,
-            DEFAULT_LIQUID_TESTNET_NODE.to_string(),
-            &redeem_script_str.clone(),
-        )
-        .unwrap();
-        let balance = script_elements.get_balance();
-        println!("{:?}", balance);
-        assert!(balance.is_ok());
+        assert!(electrum_client.ping().is_ok());
 
-        // assert!(electrum_client.ping().is_ok());
-        // let res = electrum_client.server_features().unwrap();
+        let network_config = NetworkConfig::default_liquid();
+        let electrum_client = network_config.electrum_url.build_client().unwrap();
+        assert!(electrum_client.ping().is_ok());
     }
 }
