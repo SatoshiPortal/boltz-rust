@@ -132,6 +132,7 @@ We now need to create a Boltz API Client. This can also be done natively in dart
 ```rust
 let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
 
+// get fees
 let boltz_pairs = boltz_client.get_pairs();
 let pair_hash = boltz_pairs
     .pairs

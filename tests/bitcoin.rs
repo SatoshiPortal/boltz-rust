@@ -25,7 +25,7 @@ use std::{env, str::FromStr};
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice_str = "lntb500u1pjchwuypp52jsy60enqpnkdlm806y9ff6uwh44vfyq9ertsnd4kyyzfsr9q8yqdq9wpc8qxqyjw5qcqp2sp5yjpu8m63gfszjazmnl68dl4asa32vx5srgljgq56zazz72m73hmqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq3z9pwkn9d7xyd36sh2n6ndnr4tskwl6x87fc9n58lhmsx4rgwlcyk9y2cwahvty9x6xcmzh6zjm5fxlye2uddf4q2gek0d3vjufkdespadlwkv";
+    let invoice_str = "lntb500u1pjch47vpp5uwzfvyng6kvp87qny8eyn7rxq0qzlqtzsgg8dgg0rgpa983n426qdqyda5sxqyjw5qcqp2sp5taxx2vtk6wsyq827rc42ccf0d2amsmlghvssaf4d4equwgnef05srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqgwy0l9y88r46895228vjl9lr8f30msypptf6tvew384cz2dmsjrr4vfqv34p76lv0yg2kqrt7ra0trjeywwd50yeleyntc2wfn45j0qpyqxfns";
     // ensure the payment hash is the one boltz uses in their swap script
     let preimage_states = PreimageStates::from_invoice_str(invoice_str).unwrap();
 
@@ -80,6 +80,13 @@ fn test_bitcoin_ssi() {
         .as_ref()
         .unwrap()
         .clone();
+    let funding_amount = response
+        .as_ref()
+        .unwrap()
+        .expected_amount
+        .as_ref()
+        .unwrap()
+        .clone();
 
     let boltz_script = BtcSwapScript::submarine_from_str(
         BitcoinNetwork::BitcoinTestnet,
@@ -93,9 +100,9 @@ fn test_bitcoin_ssi() {
         DEFAULT_TESTNET_NODE.to_owned(),
         SwapType::Submarine,
         preimage_states.hash160.to_string(),
-        keypair.pubkey.clone(),
+        boltz_script.reciever_pubkey.clone(),
         timeout as u32,
-        boltz_script.sender_pubkey.clone(),
+        keypair.pubkey.clone(),
     );
 
     println!("{:?}", boltz_script);
@@ -106,6 +113,8 @@ fn test_bitcoin_ssi() {
     println!("*******SWAP*********************");
     println!("*******SCRIPT*******************");
     println!("{}", funding_address);
+    println!("{}", funding_amount);
+
     println!("");
     println!("Once you have paid the address, the invoice will get paid after 1 conf.");
     println!("********************************");
