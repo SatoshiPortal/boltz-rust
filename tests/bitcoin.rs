@@ -254,8 +254,7 @@ fn test_bitcoin_rsi() {
     )
     .unwrap();
 
-    rv_claim_tx.fetch_utxo(out_amount).unwrap();
-    let signed_tx = rv_claim_tx.drain_tx(keypair, preimage).unwrap();
+    let signed_tx = rv_claim_tx.drain(keypair, preimage, out_amount).unwrap();
     let txid = electrum_client.transaction_broadcast(&signed_tx).unwrap();
     println!("{}", txid);
 }
@@ -298,8 +297,7 @@ fn test_recover_bitcoin_rsi() {
     )
     .unwrap();
 
-    rev_swap_tx.fetch_utxo(out_amount).unwrap();
-    let signed_tx = rev_swap_tx.drain_tx(keypair, preimage).unwrap();
+    let signed_tx = rev_swap_tx.drain(keypair, preimage, out_amount).unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx).unwrap();
     println!("{}", txid);
 }

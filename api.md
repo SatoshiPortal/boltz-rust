@@ -8,11 +8,14 @@ The inputs and outputs to all methods use basic types: String or u64;
 
 `Client pays onchain address and recieves funds on lightning.`
 
+#### Create Secrets
+
 We assume our client has a master key in the form of a 12/24 word mnemonic.
 
 We will use this as input and use the 'account' number to rotate keys via bip32 derivation.
 
 The preimage will be extracted from the invoice provided by the client.
+
 
 ```rust
 // The amount to be paid is set in the invoice
@@ -24,11 +27,14 @@ let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), account);
 
 ```
 
+#### Create Swap w/ Boltz API
+
 We now need to create a Boltz API Client. This can also be done natively in dart.
 
 ```rust
 let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
 
+// get fees
 let boltz_pairs = boltz_client.get_pairs();
 let pair_hash = boltz_pairs
     .pairs
@@ -59,6 +65,9 @@ let funding_address = response
 
 
 ```
+
+#### Construct SwapScript
+
 Now create the main SwapScript and SwapTx structures.
 
 First, SwapScript:
@@ -82,6 +91,9 @@ assert_eq!(
     sub_swap_script.to_address().to_string()
 );
 ```
+
+#### Construct SwapTx
+
 With submarine swaps, we will prompt the client to pay the `funding_address`,
 after which the invoice will be paid by boltz.
 
@@ -97,17 +109,16 @@ let mut sub_refund_tx = BtcSwapTx::new_refund(
     absolute_fees,
 );
 
-sub_refund_tx.fetch_utxo(out_amount);
-// The above check for out_amount may cause issues
-// fetch_utxo can be done either as part of the constructor
-// OR part of drain_tx
-let signed_tx = sub_refund_tx.drain_tx(keypair, preimage);
+// out_amount value is checked. drain will fail if amount does not match.
+let signed_tx = sub_refund_tx.drain(keypair, preimage);
 let txid = sub_refund_tx.broadcast(&signed_tx);
 ```
 
 ### Reverse Submarine Swap:
 
 `Client pays Lightning invoice and recieves funds onchain.`
+
+#### Create Secrets
 
 We assume our client has a master key in the form of a 12/24 word mnemonic.
 
@@ -126,6 +137,7 @@ let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), account);
 let preimage = PreimageStates::new();
 let out_amount = 50_000; // the exact utxo value we want to claim onchain
 ```
+#### Create Swap w/ Boltz API
 
 We now need to create a Boltz API Client. This can also be done natively in dart.
 
@@ -163,6 +175,7 @@ let lockup_address = response
     .lockup_address;
 
 ```
+#### Construct SwapScript
 
 Now create the main SwapScript and SwapTx structures.
 
@@ -188,6 +201,7 @@ assert_eq!(
 );
 ```
 
+#### Check status
 
 Invoice from boltz will be displayed on the client for payment
 Once client pays the invoice, Boltz will fund the script.
@@ -220,6 +234,7 @@ if script_balance.0 == out_amount || script_balance.1 == out_amount {
 }
 // note balance is currently a tuple; however, it will be a struct {confirmed: u64 ,unconfirmed: u64}
 ```
+#### Construct SwapTx
 
 Now we need to construct the SwapTx and claim it:
 
@@ -231,11 +246,9 @@ let mut rev_claim_tx = BtcSwapTx::new_claim(
     absolute_fees,
 );
 
-rev_claim_tx.fetch_utxo(out_amount);
-// The above check for out_amount may cause issues
-// fetch_utxo can be done either as part of the constructor
-// OR part of drain_tx
-let signed_tx = rev_claim_tx.drain_tx(keypair, preimage);
+
+// out_amount value is checked. drain will fail if amount does not match.
+let signed_tx = rev_claim_tx.drain(keypair, preimage, out_amount);
 let txid = rev_claim_tx.broadcast(&signed_tx);
 ```
 

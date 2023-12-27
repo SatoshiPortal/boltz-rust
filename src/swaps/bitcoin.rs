@@ -389,7 +389,31 @@ impl BtcSwapTx {
             utxo_value: None,
         })
     }
-    pub fn fetch_utxo(&mut self, expected_value: u64) -> Result<(), S5Error> {
+    pub fn drain(
+        &mut self,
+        keys: KeyPairString,
+        preimage: PreimageStates,
+        expected_utxo_value: u64,
+    ) -> Result<Transaction, S5Error> {
+        self.fetch_utxo(expected_utxo_value)?;
+        if !self.has_utxo() {
+            return Err(S5Error::new(ErrorKind::Wallet, "No Utxos Found."));
+        }
+        // FETCH UTXOS HERE
+
+        match self.kind {
+            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage),
+            SwapTxKind::Refund => {
+                self.sign_refund_tx(keys);
+                Err(S5Error::new(
+                    crate::e::ErrorKind::Wallet,
+                    "Refund transaction signing not supported yet",
+                ))
+            }
+        }
+        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
+    }
+    fn fetch_utxo(&mut self, expected_value: u64) -> Result<(), S5Error> {
         let network = match &self.network {
             Network::Bitcoin => BitcoinNetwork::Bitcoin,
             _ => BitcoinNetwork::BitcoinTestnet,
@@ -431,29 +455,10 @@ impl BtcSwapTx {
             }
         }
     }
-    fn _has_utxo(&self) -> bool {
+    fn has_utxo(&self) -> bool {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
-    pub fn drain_tx(
-        &self,
-        keys: KeyPairString,
-        preimage: PreimageStates,
-    ) -> Result<Transaction, S5Error> {
-        // if !self.has_utxo(){ Error::new() }
-        // FETCH UTXOS HERE
 
-        match self.kind {
-            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage),
-            SwapTxKind::Refund => {
-                self.sign_refund_tx(keys);
-                Err(S5Error::new(
-                    crate::e::ErrorKind::Wallet,
-                    "Refund transaction signing not supported yet",
-                ))
-            }
-        }
-        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
-    }
     fn sign_claim_tx(
         &self,
         keys: KeyPairString,

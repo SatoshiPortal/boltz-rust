@@ -19,7 +19,7 @@ use boltzclient::{
 #[ignore]
 fn test_liquid_ssi() {
     // https://liquidtestnet.com/faucet
-    let invoice_str = "lntb560u1pjcfqampp59kxkg8nywg50a37ks8v6qau9nv0dmkf825pfxwl3mn8mw4u08p9qdpgxguzq5mrv9kxzgzrdp5hqgzxwfshqur4vd3kjmn0xqrrsscqp79qy9qsqsp5g6p5xc5l5qyk98txtescxw3a768rpcjshf5at9n9jkamxzthsr2ssjxc9hw90kqp0e000xq7y0vwec434xu094adnp2zlq4esjkzecryt7net4cv2mjqjx7euxzetyrkl339dygl3cnmr8h2fq43yuvfnqsqhhukdw";
+    let invoice_str = "lntb500u1pjchejhpp5lpsl9kglag95sd848esm0e8wghv5t9u8y0stj7aq0kyyfvhl899qdq9w3hhqxqyjw5qcqp2sp50chgw33mdrhrqgax52srptdt0kpwswmngexfhucz30ptmh8pzx0qrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq4k5t7aphnpsemxggwxkd0dj7c6le0l9htr750tpekghh458gunrh0s47qpyg4utzh2qhy6jykk9d055pcw9hv98wpz7ncywf67qk2rcpwmpyyj";
 
     let preimage = PreimageStates::from_invoice_str(invoice_str).unwrap();
 
