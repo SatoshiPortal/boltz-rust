@@ -543,7 +543,6 @@ impl LBtcSwapTx {
             additional_generator,
         )
         .unwrap();
-
         let inflation_keys_rangeproof = None;
 
         let witness = TxInWitness {

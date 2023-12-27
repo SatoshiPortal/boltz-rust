@@ -88,7 +88,6 @@ impl PreimageStates {
                 ));
             }
         };
-
         Ok(PreimageStates::from_sha256_str(
             &invoice.payment_hash().to_string(),
         )?)

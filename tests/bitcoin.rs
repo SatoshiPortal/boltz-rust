@@ -20,11 +20,12 @@ use std::{env, str::FromStr};
 
 /// submarine swap integration
 /// Always run this with --no-capture so you get all the data to recover (if needed)
+/// Always update invoice before running
 
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice_str = "lntb500u1pjcjh3npp5llyysjq9a5cpsjrt535vxdg57fm0fjj89vhp4k5jz8kx8t8p9u3qdq9d9h8gxqyjw5qcqp2sp5ucymlq0czg73wgkzdwc70va8kdj3zt2lfgtq3z5javzkz0ptdlpqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqn09n6lg8uvq7lur4e6r0rzy6jep9ja2tw48pn2m97e39c3652qekmx9mupjr0reun3rtcsxfm8fyksztac0zrn6w5q3phgf7tzfxthcqu9ex3q";
+    let invoice_str = "lntb500u1pjchwuypp52jsy60enqpnkdlm806y9ff6uwh44vfyq9ertsnd4kyyzfsr9q8yqdq9wpc8qxqyjw5qcqp2sp5yjpu8m63gfszjazmnl68dl4asa32vx5srgljgq56zazz72m73hmqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq3z9pwkn9d7xyd36sh2n6ndnr4tskwl6x87fc9n58lhmsx4rgwlcyk9y2cwahvty9x6xcmzh6zjm5fxlye2uddf4q2gek0d3vjufkdespadlwkv";
     // ensure the payment hash is the one boltz uses in their swap script
     let preimage_states = PreimageStates::from_invoice_str(invoice_str).unwrap();
 
@@ -39,6 +40,8 @@ fn test_bitcoin_ssi() {
     // SECRETS
     let network_config = NetworkConfig::default_bitcoin();
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
+
+    // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let pair_hash = boltz_pairs
@@ -127,8 +130,11 @@ fn test_bitcoin_rsi() {
     let preimage = PreimageStates::new();
     println!("****SECRETS****:{:?}", preimage.clone());
     // SECRETS
+
     let network_config = NetworkConfig::default_bitcoin();
     let electrum_client = network_config.electrum_url.build_client().unwrap();
+
+    // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let pair_hash = boltz_pairs

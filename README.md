@@ -7,10 +7,10 @@ This repo will soon be converted into a boltz-client library which can be used i
 The goal of this  is to develop a working boltz client that supports:
 
 
-- [ ] normal submarine swaps: Chain->LN for both Bitcoin & Liquid
+- [ ] normal submarine swaps: OnChain->LN for both Bitcoin & Liquid
 Here we will pay an onchain script address for boltz and boltz will pay our LN invoice.
 
-- [ ] reverse submarine swaps LN->Chain for both Bitcoin & Liquid
+- [ ] reverse submarine swaps LN->OnChain for both Bitcoin & Liquid
 Here we will pay an LN invoice to boltz and boltz will fund an onchain script for us to sweep.
 
 ## Script
@@ -91,11 +91,11 @@ For the sake of unifying the implementation challenge, we will look at the stand
 - [x] generate address from the script and check for a match against the `address` provided by boltz
 - [x] ensure our script matches the `redeemScript` provided by boltz
 - [x] pay the `invoice` (use local clightning)
-- [ ] boltz will confirm `invoice` paid and send funds to the `address` creating a utxo that we can spend
+- [x] boltz will confirm `invoice` paid and send funds to the `address` creating a utxo that we can spend
 - [x] construct a transaction/psbt to spend this utxo
 - [x] solve spending conditions: hashlock + signature
 - [x] sweep the utxo to your existing bitcoin wallet
-- [x] once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice` 
+- [x] once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice`
 
 ### Liquid (WIP)
 

@@ -206,9 +206,13 @@ impl BtcSwapScript {
                     Ok(result) => result,
                     Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
                 };
+
                 let sender_pubkey = match PublicKey::from_str(&self.sender_pubkey) {
                     Ok(result) => result,
-                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+                    Err(e) => {
+                        // do more stuff
+                        return Err(S5Error::new(ErrorKind::Input, &e.to_string()));
+                    }
                 };
                 let locktime = LockTime::from_consensus(self.timelock);
                 let hashvalue = match Hash::from_str(&self.hashlock) {
@@ -462,7 +466,7 @@ impl BtcSwapTx {
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo.unwrap(),
-            script_sig: Script::empty().into(), // empty
+            script_sig: Script::empty().into(), // always empty because segwit
             witness: Witness::new(),
         };
 
@@ -480,12 +484,13 @@ impl BtcSwapTx {
         };
 
         // SIGN TRANSACTION
+        let hash_type = bitcoin::sighash::EcdsaSighashType::All;
         let secp = Secp256k1::new();
         let sighash = match SighashCache::new(unsigned_tx.clone()).segwit_signature_hash(
             0,
             &self.swap_script.to_script()?,
             self.utxo_value.unwrap(),
-            bitcoin::sighash::EcdsaSighashType::All,
+            hash_type,
         ) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
@@ -499,10 +504,8 @@ impl BtcSwapTx {
 
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
-        witness.push_bitcoin_signature(
-            &signature.serialize_der(),
-            bitcoin::sighash::EcdsaSighashType::All,
-        );
+
+        witness.push_bitcoin_signature(&signature.serialize_der(), hash_type);
         witness.push(preimage.preimage_bytes.unwrap());
         witness.push(self.swap_script.to_script().unwrap().as_bytes());
 
