@@ -1,7 +1,7 @@
 use std::env;
 
 use boltzclient::{
-    key::{ec::KeyPairString, preimage::PreimageStates},
+    key::{ec::KeyPairString, preimage::Preimage},
     network::electrum::{
         BitcoinNetwork, NetworkConfig, DEFAULT_LIQUID_TESTNET_NODE, DEFAULT_TESTNET_NODE,
     },
@@ -20,7 +20,7 @@ fn test_liquid_ssi() {
     // https://liquidtestnet.com/faucet
     let invoice_str = "lntb500u1pjchejhpp5lpsl9kglag95sd848esm0e8wghv5t9u8y0stj7aq0kyyfvhl899qdq9w3hhqxqyjw5qcqp2sp50chgw33mdrhrqgax52srptdt0kpwswmngexfhucz30ptmh8pzx0qrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq4k5t7aphnpsemxggwxkd0dj7c6le0l9htr750tpekghh458gunrh0s47qpyg4utzh2qhy6jykk9d055pcw9hv98wpz7ncywf67qk2rcpwmpyyj";
 
-    let preimage = PreimageStates::from_invoice_str(invoice_str).unwrap();
+    let preimage = Preimage::from_invoice_str(invoice_str).unwrap();
 
     let _out_amount = 50_000;
 
@@ -96,7 +96,7 @@ fn test_liquid_rsi() {
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("{:?}", keypair);
-    let preimage = PreimageStates::new();
+    let preimage = Preimage::new();
     // SECRETS
     let network_config = NetworkConfig::default_liquid();
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
@@ -111,7 +111,7 @@ fn test_liquid_rsi() {
 
     let request = CreateSwapRequest::new_lbtc_reverse(
         pair_hash,
-        preimage.clone().sha256,
+        preimage.clone().sha256.to_string(),
         keypair.pubkey.clone(),
         out_amount,
     );

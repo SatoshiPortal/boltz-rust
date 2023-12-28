@@ -11,7 +11,7 @@ use electrum_client::ElectrumApi;
 
 use crate::{
     e::{ErrorKind, S5Error},
-    key::{ec::KeyPairString, preimage::PreimageStates},
+    key::{ec::KeyPairString, preimage::Preimage},
     network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::boltz::SwapTxKind,
 };
@@ -391,7 +391,7 @@ impl BtcSwapTx {
     pub fn drain(
         &mut self,
         keys: KeyPairString,
-        preimage: PreimageStates,
+        preimage: Preimage,
         expected_utxo_value: u64,
     ) -> Result<Transaction, S5Error> {
         self.fetch_utxo(expected_utxo_value)?;
@@ -461,7 +461,7 @@ impl BtcSwapTx {
     fn sign_claim_tx(
         &self,
         keys: KeyPairString,
-        preimage: PreimageStates,
+        preimage: Preimage,
     ) -> Result<Transaction, S5Error> {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
@@ -507,7 +507,7 @@ impl BtcSwapTx {
         let mut witness = Witness::new();
 
         witness.push_bitcoin_signature(&signature.serialize_der(), hash_type);
-        witness.push(preimage.preimage_bytes.unwrap());
+        witness.push(preimage.bytes.unwrap());
         witness.push(self.swap_script.to_script().unwrap().as_bytes());
 
         // https://github.com/bitcoin-teleport/teleport-transactions/blob/master/src/wallet_sync.rs#L255

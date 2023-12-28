@@ -4,85 +4,87 @@ use bitcoin::secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
 use lightning_invoice::Bolt11Invoice;
 
 use crate::e::{ErrorKind, S5Error};
-use bitcoin::secp256k1::rand::{thread_rng, Rng};
+use bitcoin::secp256k1::rand::rngs::OsRng;
+use rand_core::RngCore;
 
-fn rnd_str() -> String {
-    let mut rng = thread_rng();
+fn rng_32b() -> [u8; 32] {
     let mut bytes = [0u8; 32];
-    rng.fill(&mut bytes[..]);
-    hex::encode(bytes)
+    OsRng.fill_bytes(&mut bytes);
+    bytes
 }
 
 #[derive(Debug, Clone)]
-pub struct PreimageStates {
-    pub preimage: Option<String>,
-    pub preimage_bytes: Option<Vec<u8>>,
-    pub sha256: String,
-    pub hash160: String,
-    pub sha256_bytes: [u8; 32],
-    pub hash160_bytes: [u8; 20],
+pub struct Preimage {
+    pub bytes: Option<[u8; 32]>,
+    pub sha256: sha256::Hash,
+    pub hash160: hash160::Hash,
 }
 
-impl PreimageStates {
-    pub fn new() -> PreimageStates {
-        let preimage = rnd_str();
-        let sha256 = sha256::Hash::hash(&hex::decode(preimage.clone()).unwrap()).to_string();
-        let hash160 = hash160::Hash::hash(&hex::decode(preimage.clone()).unwrap()).to_string();
-        let preimage_bytes: Vec<u8> = hex::decode(preimage.clone()).unwrap();
+impl Preimage {
+    pub fn new() -> Preimage {
+        let preimage = rng_32b();
+        let sha256 = sha256::Hash::hash(&preimage);
+        let hash160 = hash160::Hash::hash(&preimage);
 
-        let sha256_bytes =
-            sha256::Hash::hash(&hex::decode(preimage.clone()).unwrap()).to_byte_array();
-        let hash160_bytes =
-            hash160::Hash::hash(&hex::decode(preimage.clone()).unwrap()).to_byte_array();
-
-        PreimageStates {
-            preimage: Some(preimage),
-            sha256,
-            hash160,
-            preimage_bytes: Some(preimage_bytes),
-            sha256_bytes,
-            hash160_bytes,
+        Preimage {
+            bytes: Some(preimage),
+            sha256: sha256,
+            hash160: hash160,
         }
     }
 
-    pub fn from_str(preimage: &str) -> Result<PreimageStates, S5Error> {
-        let sha256 = match &hex::decode(preimage) {
-            Ok(result) => sha256::Hash::hash(result),
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-        let hash160 = match &hex::decode(preimage) {
-            Ok(result) => hash160::Hash::hash(result),
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-        let preimage_bytes: Vec<u8> = hex::decode(preimage).unwrap();
+    pub fn from_str(preimage: &str) -> Result<Preimage, S5Error> {
+        // Check if the input string is exactly 64 characters (32 bytes)
+        if preimage.len() != 64 {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "Preimage input is not 32 bytes",
+            ));
+        }
 
-        Ok(PreimageStates {
-            preimage: Some(preimage.to_string()),
-            preimage_bytes: Some(preimage_bytes),
-            sha256: sha256.to_string(),
-            hash160: hash160.to_string(),
-            sha256_bytes: sha256.to_byte_array(),
-            hash160_bytes: hash160.to_byte_array(),
+        let decoded = match hex::decode(preimage) {
+            Ok(decoded) => decoded,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+
+        // Ensure the decoded bytes are exactly 32 bytes long
+        let preimage_bytes: [u8; 32] = match decoded.try_into() {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return Err(S5Error::new(
+                    ErrorKind::Input,
+                    "Decoded Preimage input is not 32 bytes",
+                ))
+            }
+        };
+
+        let sha256 = sha256::Hash::hash(&preimage_bytes);
+        let hash160 = hash160::Hash::hash(&preimage_bytes);
+
+        Ok(Preimage {
+            bytes: Some(preimage_bytes),
+            sha256: sha256,
+            hash160: hash160,
         })
     }
 
-    pub fn from_sha256_str(preimage_sha256: &str) -> Result<PreimageStates, S5Error> {
+    pub fn from_sha256_str(preimage_sha256: &str) -> Result<Preimage, S5Error> {
         let sha256 = match sha256::Hash::from_str(preimage_sha256) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
-        let hash160 = ripemd160::Hash::hash(sha256.as_byte_array());
-
-        Ok(PreimageStates {
-            preimage: None,
-            sha256: sha256.to_string(),
-            hash160: hash160.to_string(),
-            preimage_bytes: None,
-            sha256_bytes: sha256.to_byte_array(),
-            hash160_bytes: hash160.to_byte_array(),
+        let hash160 = hash160::Hash::from_slice(
+            ripemd160::Hash::hash(sha256.as_byte_array()).as_byte_array(),
+        )
+        .unwrap();
+        // will never fail as long as sha256 is a valid sha256::Hash
+        Ok(Preimage {
+            bytes: None,
+            sha256: sha256,
+            hash160: hash160,
         })
     }
-    pub fn from_invoice_str(invoice_str: &str) -> Result<PreimageStates, S5Error> {
+    pub fn from_invoice_str(invoice_str: &str) -> Result<Preimage, S5Error> {
         let invoice = match Bolt11Invoice::from_str(&invoice_str) {
             Ok(invoice) => invoice,
             Err(e) => {
@@ -93,8 +95,14 @@ impl PreimageStates {
                 ));
             }
         };
-        Ok(PreimageStates::from_sha256_str(
+        Ok(Preimage::from_sha256_str(
             &invoice.payment_hash().to_string(),
         )?)
+    }
+    pub fn to_string(&self) -> Option<String> {
+        match &self.bytes {
+            Some(result) => Some(hex::encode(result)),
+            None => None,
+        }
     }
 }

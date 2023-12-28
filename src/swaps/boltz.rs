@@ -1,3 +1,4 @@
+use bitcoin::hashes::{hash160, sha256};
 use lightning_invoice::Bolt11Invoice;
 use reqwest;
 use serde::Serializer;
@@ -460,7 +461,7 @@ pub struct CreateSwapResponse {
 }
 
 impl CreateSwapResponse {
-    pub fn validate_invoice_preimage256(&self, preimage_sha256: String) -> bool {
+    pub fn validate_invoice_preimage256(&self, preimage_sha256: sha256::Hash) -> bool {
         match &self.invoice {
             Some(invoice_str) => {
                 let invoice = match Bolt11Invoice::from_str(&invoice_str) {
@@ -470,7 +471,7 @@ impl CreateSwapResponse {
                         return false;
                     }
                 };
-                if &invoice.payment_hash().to_string() == &preimage_sha256 {
+                if &invoice.payment_hash().to_string() == &preimage_sha256.to_string() {
                     true
                 } else {
                     println!(
@@ -484,7 +485,7 @@ impl CreateSwapResponse {
             None => false,
         }
     }
-    pub fn validate_script_preimage160(&self, preimage_hash160: String) -> bool {
+    pub fn validate_script_preimage160(&self, preimage_hash160: hash160::Hash) -> bool {
         match &self.redeem_script {
             Some(rs) => {
                 let script_elements = match BtcSwapScript::submarine_from_str(
@@ -500,7 +501,7 @@ impl CreateSwapResponse {
                     }
                 };
                 // println!("{}-m----m-{}", script_elements.hashlock, preimage_hash160);
-                if &script_elements.hashlock == &preimage_hash160 {
+                if &script_elements.hashlock == &preimage_hash160.to_string() {
                     true
                 } else {
                     println!(
@@ -542,7 +543,7 @@ mod tests {
     use bitcoin::secp256k1::hashes::{sha256, Hash};
 
     use super::*;
-    use crate::key::{ec::KeyPairString, preimage::PreimageStates};
+    use crate::key::{ec::KeyPairString, preimage::Preimage};
 
     #[test]
     fn test_get_pairs() {
@@ -629,7 +630,7 @@ mod tests {
                 .to_string(),
         };
 
-        let preimage = PreimageStates::new();
+        let preimage = Preimage::new();
         println!("Preimage: {:?}", preimage);
 
         let pair_hash =
@@ -637,7 +638,7 @@ mod tests {
 
         let request = CreateSwapRequest::new_btc_reverse(
             pair_hash,
-            preimage.sha256.clone(),
+            preimage.sha256.to_string(),
             claim_key_pair.pubkey,
             100_000,
         );
@@ -664,7 +665,7 @@ mod tests {
                 .to_string(),
         };
 
-        let preimage = PreimageStates::new();
+        let preimage = Preimage::new();
         println!("Preimage: {:?}", preimage);
 
         let pair_hash =
@@ -672,7 +673,7 @@ mod tests {
 
         let request = CreateSwapRequest::new_btc_reverse(
             pair_hash,
-            preimage.sha256.clone(),
+            preimage.sha256.clone().to_string(),
             claim_key_pair.pubkey,
             100_000,
         );
