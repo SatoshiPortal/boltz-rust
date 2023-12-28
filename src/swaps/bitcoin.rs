@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use bitcoin::secp256k1::{Message, Secp256k1};
+use bitcoin::secp256k1::{KeyPair, Message, Secp256k1};
 use bitcoin::{
     blockdata::script::{Builder, Instruction, Script, ScriptBuf},
     opcodes::{all::*, OP_0},
@@ -11,7 +11,7 @@ use electrum_client::ElectrumApi;
 
 use crate::{
     e::{ErrorKind, S5Error},
-    key::{ec::KeyPairString, preimage::Preimage},
+    key::preimage::Preimage,
     network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::boltz::SwapTxKind,
 };
@@ -390,7 +390,7 @@ impl BtcSwapTx {
     }
     pub fn drain(
         &mut self,
-        keys: KeyPairString,
+        keys: KeyPair,
         preimage: Preimage,
         expected_utxo_value: u64,
     ) -> Result<Transaction, S5Error> {
@@ -458,11 +458,7 @@ impl BtcSwapTx {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
 
-    fn sign_claim_tx(
-        &self,
-        keys: KeyPairString,
-        preimage: Preimage,
-    ) -> Result<Transaction, S5Error> {
+    fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage) -> Result<Transaction, S5Error> {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
         let unsigned_input: TxIn = TxIn {
@@ -501,7 +497,7 @@ impl BtcSwapTx {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
-        let signature = secp.sign_ecdsa(&sighash_message, &keys.to_typed().secret_key());
+        let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
 
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
@@ -530,7 +526,7 @@ impl BtcSwapTx {
 
         Ok(signed_tx)
     }
-    fn sign_refund_tx(&self, _keys: KeyPairString) -> () {
+    fn sign_refund_tx(&self, _keys: KeyPair) -> () {
         // submarine
         ()
     }
@@ -669,18 +665,17 @@ mod tests {
         // };
     }
 
-    use crate::key::ec::KeyPairString;
-
     #[test]
     fn test_decode_encode_swap_redeem_script() {
+        let secp = Secp256k1::new();
         let redeem_script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
         let expected_address = "2MxkD9NtLhU4iRAUw8G6B83SiHxDESGfDac";
         let expected_timeout = 2542048;
-        let sender_key_pair = KeyPairString {
-            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
-            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d"
-                .to_string(),
-        };
+        let sender_key_pair = KeyPair::from_seckey_str(
+            &secp,
+            "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
+        )
+        .unwrap();
         let decoded = BtcSwapScript::submarine_from_str(
             BitcoinNetwork::BitcoinTestnet,
             DEFAULT_TESTNET_NODE.to_owned(),
@@ -688,7 +683,7 @@ mod tests {
         )
         .unwrap();
         println!("{:?}", decoded);
-        assert!(decoded.sender_pubkey == sender_key_pair.pubkey);
+        assert!(decoded.sender_pubkey == sender_key_pair.public_key().to_string());
         assert!(decoded.timelock == expected_timeout);
 
         let encoded = BtcSwapScript {

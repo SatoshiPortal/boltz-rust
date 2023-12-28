@@ -540,8 +540,10 @@ pub struct GetFeeEstimationResponse {
 
 #[cfg(test)]
 mod tests {
+    use bitcoin::secp256k1::{KeyPair, Secp256k1};
+
     use super::*;
-    use crate::key::{ec::KeyPairString, preimage::Preimage};
+    use crate::key::preimage::Preimage;
 
     #[test]
     fn test_get_pairs() {
@@ -582,17 +584,22 @@ mod tests {
     #[ignore]
     /// updated invoice before running
     fn test_create_bitcoin_submarine() {
+        let secp = Secp256k1::new();
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let invoice = "lntb501u1pjh67z3pp539hhfy9vk70yde3m0lkp838l2y0xqskmf5cwm8ng25rqp8asncmsdq8w3jhxaqxqyjw5qcqp2sp59dsnqt4ecde2frjn5zrnw6cunryadzv3p386glz8l7uj37pnwnvsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq4esj2vvneu5y4e8qtheyxmepjgg5turmxccgmuks78l08m9wguvhvw2yvrftfjh6tzaxy57mty3zsvg3jveazfxs60e6acn989pzdlspafd52g".to_string();
 
-        let refund_key_pair = KeyPairString {
-            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
-            pubkey: "023946267e8f3eeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d".to_string(),
-        };
+        let refund_key_pair = KeyPair::from_seckey_str(
+            &secp,
+            "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
+        )
+        .unwrap();
         let pair_hash =
             "a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5".to_string();
-        let request =
-            CreateSwapRequest::new_btc_submarine(pair_hash, invoice, refund_key_pair.pubkey);
+        let request = CreateSwapRequest::new_btc_submarine(
+            pair_hash,
+            invoice,
+            refund_key_pair.public_key().to_string(),
+        );
         println!("{:?}", serde_json::to_string(&request));
         let response = client.create_swap(request);
         println!("RESPONSE: {:?}", response);
@@ -615,13 +622,14 @@ mod tests {
     #[ignore]
     /// No changes required to run
     fn test_create_bitcoin_reverse() {
-        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let claim_key_pair = KeyPairString {
-            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
-            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d"
-                .to_string(),
-        };
+        let secp = Secp256k1::new();
 
+        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
+        let claim_key_pair = KeyPair::from_seckey_str(
+            &secp,
+            "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
+        )
+        .unwrap();
         let preimage = Preimage::new();
         println!("Preimage: {:?}", preimage);
 
@@ -631,7 +639,7 @@ mod tests {
         let request = CreateSwapRequest::new_btc_reverse(
             pair_hash,
             preimage.sha256.to_string(),
-            claim_key_pair.pubkey,
+            claim_key_pair.public_key().to_string(),
             100_000,
         );
         let response = client.create_swap(request);
@@ -650,12 +658,14 @@ mod tests {
     #[ignore]
     /// No changes required to run
     fn test_liquid_reverse() {
+        let secp = Secp256k1::new();
+
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let claim_key_pair = KeyPairString {
-            seckey: "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0".to_string(),
-            pubkey: "023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d"
-                .to_string(),
-        };
+        let claim_key_pair = KeyPair::from_seckey_str(
+            &secp,
+            "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
+        )
+        .unwrap();
 
         let preimage = Preimage::new();
         println!("Preimage: {:?}", preimage);
@@ -666,7 +676,7 @@ mod tests {
         let request = CreateSwapRequest::new_btc_reverse(
             pair_hash,
             preimage.sha256.clone().to_string(),
-            claim_key_pair.pubkey,
+            claim_key_pair.public_key().to_string(),
             100_000,
         );
         let response = client.create_swap(request);

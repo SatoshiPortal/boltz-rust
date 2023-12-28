@@ -1,7 +1,7 @@
 use electrum_client::ElectrumApi;
 use std::str::FromStr;
 
-use bitcoin::script::Script as BitcoinScript;
+use bitcoin::{script::Script as BitcoinScript, secp256k1::KeyPair};
 use elements::{
     confidential::Nonce,
     secp256k1_zkp::{Generator, PedersenCommitment, RangeProof, Secp256k1, Tag, Tweak},
@@ -14,7 +14,7 @@ use elements::secp256k1_zkp::Message;
 
 use crate::{
     e::{ErrorKind, S5Error},
-    key::{ec::KeyPairString, preimage::Preimage},
+    key::preimage::Preimage,
     network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::boltz::SwapTxKind,
 };
@@ -386,7 +386,7 @@ impl LBtcSwapTx {
 
     pub fn drain_tx(
         &mut self,
-        keys: KeyPairString,
+        keys: KeyPair,
         preimage: Preimage,
         blinding_keys: BlindingKeyPair,
     ) -> Result<Transaction, S5Error> {
@@ -440,7 +440,7 @@ impl LBtcSwapTx {
 
     fn sign_claim_tx(
         &self,
-        keys: KeyPairString,
+        keys: KeyPair,
         preimage: Preimage,
         _blinding_keys: BlindingKeyPair,
     ) -> Transaction {
@@ -517,7 +517,7 @@ impl LBtcSwapTx {
             )[..],
         )
         .unwrap();
-        let signature = secp.sign_ecdsa(&sighash, &keys.to_typed().secret_key());
+        let signature = secp.sign_ecdsa(&sighash, &keys.secret_key());
 
         let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
         script_witness.push(hex::decode(&signature.serialize_der().to_string()).unwrap());
@@ -539,7 +539,7 @@ impl LBtcSwapTx {
             blinding_factor,
             message,
             additional_commitment,
-            keys.to_typed().secret_key(),
+            keys.secret_key(),
             exp,
             min_bits,
             additional_generator,
@@ -571,7 +571,7 @@ impl LBtcSwapTx {
         };
         signed_tx
     }
-    fn sign_refund_tx(&self, _keys: KeyPairString) -> () {
+    fn sign_refund_tx(&self, _keys: KeyPair) -> () {
         ()
     }
 }
@@ -599,6 +599,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_liquid_rev_tx() {
+        let secp = Secp256k1::new();
         const RETURN_ADDRESS: &str =
             "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
 
@@ -612,11 +613,11 @@ mod tests {
         .unwrap();
 
         let _id = "s9EBbv";
-        let _my_key_pair = KeyPairString {
-            seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1".to_string(),
-            pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986"
-                .to_string(),
-        };
+        let _my_key_pair = KeyPair::from_seckey_str(
+            &secp,
+            "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1",
+        )
+        .unwrap();
         let preimage =
             Preimage::from_str("a323c8c5abadca53bb4b732d62d0486ba49ecab7e340d2b44aac13ac813fed29")
                 .unwrap();
@@ -663,11 +664,11 @@ mod tests {
     LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None } , LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None }
      */
 
-    use crate::key::ec::KeyPairString;
     use std::str::FromStr;
 
     #[test]
     fn test_liquid_swap_elements() {
+        let secp = Secp256k1::new();
         let redeem_script_str = "8201208763a914fc9eeab62b946bd3e9681c082ac2b6d0bccea80f88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750315f411b1752102285c72dca7aaa31d58334e20be181cfa2cb8eb8092a577ef6f77bba068b8c69868ac".to_string();
         let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwkxqf8psf3e56k2k7393r3tkllznsdpphqa33rdvz00va429jq6j2zzg8f59kqhex";
         let expected_timeout = 1176597;
@@ -678,11 +679,11 @@ mod tests {
         .unwrap();
 
         let _id = "axtHXB";
-        let my_key_pair = KeyPairString {
-            seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1".to_string(),
-            pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986"
-                .to_string(),
-        };
+        let my_key_pair = KeyPair::from_seckey_str(
+            &secp,
+            "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1",
+        )
+        .unwrap();
         let decoded = LBtcSwapScript::reverse_from_str(
             BitcoinNetwork::LiquidTestnet,
             DEFAULT_LIQUID_TESTNET_NODE.to_string(),
@@ -690,7 +691,10 @@ mod tests {
         )
         .unwrap();
         // println!("{:?}", decoded);
-        assert_eq!(decoded.reciever_pubkey, my_key_pair.pubkey);
+        assert_eq!(
+            decoded.reciever_pubkey,
+            my_key_pair.public_key().to_string()
+        );
         assert_eq!(decoded.timelock, expected_timeout);
 
         let script_elements = LBtcSwapScript {

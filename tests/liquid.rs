@@ -1,7 +1,7 @@
 use std::env;
 
 use boltzclient::{
-    key::{ec::KeyPairString, preimage::Preimage},
+    key::{derivation::ChildKeys, preimage::Preimage},
     network::electrum::{
         BitcoinNetwork, NetworkConfig, DEFAULT_LIQUID_TESTNET_NODE, DEFAULT_TESTNET_NODE,
     },
@@ -26,7 +26,9 @@ fn test_liquid_ssi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
+    let keypair = ChildKeys::from_submarine_account(&mnemonic, 1)
+        .unwrap()
+        .keypair;
     println!("{:?}", keypair);
     // SECRETS
     let network_config = NetworkConfig::default_liquid();
@@ -43,7 +45,7 @@ fn test_liquid_ssi() {
     let request = CreateSwapRequest::new_lbtc_submarine(
         pair_hash,
         invoice_str.to_string(),
-        keypair.pubkey.clone(),
+        keypair.public_key().to_string().clone(),
     );
     let response = boltz_client.create_swap(request);
     println!("{:?}", response);
@@ -94,7 +96,9 @@ fn test_liquid_rsi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
+    let keypair = ChildKeys::from_reverse_account(&mnemonic, 1)
+        .unwrap()
+        .keypair;
     println!("{:?}", keypair);
     let preimage = Preimage::new();
     // SECRETS
@@ -112,7 +116,7 @@ fn test_liquid_rsi() {
     let request = CreateSwapRequest::new_lbtc_reverse(
         pair_hash,
         preimage.clone().sha256.to_string(),
-        keypair.pubkey.clone(),
+        keypair.public_key().to_string().clone(),
         out_amount,
     );
     let response = boltz_client.create_swap(request);
@@ -153,7 +157,7 @@ fn test_liquid_rsi() {
         DEFAULT_LIQUID_TESTNET_NODE.to_string(),
         boltzclient::swaps::boltz::SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
-        keypair.pubkey.clone(),
+        keypair.public_key().to_string().clone(),
         timeout as u32,
         boltz_script_elements.sender_pubkey.clone(),
     );

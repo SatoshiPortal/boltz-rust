@@ -1,8 +1,9 @@
 // mod bullbitcoin_rnd;
 // extern crate libbullwallet;
 
+use bitcoin::secp256k1::{KeyPair, Secp256k1};
 use boltzclient::{
-    key::{ec::KeyPairString, preimage::Preimage},
+    key::{derivation::ChildKeys, preimage::Preimage},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
         bitcoin::{BtcSwapScript, BtcSwapTx},
@@ -37,11 +38,16 @@ fn test_bitcoin_ssi() {
     let invoice_str = "lntb500u1pjch47vpp5uwzfvyng6kvp87qny8eyn7rxq0qzlqtzsgg8dgg0rgpa983n426qdqyda5sxqyjw5qcqp2sp5taxx2vtk6wsyq827rc42ccf0d2amsmlghvssaf4d4equwgnef05srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqgwy0l9y88r46895228vjl9lr8f30msypptf6tvew384cz2dmsjrr4vfqv34p76lv0yg2kqrt7ra0trjeywwd50yeleyntc2wfn45j0qpyqxfns";
     // ensure the payment hash is the one boltz uses in their swap script
     let preimage_states = Preimage::from_invoice_str(invoice_str).unwrap();
-
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
-    println!("****SECRETS****:{:?}", keypair);
+    let keypair = ChildKeys::from_submarine_account(&mnemonic, 1)
+        .unwrap()
+        .keypair;
+    println!(
+        "****SECRETS****:\n sec: {:?}, pub: {:?}",
+        keypair.display_secret(),
+        keypair.public_key()
+    );
     // SECRETS
     let network_config = NetworkConfig::default_bitcoin();
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
@@ -59,7 +65,7 @@ fn test_bitcoin_ssi() {
     let request = CreateSwapRequest::new_btc_submarine(
         pair_hash,
         invoice_str.to_string(),
-        keypair.pubkey.clone(),
+        keypair.public_key().to_string().clone(),
     );
     let response = boltz_client.create_swap(request);
     assert!(response
@@ -107,7 +113,7 @@ fn test_bitcoin_ssi() {
         preimage_states.hash160.to_string(),
         boltz_script.reciever_pubkey.clone(),
         timeout as u32,
-        keypair.pubkey.clone(),
+        keypair.public_key().to_string().clone(),
     );
 
     println!("{:?}", boltz_script);
@@ -135,10 +141,19 @@ fn test_bitcoin_rsi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
-    println!("****SECRETS****:{:?}", keypair);
+    let keypair = ChildKeys::from_reverse_account(&mnemonic, 1)
+        .unwrap()
+        .keypair;
+    println!(
+        "****SECRETS****:\n sec: {:?}, pub: {:?}",
+        keypair.display_secret(),
+        keypair.public_key()
+    );
     let preimage = Preimage::new();
-    println!("****SECRETS****:{:?}", preimage.clone());
+    println!(
+        "****SECRETS****:\n preimage: {:?}",
+        preimage.to_string().clone()
+    );
     // SECRETS
 
     let network_config = NetworkConfig::default_bitcoin();
@@ -157,7 +172,7 @@ fn test_bitcoin_rsi() {
     let request = CreateSwapRequest::new_btc_reverse(
         pair_hash,
         preimage.clone().sha256.to_string(),
-        keypair.pubkey.clone(),
+        keypair.public_key().to_string().clone(),
         // timeout as u64,
         out_amount,
     );
@@ -198,7 +213,7 @@ fn test_bitcoin_rsi() {
         DEFAULT_TESTNET_NODE.to_owned(),
         SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
-        keypair.pubkey.clone(),
+        keypair.public_key().to_string().clone(),
         timeout as u32,
         boltz_rev_script.sender_pubkey.clone(),
     );
@@ -266,12 +281,15 @@ fn test_bitcoin_rsi() {
 #[test]
 #[ignore]
 fn test_recover_bitcoin_rsi() {
+    let secp = Secp256k1::new();
     const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
     let out_amount = 50_000;
-    let keypair = KeyPairString {
-        seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1".to_string(),
-        pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986".to_string(),
-    };
+    let keypair = KeyPair::from_seckey_str(
+        &secp,
+        "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1",
+    )
+    .unwrap();
+
     let preimage =
         Preimage::from_str("898396fe53c58375cf8a5a8cfead2a285dc4b5b84cd149800914fc60c9f3a70b")
             .unwrap();
