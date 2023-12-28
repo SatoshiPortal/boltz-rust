@@ -1,9 +1,11 @@
 use bitcoin::bip32::ExtendedPrivKey;
+use bitcoin::secp256k1::hashes::sha256;
+use bitcoin::secp256k1::schnorr::Signature;
+use bitcoin::secp256k1::Secp256k1;
+use bitcoin::secp256k1::{
+    ecdh::SharedSecret, KeyPair, Message, PublicKey, SecretKey, XOnlyPublicKey,
+};
 use bitcoin::Network;
-use secp256k1::hashes::sha256;
-use secp256k1::schnorr::Signature;
-use secp256k1::Secp256k1;
-use secp256k1::{ecdh::SharedSecret, KeyPair, Message, PublicKey, SecretKey, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 

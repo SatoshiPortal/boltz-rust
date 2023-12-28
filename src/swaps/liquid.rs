@@ -10,7 +10,7 @@ use elements::{
     TxOutWitness, Txid,
 };
 
-use secp256k1::Message;
+use elements::secp256k1_zkp::Message;
 
 use crate::{
     e::{ErrorKind, S5Error},
@@ -26,6 +26,7 @@ pub const DEFAULT_SURJECTIONPROOF_SIZE: u64 = 135;
 pub const DEFAULT_RANGEPROOF_SIZE: u64 = 4174;
 use bitcoin::hashes::hash160::Hash;
 use bitcoin::PublicKey;
+use elements::secp256k1_zkp::PublicKey as NoncePublicKey;
 use elements::{
     address::Address as EAddress,
     opcodes::all::*,
@@ -33,7 +34,6 @@ use elements::{
     secp256k1_zkp::PublicKey as ZKPublicKey,
     AddressParams, LockTime,
 };
-use secp256k1::PublicKey as NoncePublicKey;
 
 use crate::key::ec::BlindingKeyPair;
 
@@ -445,26 +445,26 @@ impl LBtcSwapTx {
         _blinding_keys: BlindingKeyPair,
     ) -> Transaction {
         /*
-         *
-         * NOTES:
-         *
-         * decodetransaction additional fields in liquid
-            "is_pegin": false,
-            "value-minimum": 0.00000001,
-            "value-maximum": 687.19476736,
-            "ct-exponent": 0,
-            "ct-bits": 36,
-            "valuecommitment": "0844778d24db8b3454924e3b77d2aa00b4bd57bc20cb852a65238a336b93db7ac6",
-            "assetcommitment": "0b96a62e05fcf65a50ad58643a603f21bb033172336c653840accbae54e9fe7dd7",
-            "commitmentnonce": "02acc6606bdd8c65bdaeadf1eefec726d0d3b777586922b6255c557bb8e43ac946",
-            "commitmentnonce_fully_valid": true,
+        *
+        * NOTES:
+        *
+        * decodetransaction additional fields in liquid
+           "is_pegin": false,
+           "value-minimum": 0.00000001,
+           "value-maximum": 687.19476736,
+           "ct-exponent": 0,
+           "ct-bits": 36,
+           "valuecommitment": "0844778d24db8b3454924e3b77d2aa00b4bd57bc20cb852a65238a336b93db7ac6",
+           "assetcommitment": "0b96a62e05fcf65a50ad58643a603f21bb033172336c653840accbae54e9fe7dd7",
+           "commitmentnonce": "02acc6606bdd8c65bdaeadf1eefec726d0d3b777586922b6255c557bb8e43ac946",
+           "commitmentnonce_fully_valid": true,
 
 
-            In Liquid, the fee is explicitly stated as a vout. 
-            It is not derived from deducting the vout total from the vin total like in Bitcoin.
-         *
-         * 
-         */
+           In Liquid, the fee is explicitly stated as a vout.
+           It is not derived from deducting the vout total from the vin total like in Bitcoin.
+        *
+        *
+        */
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,

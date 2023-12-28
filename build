@@ -1,5 +1,0 @@
-#!/bin/bash
-
-docker build --platform linux/x86_64 --build-arg USER_ID=$(id -u) -t bwcbuilder . 
-# in the project root directory run:
-docker run --platform linux/x86_64 --name bwcbuilder01 -v $PWD:/bullwallet-core bwcbuilder && docker stop bwcbuilder01 && docker rm bwcbuilder01

@@ -1,4 +1,4 @@
-use secp256k1::rand::{thread_rng, Rng};
+use bitcoin::secp256k1::rand::{thread_rng, Rng};
 use std::io;
 use std::io::Write;
 

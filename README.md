@@ -1,13 +1,9 @@
-# bullbitcoin-rnd
+# boltz-client
 
-```
-This repo will soon be converted into a boltz-client library which can be used in rust and flutter clients.
-```
-
-The goal of this  is to develop a working boltz client that supports:
+The goal of this  is to develop a working boltz client in rust that supports:
 
 
-- [ ] normal submarine swaps: OnChain->LN for both Bitcoin & Liquid
+- [x] normal submarine swaps: OnChain->LN for both Bitcoin & Liquid
 Here we will pay an onchain script address for boltz and boltz will pay our LN invoice.
 
 - [ ] reverse submarine swaps LN->OnChain for both Bitcoin & Liquid

@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use bitcoin::secp256k1::{Message, Secp256k1};
 use bitcoin::{
     blockdata::script::{Builder, Instruction, Script, ScriptBuf},
     opcodes::{all::*, OP_0},
@@ -7,7 +8,6 @@ use bitcoin::{
 };
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
 use electrum_client::ElectrumApi;
-use secp256k1::{Message, Secp256k1};
 
 use crate::{
     e::{ErrorKind, S5Error},
@@ -564,12 +564,12 @@ mod tests {
     use crate::util::pause_and_wait;
     use bitcoin::opcodes::all::{OP_EQUAL, OP_HASH160};
     use bitcoin::script::Builder;
+    use bitcoin::secp256k1::hashes::{hash160, Hash};
     use bitcoin::{
         absolute::LockTime, Address, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxOut,
         Witness,
     };
     use electrum_client::ElectrumApi;
-    use secp256k1::hashes::{hash160, Hash};
     use std::str::FromStr;
 
     #[test]

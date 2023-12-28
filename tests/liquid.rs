@@ -1,4 +1,3 @@
-use dotenv::dotenv;
 use std::env;
 
 use boltzclient::{
@@ -25,12 +24,8 @@ fn test_liquid_ssi() {
 
     let _out_amount = 50_000;
 
-    dotenv().ok();
     // SECRETS
-    let mnemonic = match env::var("MNEMONIC") {
-        Ok(result) => result,
-        Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
-    };
+    let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("{:?}", keypair);
     // SECRETS
@@ -97,12 +92,8 @@ fn test_liquid_rsi() {
         "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
     let out_amount = 50_000;
 
-    dotenv().ok();
     // SECRETS
-    let mnemonic = match env::var("MNEMONIC") {
-        Ok(result) => result,
-        Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
-    };
+    let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("{:?}", keypair);
     let preimage = PreimageStates::new();

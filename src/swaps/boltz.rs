@@ -4,8 +4,8 @@ use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::str::FromStr;
-use std::time::Duration;
-use ureq::{Agent, AgentBuilder, Error};
+// use std::time::Duration;
+// use ureq::{Agent, AgentBuilder, Error};
 
 use crate::e::{ErrorKind, S5Error};
 
@@ -539,7 +539,7 @@ pub struct GetFeeEstimationResponse {
 
 #[cfg(test)]
 mod tests {
-    use secp256k1::hashes::{sha256, Hash};
+    use bitcoin::secp256k1::hashes::{sha256, Hash};
 
     use super::*;
     use crate::{key::ec::KeyPairString, util::rnd_str};

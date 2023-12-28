@@ -12,7 +12,6 @@ use boltzclient::{
     },
     util::pause_and_wait,
 };
-use dotenv::dotenv;
 use electrum_client::ElectrumApi;
 use lightning_invoice::Bolt11Invoice;
 
@@ -29,12 +28,8 @@ fn test_bitcoin_ssi() {
     // ensure the payment hash is the one boltz uses in their swap script
     let preimage_states = PreimageStates::from_invoice_str(invoice_str).unwrap();
 
-    dotenv().ok();
     // SECRETS
-    let mnemonic = match env::var("MNEMONIC") {
-        Ok(result) => result,
-        Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
-    };
+    let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("****SECRETS****:{:?}", keypair);
     // SECRETS
@@ -128,12 +123,8 @@ fn test_bitcoin_rsi() {
     const RETURN_ADDRESS: &str = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu";
     let out_amount = 50_000;
 
-    dotenv().ok();
     // SECRETS
-    let mnemonic = match env::var("MNEMONIC") {
-        Ok(result) => result,
-        Err(e) => panic!("Couldn't read MNEMONIC ({})", e),
-    };
+    let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
     let keypair = KeyPairString::from_mnemonic(mnemonic, "".to_string(), 1).unwrap();
     println!("****SECRETS****:{:?}", keypair);
     let preimage = PreimageStates::new();
