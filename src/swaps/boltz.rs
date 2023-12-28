@@ -8,9 +8,9 @@ use std::str::FromStr;
 // use std::time::Duration;
 // use ureq::{Agent, AgentBuilder, Error};
 
-use crate::e::{ErrorKind, S5Error};
+use crate::util::error::{ErrorKind, S5Error};
 
-use crate::network::electrum::{BitcoinNetwork, DEFAULT_MAINNET_NODE, DEFAULT_TESTNET_NODE};
+use crate::network::electrum::{BitcoinNetwork, DEFAULT_MAINNET_NODE};
 use crate::swaps::bitcoin::BtcSwapScript;
 
 pub const BOLTZ_TESTNET_URL: &str = "https://api.testnet.boltz.exchange";
@@ -543,7 +543,7 @@ mod tests {
     use bitcoin::secp256k1::{KeyPair, Secp256k1};
 
     use super::*;
-    use crate::key::preimage::Preimage;
+    use crate::util::preimage::Preimage;
 
     #[test]
     fn test_get_pairs() {

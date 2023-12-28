@@ -13,10 +13,12 @@ use elements::{
 use elements::secp256k1_zkp::Message;
 
 use crate::{
-    e::{ErrorKind, S5Error},
-    key::preimage::Preimage,
     network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::boltz::SwapTxKind,
+    util::{
+        error::{ErrorKind, S5Error},
+        preimage::Preimage,
+    },
 };
 
 pub const DUST_VALUE: u64 = 546;
@@ -35,7 +37,7 @@ use elements::{
     AddressParams, LockTime,
 };
 
-use crate::key::ec::BlindingKeyPair;
+use crate::util::ec::BlindingKeyPair;
 
 use super::boltz::SwapType;
 #[derive(Debug, Clone, PartialEq)]
@@ -393,7 +395,7 @@ impl LBtcSwapTx {
         // self.fetch_utxo();
         if !self.has_utxo() {
             return Err(S5Error::new(
-                crate::e::ErrorKind::Transaction,
+                ErrorKind::Transaction,
                 "No utxos available yet",
             ));
         }
@@ -402,7 +404,7 @@ impl LBtcSwapTx {
             SwapTxKind::Refund => {
                 self.sign_refund_tx(keys);
                 Err(S5Error::new(
-                    crate::e::ErrorKind::Transaction,
+                    ErrorKind::Transaction,
                     "Refund transaction signing not supported yet",
                 ))
             }
@@ -588,7 +590,7 @@ fn _mock_pubkey() -> elements::secp256k1_zkp::PublicKey {
 }
 #[cfg(test)]
 mod tests {
-    use crate::{key::ec::BlindingKeyPair, network::electrum::DEFAULT_LIQUID_TESTNET_NODE};
+    use crate::{network::electrum::DEFAULT_LIQUID_TESTNET_NODE, util::ec::BlindingKeyPair};
 
     use super::*;
     use elements::pset::serialize::Serialize;

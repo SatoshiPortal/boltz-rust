@@ -1,14 +1,10 @@
-use std::env;
-
 use boltzclient::{
-    key::{derivation::ChildKeys, preimage::Preimage},
-    network::electrum::{
-        BitcoinNetwork, NetworkConfig, DEFAULT_LIQUID_TESTNET_NODE, DEFAULT_TESTNET_NODE,
-    },
+    network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_LIQUID_TESTNET_NODE},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
         liquid::LBtcSwapScript,
     },
+    util::{derivation::ChildKeys, preimage::Preimage},
 };
 // use elements::Address;
 

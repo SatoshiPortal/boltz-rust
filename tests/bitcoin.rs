@@ -3,7 +3,6 @@
 
 use bitcoin::secp256k1::{KeyPair, Secp256k1};
 use boltzclient::{
-    key::{derivation::ChildKeys, preimage::Preimage},
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
         bitcoin::{BtcSwapScript, BtcSwapTx},
@@ -11,6 +10,7 @@ use boltzclient::{
             BoltzApiClient, CreateSwapRequest, SwapStatusRequest, SwapType, BOLTZ_TESTNET_URL,
         },
     },
+    util::{derivation::ChildKeys, preimage::Preimage},
 };
 use electrum_client::ElectrumApi;
 use lightning_invoice::Bolt11Invoice;

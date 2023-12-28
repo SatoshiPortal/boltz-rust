@@ -1,4 +1,4 @@
-use crate::e::{ErrorKind, S5Error};
+use crate::util::error::{ErrorKind, S5Error};
 use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey, Fingerprint};
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::{KeyPair, Secp256k1};
@@ -52,8 +52,6 @@ impl ChildKeys {
             Ok(xprv) => xprv,
             Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
         };
-
-        let child_xpub = ExtendedPubKey::from_priv(&secp, &child_xprv);
 
         let key_pair = match KeyPair::from_seckey_str(
             &secp,

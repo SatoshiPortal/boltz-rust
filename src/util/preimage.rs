@@ -3,7 +3,7 @@ use std::str::FromStr;
 use bitcoin::secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
 use lightning_invoice::Bolt11Invoice;
 
-use crate::e::{ErrorKind, S5Error};
+use crate::util::error::{ErrorKind, S5Error};
 use bitcoin::secp256k1::rand::rngs::OsRng;
 use rand_core::RngCore;
 

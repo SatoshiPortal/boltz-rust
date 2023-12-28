@@ -1,17 +1,9 @@
-use bitcoin::bip32::ExtendedPrivKey;
-use bitcoin::secp256k1::hashes::sha256;
-use bitcoin::secp256k1::schnorr::Signature;
 use bitcoin::secp256k1::Secp256k1;
-use bitcoin::secp256k1::{
-    ecdh::SharedSecret, KeyPair, Message, PublicKey, SecretKey, XOnlyPublicKey,
-};
-use bitcoin::Network;
+use bitcoin::secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-use crate::e::{ErrorKind, S5Error};
-
-use super::derivation::{ChildKeys, DerivationPurpose};
+use crate::util::error::{ErrorKind, S5Error};
 
 use elements::secp256k1_zkp::{
     KeyPair as ZKKeyPair, PublicKey as ZKPublicKey, SecretKey as ZKSecretKey,
@@ -27,8 +19,6 @@ pub struct BlindingKeyPair {
 impl BlindingKeyPair {
     pub fn from_secret_string(blinding_key: String) -> Result<Self, S5Error> {
         let zksecp = ZKSecp256k1::new();
-        let blinding_key_bytes = hex::decode(&blinding_key).unwrap();
-
         let zkseckey: ZKSecretKey = match ZKSecretKey::from_str(&blinding_key) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),

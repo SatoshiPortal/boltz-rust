@@ -1,4 +1,4 @@
-use crate::e::S5Error;
+use crate::util::error::S5Error;
 
 // TODO: policy asset should only be set for ElementsRegtest, fail otherwise
 const _LIQUID_POLICY_ASSET_STR: &str =
@@ -109,7 +109,6 @@ impl NetworkConfig {
 mod tests {
 
     use super::*;
-    use crate::{key::ec::BlindingKeyPair, swaps::liquid::LBtcSwapScript};
     use electrum_client::ElectrumApi;
 
     #[test]

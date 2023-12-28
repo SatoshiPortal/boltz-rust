@@ -10,10 +10,12 @@ use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut
 use electrum_client::ElectrumApi;
 
 use crate::{
-    e::{ErrorKind, S5Error},
-    key::preimage::Preimage,
     network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::boltz::SwapTxKind,
+    util::{
+        error::{ErrorKind, S5Error},
+        preimage::Preimage,
+    },
 };
 
 use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160::Hash};
@@ -405,7 +407,7 @@ impl BtcSwapTx {
             SwapTxKind::Refund => {
                 self.sign_refund_tx(keys);
                 Err(S5Error::new(
-                    crate::e::ErrorKind::Transaction,
+                    ErrorKind::Transaction,
                     "Refund transaction signing not supported yet",
                 ))
             }
