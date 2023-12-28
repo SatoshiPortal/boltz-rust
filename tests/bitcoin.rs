@@ -10,16 +10,26 @@ use boltzclient::{
             BoltzApiClient, CreateSwapRequest, SwapStatusRequest, SwapType, BOLTZ_TESTNET_URL,
         },
     },
-    util::pause_and_wait,
 };
 use electrum_client::ElectrumApi;
 use lightning_invoice::Bolt11Invoice;
 
-use std::{env, str::FromStr};
+use std::{io, io::Write, str::FromStr};
 
 /// submarine swap integration
 /// Always run this with --no-capture so you get all the data to recover (if needed)
 /// Always update invoice before running
+
+pub fn pause_and_wait(msg: &str) {
+    let stdin = io::stdin();
+    let mut stdout = io::stdout();
+    write!(stdout, "\n").unwrap();
+    write!(stdout, "******{msg}******").unwrap();
+    write!(stdout, "\n").unwrap();
+    write!(stdout, "Press Enter to continue...").unwrap();
+    stdout.flush().unwrap();
+    let _ = stdin.read_line(&mut String::new()).unwrap();
+}
 
 #[test]
 #[ignore]

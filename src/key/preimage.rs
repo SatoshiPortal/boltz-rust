@@ -3,10 +3,15 @@ use std::str::FromStr;
 use bitcoin::secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
 use lightning_invoice::Bolt11Invoice;
 
-use crate::{
-    e::{ErrorKind, S5Error},
-    util::rnd_str,
-};
+use crate::e::{ErrorKind, S5Error};
+use bitcoin::secp256k1::rand::{thread_rng, Rng};
+
+fn rnd_str() -> String {
+    let mut rng = thread_rng();
+    let mut bytes = [0u8; 32];
+    rng.fill(&mut bytes[..]);
+    hex::encode(bytes)
+}
 
 #[derive(Debug, Clone)]
 pub struct PreimageStates {

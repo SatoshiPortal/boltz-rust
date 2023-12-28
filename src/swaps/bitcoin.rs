@@ -561,7 +561,6 @@ impl BtcSwapTx {
 mod tests {
     use super::*;
     use crate::network::electrum::{NetworkConfig, DEFAULT_TESTNET_NODE};
-    use crate::util::pause_and_wait;
     use bitcoin::opcodes::all::{OP_EQUAL, OP_HASH160};
     use bitcoin::script::Builder;
     use bitcoin::secp256k1::hashes::{hash160, Hash};
@@ -570,7 +569,20 @@ mod tests {
         Witness,
     };
     use electrum_client::ElectrumApi;
+    use std::io;
+    use std::io::Write;
     use std::str::FromStr;
+
+    pub fn pause_and_wait(msg: &str) {
+        let stdin = io::stdin();
+        let mut stdout = io::stdout();
+        write!(stdout, "\n").unwrap();
+        write!(stdout, "******{msg}******").unwrap();
+        write!(stdout, "\n").unwrap();
+        write!(stdout, "Press Enter to continue...").unwrap();
+        stdout.flush().unwrap();
+        let _ = stdin.read_line(&mut String::new()).unwrap();
+    }
 
     #[test]
     #[ignore]

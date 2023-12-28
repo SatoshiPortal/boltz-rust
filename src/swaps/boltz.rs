@@ -542,7 +542,7 @@ mod tests {
     use bitcoin::secp256k1::hashes::{sha256, Hash};
 
     use super::*;
-    use crate::{key::ec::KeyPairString, util::rnd_str};
+    use crate::key::{ec::KeyPairString, preimage::PreimageStates};
 
     #[test]
     fn test_get_pairs() {
@@ -629,16 +629,15 @@ mod tests {
                 .to_string(),
         };
 
-        let preimage = rnd_str();
+        let preimage = PreimageStates::new();
         println!("Preimage: {:?}", preimage);
-        let preimage_hash = sha256::Hash::hash(&hex::decode(preimage).unwrap()).to_string();
 
         let pair_hash =
             "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
 
         let request = CreateSwapRequest::new_btc_reverse(
             pair_hash,
-            preimage_hash.clone(),
+            preimage.sha256.clone(),
             claim_key_pair.pubkey,
             100_000,
         );
@@ -647,7 +646,7 @@ mod tests {
         assert!(response
             .as_ref()
             .unwrap()
-            .validate_invoice_preimage256(preimage_hash));
+            .validate_invoice_preimage256(preimage.sha256));
         let id = response.unwrap().id;
         let request = SwapStatusRequest { id: id };
         let response = client.swap_status(request);
@@ -665,16 +664,15 @@ mod tests {
                 .to_string(),
         };
 
-        let preimage = rnd_str();
+        let preimage = PreimageStates::new();
         println!("Preimage: {:?}", preimage);
-        let preimage_hash = sha256::Hash::hash(&hex::decode(preimage).unwrap()).to_string();
 
         let pair_hash =
             "bfe685df32af97d89e4ca9faa0f133003bf7637e719fdef0d665f34cc66d3f76".to_string();
 
         let request = CreateSwapRequest::new_btc_reverse(
             pair_hash,
-            preimage_hash.clone(),
+            preimage.sha256.clone(),
             claim_key_pair.pubkey,
             100_000,
         );
@@ -683,7 +681,7 @@ mod tests {
         assert!(response
             .as_ref()
             .unwrap()
-            .validate_invoice_preimage256(preimage_hash));
+            .validate_invoice_preimage256(preimage.sha256));
         let id = response.unwrap().id;
         let request = SwapStatusRequest { id: id };
         let response = client.swap_status(request);
