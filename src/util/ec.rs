@@ -40,26 +40,27 @@ impl BlindingKeyPair {
 #[cfg(test)]
 mod tests {
     use elements::secp256k1_zkp::{Generator, RangeProof, Tag, Tweak};
+    use hex::FromHex;
 
     use super::*;
 
     #[test]
     fn test_ct_primitives() {
-        // create a blinding key
-        // commit some value
-        // read the commited value
+        // 1. Test Pedersen commitment - https://docs.rs/secp256k1-zkp/0.9.2/secp256k1_zkp/struct.PedersenCommitment.html
         let secp = ZKSecp256k1::new();
-        let blinding_key_str = BlindingKeyPair::from_secret_string(
-            "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
-        )
-        .unwrap();
-
-        let blinding_key = blinding_key_str.to_typed();
         let value = 50_000;
 
-        let blinding_factor = Tweak::from_slice(blinding_key.secret_key().as_ref()).unwrap();
-        let generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
-        let pc = PedersenCommitment::new(&secp, value, blinding_factor, generator);
+        let blinding_factor_n = Tweak::from_inner(<[u8; 32]>::from_hex("dfad9ad4ab3d475c487858cbab210e893a6dfffa814851e4692f91f8a0818a3a").unwrap());
+        let additional_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor_n.unwrap());
+        let blinding_factor_r = Tweak::from_inner(<[u8; 32]>::from_hex("aa24825c14e0bf855e9bc3c877eadee934a9e870ea69fe6678650c4ab99e2d25").unwrap());
+        // Pedersen commitment of form X = r*G + v*H
+        //     where X is the Pedersen commitment
+        //     r is the blinding_factor
+        //     v is value to commit
+        //     H is additional_generator and G is secp256k1's fixed generator point  
+        let pc = PedersenCommitment::new(&secp, value, blinding_factor_r.unwrap(), additional_generator);
+        let expected_pc = "09c02e309a8ac06d644aab0c8b52dd4318825340d7a33336a0b496a21cbea56229";
+        assert_eq!(expected_pc, pc.to_string());
 
         let min_value: u64 = 0;
         let exp: i32 = 0;
