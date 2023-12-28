@@ -460,8 +460,10 @@ impl LBtcSwapTx {
             "commitmentnonce_fully_valid": true,
 
 
-        In Liquid, the fee is explicitly stated as a vout. It is not derived from deducting the vout total from the vin total like in Bitcoin.
+            In Liquid, the fee is explicitly stated as a vout. 
+            It is not derived from deducting the vout total from the vin total like in Bitcoin.
          *
+         * 
          */
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {

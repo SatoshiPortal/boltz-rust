@@ -321,7 +321,6 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 //         .map(|((i, char1), char2)| (i, char1, char2))
 //         .collect()
 // }
-
 pub struct BtcSwapTx {
     kind: SwapTxKind,
     swap_script: BtcSwapScript,
@@ -485,7 +484,6 @@ impl BtcSwapTx {
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
-
         // SIGN TRANSACTION
         let hash_type = bitcoin::sighash::EcdsaSighashType::All;
         let secp = Secp256k1::new();
@@ -528,6 +526,8 @@ impl BtcSwapTx {
             input: vec![signed_txin],
             output: vec![output.clone()],
         };
+        // signed_tx.size();
+
         Ok(signed_tx)
     }
     fn sign_refund_tx(&self, _keys: KeyPairString) -> () {

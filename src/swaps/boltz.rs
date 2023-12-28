@@ -581,6 +581,7 @@ mod tests {
     fn test_get_fee_estimation() {
         let client = BoltzApiClient::new(BOLTZ_MAINNET_URL);
         let response = client.get_fee_estimation();
+        println!("{:?}", response);
         assert!(response.is_ok());
     }
 

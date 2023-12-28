@@ -170,6 +170,8 @@ pub fn schnorr_verify(signature: &str, message: &str, pubkey: &str) -> Result<bo
 
 #[cfg(test)]
 mod tests {
+    use elements::secp256k1_zkp::{Generator, RangeProof, Tag, Tweak};
+
     use super::*;
 
     #[test]
@@ -177,7 +179,7 @@ mod tests {
         // create a blinding key
         // commit some value
         // read the commited value
-
+        let secp = ZKSecp256k1::new();
         let blinding_key_str = BlindingKeyPair::from_secret_string(
             "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
         )
@@ -186,6 +188,33 @@ mod tests {
         let blinding_key = blinding_key_str.to_typed();
         let value = 50_000;
 
+        let blinding_factor = Tweak::from_slice(blinding_key.secret_key().as_ref()).unwrap();
+        let generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
+        let pc = PedersenCommitment::new(&secp, value, blinding_factor, generator);
+
+        let min_value: u64 = 0;
+        let exp: i32 = 0;
+        let min_bits: u8 = 36;
+        let message: &[u8] = &[];
+        let additional_commitment: &[u8] = &[];
+        let additional_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
+
+        let range_proof = RangeProof::new(
+            &secp,
+            min_value,
+            pc,
+            value,
+            blinding_factor,
+            message,
+            additional_commitment,
+            blinding_key.secret_key(),
+            exp,
+            min_bits,
+            additional_generator,
+        )
+        .unwrap();
+        let range = range_proof.verify(&secp, pc, additional_commitment, additional_generator);
+        println!("{:?}", range);
         /*
          * https://docs.rs/secp256k1-zkp/0.9.2/secp256k1_zkp/struct.RangeProof.html
          * pub fn new<C: Signing>(

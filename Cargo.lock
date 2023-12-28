@@ -153,8 +153,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "bullbitcoin-rnd"
-version = "0.2.0"
+name = "boltz-client"
+version = "0.2.1"
 dependencies = [
  "bip39",
  "bitcoin 0.30.2",

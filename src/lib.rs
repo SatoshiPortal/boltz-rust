@@ -1,8 +1,3 @@
-/*
-
-THIS SHOULD BE GENERATED
-
-*/
 pub mod e;
 pub mod key;
 pub mod network;
