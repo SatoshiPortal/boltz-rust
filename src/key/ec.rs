@@ -12,7 +12,6 @@ use std::str::FromStr;
 use crate::e::{ErrorKind, S5Error};
 
 use super::derivation::{ChildKeys, DerivationPurpose};
-use super::seed::MasterKey;
 
 use elements::secp256k1_zkp::{
     KeyPair as ZKKeyPair, PublicKey as ZKPublicKey, SecretKey as ZKSecretKey,
