@@ -62,60 +62,34 @@ mod tests {
         let expected_pc = "09c02e309a8ac06d644aab0c8b52dd4318825340d7a33336a0b496a21cbea56229";
         assert_eq!(expected_pc, pc.to_string());
 
+        // 2. Create and verify range proofs - https://docs.rs/secp256k1-zkp/0.9.2/secp256k1_zkp/struct.RangeProof.html
         let min_value: u64 = 0;
+        let secret_key = SecretKey::from_str("0000000000000000000000000000000000000000000000000000000000000001").unwrap();
         let exp: i32 = 0;
         let min_bits: u8 = 36;
         let message: &[u8] = &[];
         let additional_commitment: &[u8] = &[];
-        let additional_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
 
         let range_proof = RangeProof::new(
             &secp,
-            min_value,
-            pc,
-            value,
-            blinding_factor,
-            message,
-            additional_commitment,
-            blinding_key.secret_key(),
-            exp,
-            min_bits,
-            additional_generator,
+            min_value, // constructs a proof where the verifer can tell the minimum value is at least the specified amount.
+            pc, // the commitment being proved.
+            value, // Actual value of the commitment.
+            blinding_factor_r.unwrap(), // 32-byte blinding factor used by value.
+            message, // pointer to a byte array of data to be embedded in the rangeproof that can be recovered by rewinding the proof
+            additional_commitment, // additional data to be covered in rangeproof signature
+            secret_key,  // 32-byte secret nonce used to initialize the proof (value can be reverse-engineered out of the proof if this secret is known.)
+            exp, // Base-10 exponent. Digits below above will be made public, but the proof will be made smaller. Allowed range is -1 to 18. (-1 is a special case that makes the value public. 0 is the most private.)
+            min_bits, // Number of bits of the value to keep private. (0 = auto/minimal, - 64).
+            additional_generator, // additional generator 'h'
         )
         .unwrap();
-        let range = range_proof.verify(&secp, pc, additional_commitment, additional_generator);
-        println!("{:?}", range);
-        /*
-         * https://docs.rs/secp256k1-zkp/0.9.2/secp256k1_zkp/struct.RangeProof.html
-         * pub fn new<C: Signing>(
-            secp: &Secp256k1<C>,
-            min_value: u64,
-            commitment: PedersenCommitment,
-            value: u64,
-            commitment_blinding: Tweak,
-            message: &[u8],
-            additional_commitment: &[u8],
-            sk: SecretKey,
-            exp: i32,
-            min_bits: u8,
-            additional_generator: Generator
-        ) -> Result<RangeProof, Error>
+        let range = range_proof.verify(&secp, pc, additional_commitment, additional_generator).unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, u64::pow(2, min_bits as u32));
 
-        Prove that commitment hides a value within a range, with the lower bound set to min_value.
-        source
-        pub fn verify<C: Verification>(
-            &self,
-            secp: &Secp256k1<C>,
-            commitment: PedersenCommitment,
-            additional_commitment: &[u8],
-            additional_generator: Generator
-        ) -> Result<Range<u64>, Error>
-
-        Verify that the committed value is within a range.
-
-        If the verification is successful, return the actual range of possible values.
-
-        *
-        */
+        let (opening, _range) = range_proof.rewind(&secp, pc, secret_key, additional_commitment, additional_generator).unwrap();
+        assert_eq!(opening.value, value);
+        assert_eq!(opening.blinding_factor, blinding_factor_r.unwrap());
     }
 }
