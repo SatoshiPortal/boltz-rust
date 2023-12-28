@@ -32,7 +32,7 @@ impl BlindingKeyPair {
 
         let zkseckey: ZKSecretKey = match ZKSecretKey::from_str(&blinding_key) {
             Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
+            Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
         };
         let zkspubkey = zkseckey.public_key(&zksecp);
         Ok(BlindingKeyPair {

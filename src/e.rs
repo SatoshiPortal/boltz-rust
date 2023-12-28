@@ -8,20 +8,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum ErrorKind {
     Key,
-    Wallet,
+    BoltzApi,
     Network,
     Input,
-    Internal,
+    Script,
+    Transaction,
 }
 
 impl Display for ErrorKind {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             ErrorKind::Input => write!(f, "Input"),
-            ErrorKind::Internal => write!(f, "OpError"),
-            ErrorKind::Key => write!(f, "KeyError"),
-            ErrorKind::Wallet => write!(f, "WalletError"),
-            ErrorKind::Network => write!(f, "NetworkError"),
+            ErrorKind::BoltzApi => write!(f, "BoltzApi"),
+            ErrorKind::Key => write!(f, "Key"),
+            ErrorKind::Network => write!(f, "Network"),
+            ErrorKind::Script => write!(f, "Script"),
+            ErrorKind::Transaction => write!(f, "Transaction"),
         }
     }
 }

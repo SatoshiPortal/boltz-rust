@@ -2,7 +2,6 @@
 
 The goal of this  is to develop a working boltz client in rust that supports:
 
-
 - [x] normal submarine swaps: OnChain->LN for both Bitcoin & Liquid
 Here we will pay an onchain script address for boltz and boltz will pay our LN invoice.
 
@@ -99,15 +98,12 @@ The swap procedure will be similar for liquid with a few additions like using a 
 
 The elements library is very similar to bitcoin and solving this problem for bitcoin will also solve majority of the problem for liquid.
 
-Additionally, this repo will also explore using `bewallet` as an option for bullbitcoin's primary Liquid wallet.
-
 ## Core Libraries/API
 
 - [boltz](https://docs.boltz.exchange/v/api/api)
 - [bitcoin](https://docs.rs/bitcoin/0.30.0/bitcoin/index.html)
 - [elements](https://docs.rs/elements/0.22.0/elements/index.html)
 - [lightning-invoice](https://docs.rs/lightning-invoice/latest/lightning_invoice/)
-- [bewallet](https://github.com/LeoComandini/BEWallet/tree/master)
 - [electrum-client](https://docs.rs/electrum-client/latest/electrum_client/)
 
 ## Resources
@@ -121,14 +117,11 @@ A simple rust bitcoin wallet
 - [rust-bitcoin-wallet](https://github.com/stevenroose/rust-bitcoin-wallet)
 Another old simple rust bitcoin wallet - only upto Psbt building
 
-- [bdk](https://docs.rs/bdk/latest/bdk/)
-A descriptor library that uses bitcoin, miniscript and electrum-client
-
 - [boltz](https://github.com/BoltzExchange/boltz-core/blob/master/lib/swap/Claim.ts)
 Boltz-core - solving the claim script
 
-- [bewallet](https://github.com/LeoComandini/BEWallet/blob/master/src/interface.rs#L538)
-Core wallet functions for liquid
+- [tdryja-ct](https://www.youtube.com/watch?v=UySc4jxbqi4)
+Tadge Dryja's MIT Opencourseware presentation on Confidential Transactions
 
 ## test
 
@@ -169,11 +162,11 @@ For all ignored unit tests read the tests before running.
 
 ## Milestones
 
-- [x] NormalSwap  (BTC): Claim
+- [x] NormalSwap  (BTC): Claim (Invoice paid)
 - [ ] NormalSwap  (BTC): Refund
 - [x] ReverseSwap (BTC): Claim
-- [x] ReverseSwap (BTC): Refund
-- [x] NormalSwap  (L-BTC): Claim
+- [x] ReverseSwap (BTC): Refund (Invoice expires)
+- [x] NormalSwap  (L-BTC): Claim (Invoice paid)
 - [ ] NormalSwap  (L-BTC): Refund
 - [ ] ReverseSwap (L-BTC): Claim
-- [ ] ReverseSwap (L-BTC): Refund
+- [x] ReverseSwap (L-BTC): Refund (Invoice expires)

@@ -300,7 +300,7 @@ impl BtcSwapScript {
 
         let script_balance = match electrum_client.script_get_balance(&self.to_script().unwrap()) {
             Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
+            Err(e) => return Err(S5Error::new(ErrorKind::Script, &e.to_string())),
         };
         Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
@@ -396,7 +396,7 @@ impl BtcSwapTx {
     ) -> Result<Transaction, S5Error> {
         self.fetch_utxo(expected_utxo_value)?;
         if !self.has_utxo() {
-            return Err(S5Error::new(ErrorKind::Wallet, "No Utxos Found."));
+            return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
         }
         // FETCH UTXOS HERE
 
@@ -405,7 +405,7 @@ impl BtcSwapTx {
             SwapTxKind::Refund => {
                 self.sign_refund_tx(keys);
                 Err(S5Error::new(
-                    crate::e::ErrorKind::Wallet,
+                    crate::e::ErrorKind::Transaction,
                     "Refund transaction signing not supported yet",
                 ))
             }
@@ -433,7 +433,7 @@ impl BtcSwapTx {
             .unwrap();
         if utxos.len() == 0 {
             return Err(S5Error::new(
-                ErrorKind::Wallet,
+                ErrorKind::Transaction,
                 &format!("0 utxos found for this script",),
             ));
         } else {
@@ -494,7 +494,7 @@ impl BtcSwapTx {
             hash_type,
         ) {
             Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
 
         let sighash_message = match Message::from_slice(&sighash[..]) {

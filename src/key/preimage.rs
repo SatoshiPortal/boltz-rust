@@ -48,11 +48,11 @@ impl PreimageStates {
     pub fn from_str(preimage: &str) -> Result<PreimageStates, S5Error> {
         let sha256 = match &hex::decode(preimage) {
             Ok(result) => sha256::Hash::hash(result),
-            Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
         let hash160 = match &hex::decode(preimage) {
             Ok(result) => hash160::Hash::hash(result),
-            Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
         let preimage_bytes: Vec<u8> = hex::decode(preimage).unwrap();
 
@@ -69,7 +69,7 @@ impl PreimageStates {
     pub fn from_sha256_str(preimage_sha256: &str) -> Result<PreimageStates, S5Error> {
         let sha256 = match sha256::Hash::from_str(preimage_sha256) {
             Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Wallet, &e.to_string())),
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
         let hash160 = ripemd160::Hash::hash(sha256.as_byte_array());
 

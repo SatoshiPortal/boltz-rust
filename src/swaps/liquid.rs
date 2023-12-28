@@ -393,7 +393,7 @@ impl LBtcSwapTx {
         // self.fetch_utxo();
         if !self.has_utxo() {
             return Err(S5Error::new(
-                crate::e::ErrorKind::Wallet,
+                crate::e::ErrorKind::Transaction,
                 "No utxos available yet",
             ));
         }
@@ -402,7 +402,7 @@ impl LBtcSwapTx {
             SwapTxKind::Refund => {
                 self.sign_refund_tx(keys);
                 Err(S5Error::new(
-                    crate::e::ErrorKind::Wallet,
+                    crate::e::ErrorKind::Transaction,
                     "Refund transaction signing not supported yet",
                 ))
             }

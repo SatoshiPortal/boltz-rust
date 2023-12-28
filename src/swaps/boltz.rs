@@ -44,7 +44,7 @@ impl BoltzApiClient {
             let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
             Ok(get_pairs_response)
         } else {
-            Err(S5Error::new(ErrorKind::Network, &res.text().unwrap()))
+            Err(S5Error::new(ErrorKind::BoltzApi, &res.text().unwrap()))
         }
     }
 
@@ -58,7 +58,7 @@ impl BoltzApiClient {
                 serde_json::from_str(&body).unwrap();
             Ok(get_fee_estimation_response)
         } else {
-            Err(S5Error::new(ErrorKind::Network, &res.text().unwrap()))
+            Err(S5Error::new(ErrorKind::BoltzApi, &res.text().unwrap()))
         }
     }
 
@@ -71,7 +71,7 @@ impl BoltzApiClient {
             let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
             Ok(create_swap_response)
         } else {
-            Err(S5Error::new(ErrorKind::Network, &res.text().unwrap()))
+            Err(S5Error::new(ErrorKind::BoltzApi, &res.text().unwrap()))
         }
     }
 
@@ -85,7 +85,7 @@ impl BoltzApiClient {
             let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
             Ok(swap_status_response)
         } else {
-            Err(S5Error::new(ErrorKind::Network, &res.text().unwrap()))
+            Err(S5Error::new(ErrorKind::BoltzApi, &res.text().unwrap()))
         }
     }
 }
