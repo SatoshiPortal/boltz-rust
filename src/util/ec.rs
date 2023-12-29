@@ -10,33 +10,6 @@ use elements::secp256k1_zkp::{
 };
 use elements::secp256k1_zkp::{PedersenCommitment, Secp256k1 as ZKSecp256k1};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BlindingKeyPair {
-    seckey: String,
-    pub pubkey: String,
-}
-
-impl BlindingKeyPair {
-    pub fn from_secret_string(blinding_key: String) -> Result<Self, S5Error> {
-        let zksecp = ZKSecp256k1::new();
-        let zkseckey: ZKSecretKey = match ZKSecretKey::from_str(&blinding_key) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-        };
-        let zkspubkey = zkseckey.public_key(&zksecp);
-        Ok(BlindingKeyPair {
-            seckey: blinding_key,
-            pubkey: zkspubkey.to_string(),
-        })
-    }
-    // pub fn commit_value(&self, value: String) -> PedersenCommitment {}
-    pub fn to_typed(&self) -> ZKKeyPair {
-        let secp = Secp256k1::new();
-        let seckey = SecretKey::from_str(&self.seckey).unwrap();
-        ZKKeyPair::from_secret_key(&secp, &seckey)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use elements::secp256k1_zkp::{Generator, RangeProof, Tag, Tweak};
