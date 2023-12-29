@@ -6,7 +6,8 @@ use boltzclient::{
     },
     util::{derivation::ChildKeys, preimage::Preimage},
 };
-// use elements::Address;
+use elements::secp256k1_zkp::Secp256k1;
+use elements::secp256k1_zkp::{KeyPair as ZKKeyPair, SurjectionProof};
 
 /// submarine swap integration
 /// update invoice before running
@@ -54,6 +55,7 @@ fn test_liquid_ssi() {
     let _id = response.as_ref().unwrap().id.as_str();
     let funding_address = response.as_ref().unwrap().address.clone().unwrap();
     let expected_amount = response.as_ref().unwrap().expected_amount.clone().unwrap();
+    let blinding_string = response.as_ref().unwrap().blinding_key.clone().unwrap();
 
     let redeem_script_string = response
         .as_ref()
@@ -67,6 +69,7 @@ fn test_liquid_ssi() {
         BitcoinNetwork::LiquidTestnet,
         DEFAULT_LIQUID_TESTNET_NODE.to_string(),
         &redeem_script_string,
+        blinding_string,
     )
     .unwrap();
 
@@ -134,6 +137,8 @@ fn test_liquid_rsi() {
     let _id = response.as_ref().unwrap().id.as_str();
     let _invoice = response.as_ref().unwrap().invoice.clone().unwrap();
     let _lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
+    let blinding_string = response.as_ref().unwrap().blinding_key.clone().unwrap();
+
     let redeem_script_string = response
         .as_ref()
         .unwrap()
@@ -146,8 +151,10 @@ fn test_liquid_rsi() {
         BitcoinNetwork::LiquidTestnet,
         DEFAULT_LIQUID_TESTNET_NODE.to_string(),
         &redeem_script_string,
+        blinding_string.clone(),
     )
     .unwrap();
+    let secp = Secp256k1::new();
     let constructed_script_elements = LBtcSwapScript::new(
         BitcoinNetwork::LiquidTestnet,
         DEFAULT_LIQUID_TESTNET_NODE.to_string(),
@@ -156,6 +163,7 @@ fn test_liquid_rsi() {
         keypair.public_key().to_string().clone(),
         timeout as u32,
         boltz_script_elements.sender_pubkey.clone(),
+        ZKKeyPair::from_seckey_str(&secp, &blinding_string).unwrap(),
     );
 
     assert_eq!(constructed_script_elements, boltz_script_elements);
