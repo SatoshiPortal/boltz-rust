@@ -3,11 +3,11 @@ use std::str::FromStr;
 
 use bitcoin::{script::Script as BitcoinScript, secp256k1::KeyPair};
 use elements::{
-    confidential::Nonce,
+    confidential::{self, AssetBlindingFactor, Nonce},
     secp256k1_zkp::{Generator, PedersenCommitment, RangeProof, Secp256k1, Tag, Tweak},
     sighash::SighashCache,
-    Address, AssetIssuance, OutPoint, Script, Sequence, Transaction, TxIn, TxInWitness, TxOut,
-    TxOutWitness, Txid,
+    Address, AssetId, AssetIssuance, OutPoint, Script, Sequence, SurjectionInput, Transaction,
+    TxIn, TxInWitness, TxOut, TxOutSecrets, TxOutWitness, Txid,
 };
 
 use elements::secp256k1_zkp::Message;
@@ -28,10 +28,7 @@ pub const DEFAULT_SURJECTIONPROOF_SIZE: u64 = 135;
 pub const DEFAULT_RANGEPROOF_SIZE: u64 = 4174;
 use bitcoin::hashes::hash160::Hash;
 use bitcoin::PublicKey;
-use elements::secp256k1_zkp::{
-    KeyPair as ZKKeyPair,
-    PublicKey as NoncePublicKey,
-};
+use elements::secp256k1_zkp::{KeyPair as ZKKeyPair, PublicKey as NoncePublicKey};
 use elements::{
     address::Address as EAddress,
     opcodes::all::*,
@@ -80,10 +77,7 @@ impl LBtcSwapScript {
         // let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
         let script = EScript::from_str(&redeem_script_str).unwrap();
         // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
-        // println!("ADDRESS DECODED: {:?}",address);
-        // let script_hash = script.script_hash();
-        // let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
-        // println!("DECODED SCRIPT HASH: {}",sh_str);
+
         let instructions = script.instructions();
         let mut last_op = OP_0NOTEQUAL;
         let mut hashlock = None;
@@ -239,7 +233,7 @@ impl LBtcSwapScript {
                     .push_opcode(OP_IF)
                     .push_key(&reciever_pubkey)
                     .push_opcode(OP_ELSE)
-                    .push_int(locktime.to_consensus_u32() as i64)
+                    .push_scriptint(locktime.to_consensus_u32() as i64)
                     .push_opcode(OP_CLTV)
                     .push_opcode(OP_DROP)
                     .push_key(&sender_pubkey)
@@ -283,7 +277,7 @@ impl LBtcSwapScript {
                     .push_key(&reciever_pubkey)
                     .push_opcode(OP_ELSE)
                     .push_opcode(OP_DROP)
-                    .push_int(locktime.to_consensus_u32() as i64)
+                    .push_slice(&u32_to_bytes_little_endian(locktime.to_consensus_u32()))
                     .push_opcode(OP_CLTV)
                     .push_opcode(OP_DROP)
                     .push_key(&sender_pubkey)
@@ -299,7 +293,7 @@ impl LBtcSwapScript {
     pub fn to_address(&self, blinder: ZKPublicKey) -> EAddress {
         let script = self.to_script();
         let address_params = match self.network {
-            BitcoinNetwork::Bitcoin => &AddressParams::LIQUID,
+            BitcoinNetwork::Liquid => &AddressParams::LIQUID,
             _ => &AddressParams::LIQUID_TESTNET,
         };
 
@@ -307,20 +301,6 @@ impl LBtcSwapScript {
             SwapType::Submarine => EAddress::p2shwsh(&script, Some(blinder), address_params),
             SwapType::ReverseSubmarine => EAddress::p2wsh(&script, Some(blinder), address_params),
         }
-    }
-    pub fn get_balance(&self) -> Result<(u64, i64), S5Error> {
-        let electrum_client =
-            NetworkConfig::new(self.network, &self.electrum_url, true, true, false, None)
-                .electrum_url
-                .build_client()?;
-        let elements_script = self.clone().to_script();
-        let script_bytes = elements_script.as_bytes();
-        let bitcoin_script = BitcoinScript::from_bytes(&script_bytes);
-        let script_balance = match electrum_client.script_get_balance(bitcoin_script) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-        };
-        Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
 }
 
@@ -330,6 +310,13 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
         result |= (byte as u32) << (8 * i);
     }
     result
+}
+fn u32_to_bytes_little_endian(value: u32) -> [u8; 4] {
+    let b1: u8 = (value & 0xff) as u8;
+    let b2: u8 = ((value >> 8) & 0xff) as u8;
+    let b3: u8 = ((value >> 16) & 0xff) as u8;
+    let b4: u8 = ((value >> 24) & 0xff) as u8;
+    [b1, b2, b3, b4]
 }
 
 #[derive(Debug, Clone)]
@@ -388,7 +375,7 @@ impl LBtcSwapTx {
 
     pub fn drain_tx(
         &mut self,
-        keys: KeyPair,
+        keys: ZKKeyPair,
         preimage: Preimage,
         blinding_keys: ZKKeyPair,
     ) -> Result<Transaction, S5Error> {
@@ -476,27 +463,99 @@ impl LBtcSwapTx {
             is_pegin: false,
             asset_issuance: AssetIssuance::default(),
         };
+        /*
+         *
+         *
+        let surject_inputs = self.surjection_inputs(inp_txout_sec)?;
+        let asset_id = self.outputs[last_out_index]
+            .asset
+            .ok_or(PsetBlindError::MustHaveExplicitTxOut(last_out_index))?;
+        let out_abf = AssetBlindingFactor::new(rng);
+        let exp_asset = confidential::Asset::Explicit(asset_id);
+        let blind_res = exp_asset.blind(rng, secp, out_abf, &surject_inputs);
 
+        let (out_asset_commitment, surjection_proof) =
+            blind_res.map_err(|e| PsetBlindError::ConfidentialTxOutError(last_out_index, e))?;
+
+        let value = self.outputs[last_out_index]
+            .amount
+            .ok_or(PsetBlindError::MustHaveExplicitTxOut(last_out_index))?;
+        let exp_value = confidential::Value::Explicit(value);
+        // Get all the explicit outputs
+        let mut exp_out_secrets = vec![];
+        for (i, out) in self.outputs.iter().enumerate() {
+            if out.blinding_key.is_none() {
+                let amt = out.amount.ok_or(PsetBlindError::MustHaveExplicitTxOut(i))?;
+                exp_out_secrets.push((
+                    amt,
+                    AssetBlindingFactor::zero(),
+                    ValueBlindingFactor::zero(),
+                ));
+            }
+        }
+        let mut final_vbf =
+            ValueBlindingFactor::last(secp, value, out_abf, &inp_secrets, &exp_out_secrets);
+
+        // Add all the scalars
+        for value_diff in self.global.scalars.iter() {
+            final_vbf += ValueBlindingFactor(*value_diff);
+        }
+
+        let receiver_blinding_pk = &self.outputs[last_out_index]
+            .blinding_key
+            .ok_or(PsetBlindError::MustHaveExplicitTxOut(last_out_index))?;
+        let ephemeral_sk = SecretKey::new(rng);
+        let spk = &self.outputs[last_out_index].script_pubkey;
+        let msg = RangeProofMessage {
+            asset: asset_id,
+            bf: out_abf,
+        };
+        let blind_res = exp_value.blind(
+            secp,
+            final_vbf,
+            receiver_blinding_pk.inner,
+            ephemeral_sk,
+            spk,
+            &msg,
+        );
+        let (value_commitment, nonce, rangeproof) =
+            blind_res.map_err(|e| PsetBlindError::ConfidentialTxOutError(last_out_index, e))?;
+         *
+         */
+        use bitcoin::secp256k1::rand::rngs::OsRng;
+        let mut rng = OsRng::default();
         let secp = Secp256k1::new();
-        let blinding_factor =
-            Tweak::from_slice(_blinding_keys.secret_bytes().as_ref()).unwrap();
+        let blinding_factor = Tweak::from_slice(_blinding_keys.secret_bytes().as_ref()).unwrap();
         let nonce = Nonce::Confidential(_blinding_keys.public_key());
+        let asset_id = AssetId::LIQUID_BTC;
+        let out_abf = AssetBlindingFactor::new(&mut rng);
+        let exp_asset = confidential::Asset::Explicit(asset_id);
+        let surject_inputs = SurjectionInput::Known {
+            asset: asset_id,
+            asset_bf: out_abf,
+        };
+        // let blind_res = exp_asset.blind(&mut rng, &secp, out_abf, surject_inputs.into());
+        // let (out_asset_commitment, surjection_proof) = blind_res
+        //     .map_err(|e| PsetBlindError::ConfidentialTxOutError(last_out_index, e))
+        //     .unwrap();
+
+        // let tx_out_secrets = TxOutSecrets::new(AssetId::LIQUID_BTC);
         let asset_generator = Generator::new_blinded(
             &secp,
-            Tag::default(),
-            // Tag::from(hex::decode(AssetId::LIQUID_BTC.to_hex()).unwrap().as_ref()), // as &[u8; 32]
+            // Tag::default(),
+            AssetId::LIQUID_BTC.into_tag(), // as &[u8; 32]
             blinding_factor,
         );
         let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
         let value_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
         let value_pedersen_commitment =
             PedersenCommitment::new(&secp, output_value, blinding_factor, value_generator);
-        let blinded_value = elements::confidential::Value::Confidential(value_pedersen_commitment);
+        let explicit_value = elements::confidential::Value::Explicit(output_value);
         let blinded_asset = elements::confidential::Asset::Confidential(asset_generator);
 
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
-            value: blinded_value,
+            value: explicit_value,
             asset: blinded_asset,
             nonce: nonce,
             witness: TxOutWitness::default(),
@@ -514,7 +573,7 @@ impl LBtcSwapTx {
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
                 &&self.swap_script.to_script(),
-                blinded_value,
+                explicit_value,
                 elements::EcdsaSighashType::All,
             )[..],
         )
@@ -590,9 +649,10 @@ fn _mock_pubkey() -> elements::secp256k1_zkp::PublicKey {
 }
 #[cfg(test)]
 mod tests {
-    use crate::{network::electrum::DEFAULT_LIQUID_TESTNET_NODE};
+    use crate::network::electrum::DEFAULT_LIQUID_TESTNET_NODE;
 
     use super::*;
+
     use elements::pset::serialize::Serialize;
     use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;
 
@@ -670,19 +730,19 @@ mod tests {
      */
 
     use std::str::FromStr;
-
     #[test]
     fn test_liquid_swap_elements() {
         let secp = Secp256k1::new();
         let zksecp = ZKSecp256k1::new();
         let redeem_script_str = "8201208763a914fc9eeab62b946bd3e9681c082ac2b6d0bccea80f88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750315f411b1752102285c72dca7aaa31d58334e20be181cfa2cb8eb8092a577ef6f77bba068b8c69868ac".to_string();
-        let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwkxqf8psf3e56k2k7393r3tkllznsdpphqa33rdvz00va429jq6j2zzg8f59kqhex";
+        let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwhu3nvjd8z8ljmh00rd04shcnwhkqg5yelqapk0slcc7clcqsk9ynmfeymrhueh0l";
         let expected_timeout = 1176597;
 
         let blinding_key = ZKKeyPair::from_seckey_str(
             &zksecp,
             "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed",
-        ).unwrap();
+        )
+        .unwrap();
 
         let _id = "axtHXB";
         let my_key_pair = KeyPair::from_seckey_str(
@@ -703,7 +763,7 @@ mod tests {
         );
         assert_eq!(decoded.timelock, expected_timeout);
 
-        let script_elements = LBtcSwapScript {
+        let el_script = LBtcSwapScript {
             hashlock: decoded.hashlock,
             reciever_pubkey: decoded.reciever_pubkey,
             sender_pubkey: decoded.sender_pubkey,
@@ -713,10 +773,29 @@ mod tests {
             swap_type: SwapType::ReverseSubmarine,
         };
 
-        // let script = script_elements.to_typed();
-        // println!("ENCODED HEX: {}", script.to_string());
-        let address = script_elements.to_address(blinding_key.public_key());
-        // println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
-        assert!(address.to_string() == expected_address);
+        let address = el_script.to_address(blinding_key.public_key());
+        println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
+        assert_eq!(address.to_string(), expected_address);
+        let network_config = NetworkConfig::default_liquid();
+        let electrum_client = network_config.electrum_url.build_client().unwrap();
+        assert!(electrum_client.ping().is_ok());
+
+        let fees = electrum_client.batch_estimate_fee(6..10);
+        println!("FEES: {:?}", fees);
+
+        let history = electrum_client
+            .script_get_history(BitcoinScript::from_bytes(
+                el_script.to_script().to_v0_p2wsh().as_bytes(),
+            ))
+            .unwrap();
+        let bitcoin_txid = history.first().unwrap().tx_hash;
+        let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
+        let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
+        let outpoints = tx.clone().output;
+        println!("{:?}", outpoints);
+        // let balance = el_script.get_balance().unwrap();
+        // println!("tx: {:?}", tx);
+        // let balance = el_script.get_balance().unwrap();
+        // println!("history: {:?}", history);
     }
 }

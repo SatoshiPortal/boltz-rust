@@ -123,6 +123,9 @@ Boltz-core - solving the claim script
 - [tdryja-ct](https://www.youtube.com/watch?v=UySc4jxbqi4)
 Tadge Dryja's MIT Opencourseware presentation on Confidential Transactions
 
+- [elements](https://github.com/ElementsProject/elements/blob/master/doc/elements-confidential-transactions.md)
+Docs from main elements repo on confidential transactions
+
 ## test
 
 The best place to start diving into this repo is `tests` directory. This contains integration tests for bitcoin and liquid.
@@ -143,14 +146,14 @@ cargo test -- --nocapture # for println! logs
 To run complete reverse swap integration test: 
 
 ```bash
-cargo test test_rsi -- --nocapture 
+cargo test test_rsi -- --nocapture --include-ignored
 ```
 `test_rsi` is interactive. 
 It will block the terminal and prompt you to pay a ln invoice to proceed.
 
 
 ```bash
-cargo test test_normal_swap -- --nocapture 
+cargo test test_normal_swap -- --nocapture --include-ignored
 
 ```
 `test_normal_swap` is ignored since it requires always using a new invoice or else it errors with 409
