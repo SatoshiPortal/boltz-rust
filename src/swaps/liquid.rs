@@ -28,7 +28,10 @@ pub const DEFAULT_SURJECTIONPROOF_SIZE: u64 = 135;
 pub const DEFAULT_RANGEPROOF_SIZE: u64 = 4174;
 use bitcoin::hashes::hash160::Hash;
 use bitcoin::PublicKey;
-use elements::secp256k1_zkp::PublicKey as NoncePublicKey;
+use elements::secp256k1_zkp::{
+    KeyPair as ZKKeyPair,
+    PublicKey as NoncePublicKey,
+};
 use elements::{
     address::Address as EAddress,
     opcodes::all::*,
@@ -36,8 +39,6 @@ use elements::{
     secp256k1_zkp::PublicKey as ZKPublicKey,
     AddressParams, LockTime,
 };
-
-use crate::util::ec::BlindingKeyPair;
 
 use super::boltz::SwapType;
 #[derive(Debug, Clone, PartialEq)]
@@ -295,13 +296,12 @@ impl LBtcSwapScript {
         }
     }
 
-    pub fn to_address(&self, blinder: String) -> EAddress {
+    pub fn to_address(&self, blinder: ZKPublicKey) -> EAddress {
         let script = self.to_script();
         let address_params = match self.network {
             BitcoinNetwork::Bitcoin => &AddressParams::LIQUID,
             _ => &AddressParams::LIQUID_TESTNET,
         };
-        let blinder = ZKPublicKey::from_str(&blinder).unwrap();
 
         match self.swap_type {
             SwapType::Submarine => EAddress::p2shwsh(&script, Some(blinder), address_params),
@@ -390,7 +390,7 @@ impl LBtcSwapTx {
         &mut self,
         keys: KeyPair,
         preimage: Preimage,
-        blinding_keys: BlindingKeyPair,
+        blinding_keys: ZKKeyPair,
     ) -> Result<Transaction, S5Error> {
         // self.fetch_utxo();
         if !self.has_utxo() {
@@ -444,7 +444,7 @@ impl LBtcSwapTx {
         &self,
         keys: KeyPair,
         preimage: Preimage,
-        _blinding_keys: BlindingKeyPair,
+        _blinding_keys: ZKKeyPair,
     ) -> Transaction {
         /*
         *
@@ -479,8 +479,8 @@ impl LBtcSwapTx {
 
         let secp = Secp256k1::new();
         let blinding_factor =
-            Tweak::from_slice(_blinding_keys.to_typed().secret_key().as_ref()).unwrap();
-        let nonce = Nonce::Confidential(NoncePublicKey::from_str(&_blinding_keys.pubkey).unwrap());
+            Tweak::from_slice(_blinding_keys.secret_bytes().as_ref()).unwrap();
+        let nonce = Nonce::Confidential(_blinding_keys.public_key());
         let asset_generator = Generator::new_blinded(
             &secp,
             Tag::default(),
@@ -590,10 +590,11 @@ fn _mock_pubkey() -> elements::secp256k1_zkp::PublicKey {
 }
 #[cfg(test)]
 mod tests {
-    use crate::{network::electrum::DEFAULT_LIQUID_TESTNET_NODE, util::ec::BlindingKeyPair};
+    use crate::{network::electrum::DEFAULT_LIQUID_TESTNET_NODE};
 
     use super::*;
     use elements::pset::serialize::Serialize;
+    use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;
 
     /// https://liquidtestnet.com/utils
     /// https://blockstream.info/liquidtestnet
@@ -602,6 +603,7 @@ mod tests {
     #[ignore]
     fn test_liquid_rev_tx() {
         let secp = Secp256k1::new();
+        let zksecp = ZKSecp256k1::new();
         const RETURN_ADDRESS: &str =
             "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
 
@@ -609,8 +611,9 @@ mod tests {
         let expected_address = "tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln";
         let _expected_timeout = 1179263;
 
-        let blinding_key = BlindingKeyPair::from_secret_string(
-            "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
+        let blinding_key = ZKKeyPair::from_seckey_str(
+            &zksecp,
+            "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d",
         )
         .unwrap();
 
@@ -631,7 +634,7 @@ mod tests {
         )
         .unwrap();
 
-        let address = script_elements.to_address(blinding_key.clone().pubkey);
+        let address = script_elements.to_address(blinding_key.clone().public_key());
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
 
@@ -671,14 +674,15 @@ mod tests {
     #[test]
     fn test_liquid_swap_elements() {
         let secp = Secp256k1::new();
+        let zksecp = ZKSecp256k1::new();
         let redeem_script_str = "8201208763a914fc9eeab62b946bd3e9681c082ac2b6d0bccea80f88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750315f411b1752102285c72dca7aaa31d58334e20be181cfa2cb8eb8092a577ef6f77bba068b8c69868ac".to_string();
         let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwkxqf8psf3e56k2k7393r3tkllznsdpphqa33rdvz00va429jq6j2zzg8f59kqhex";
         let expected_timeout = 1176597;
 
-        let blinding_key = BlindingKeyPair::from_secret_string(
-            "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed".to_string(),
-        )
-        .unwrap();
+        let blinding_key = ZKKeyPair::from_seckey_str(
+            &zksecp,
+            "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed",
+        ).unwrap();
 
         let _id = "axtHXB";
         let my_key_pair = KeyPair::from_seckey_str(
@@ -711,7 +715,7 @@ mod tests {
 
         // let script = script_elements.to_typed();
         // println!("ENCODED HEX: {}", script.to_string());
-        let address = script_elements.to_address(blinding_key.pubkey);
+        let address = script_elements.to_address(blinding_key.public_key());
         // println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
     }

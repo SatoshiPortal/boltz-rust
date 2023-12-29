@@ -10,111 +10,59 @@ use elements::secp256k1_zkp::{
 };
 use elements::secp256k1_zkp::{PedersenCommitment, Secp256k1 as ZKSecp256k1};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BlindingKeyPair {
-    seckey: String,
-    pub pubkey: String,
-}
-
-impl BlindingKeyPair {
-    pub fn from_secret_string(blinding_key: String) -> Result<Self, S5Error> {
-        let zksecp = ZKSecp256k1::new();
-        let zkseckey: ZKSecretKey = match ZKSecretKey::from_str(&blinding_key) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-        };
-        let zkspubkey = zkseckey.public_key(&zksecp);
-        Ok(BlindingKeyPair {
-            seckey: blinding_key,
-            pubkey: zkspubkey.to_string(),
-        })
-    }
-    // pub fn commit_value(&self, value: String) -> PedersenCommitment {}
-    pub fn to_typed(&self) -> ZKKeyPair {
-        let secp = Secp256k1::new();
-        let seckey = SecretKey::from_str(&self.seckey).unwrap();
-        ZKKeyPair::from_secret_key(&secp, &seckey)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use elements::secp256k1_zkp::{Generator, RangeProof, Tag, Tweak};
+    use hex::FromHex;
 
     use super::*;
 
     #[test]
     fn test_ct_primitives() {
-        // create a blinding key
-        // commit some value
-        // read the commited value
+        // 1. Test Pedersen commitment - https://docs.rs/secp256k1-zkp/0.9.2/secp256k1_zkp/struct.PedersenCommitment.html
         let secp = ZKSecp256k1::new();
-        let blinding_key_str = BlindingKeyPair::from_secret_string(
-            "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d".to_string(),
-        )
-        .unwrap();
-
-        let blinding_key = blinding_key_str.to_typed();
         let value = 50_000;
 
-        let blinding_factor = Tweak::from_slice(blinding_key.secret_key().as_ref()).unwrap();
-        let generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
-        let pc = PedersenCommitment::new(&secp, value, blinding_factor, generator);
+        let blinding_factor_n = Tweak::from_inner(<[u8; 32]>::from_hex("dfad9ad4ab3d475c487858cbab210e893a6dfffa814851e4692f91f8a0818a3a").unwrap());
+        let additional_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor_n.unwrap());
+        let blinding_factor_r = Tweak::from_inner(<[u8; 32]>::from_hex("aa24825c14e0bf855e9bc3c877eadee934a9e870ea69fe6678650c4ab99e2d25").unwrap());
+        // Pedersen commitment of form X = r*G + v*H
+        //     where X is the Pedersen commitment
+        //     r is the blinding_factor
+        //     v is value to commit
+        //     H is additional_generator and G is secp256k1's fixed generator point  
+        let pc = PedersenCommitment::new(&secp, value, blinding_factor_r.unwrap(), additional_generator);
+        let expected_pc = "09c02e309a8ac06d644aab0c8b52dd4318825340d7a33336a0b496a21cbea56229";
+        assert_eq!(expected_pc, pc.to_string());
 
+        // 2. Create and verify range proofs - https://docs.rs/secp256k1-zkp/0.9.2/secp256k1_zkp/struct.RangeProof.html
         let min_value: u64 = 0;
+        let secret_key = SecretKey::from_str("0000000000000000000000000000000000000000000000000000000000000001").unwrap();
         let exp: i32 = 0;
         let min_bits: u8 = 36;
         let message: &[u8] = &[];
         let additional_commitment: &[u8] = &[];
-        let additional_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
 
         let range_proof = RangeProof::new(
             &secp,
-            min_value,
-            pc,
-            value,
-            blinding_factor,
-            message,
-            additional_commitment,
-            blinding_key.secret_key(),
-            exp,
-            min_bits,
-            additional_generator,
+            min_value, // constructs a proof where the verifer can tell the minimum value is at least the specified amount.
+            pc, // the commitment being proved.
+            value, // Actual value of the commitment.
+            blinding_factor_r.unwrap(), // 32-byte blinding factor used by value.
+            message, // pointer to a byte array of data to be embedded in the rangeproof that can be recovered by rewinding the proof
+            additional_commitment, // additional data to be covered in rangeproof signature
+            secret_key,  // 32-byte secret nonce used to initialize the proof (value can be reverse-engineered out of the proof if this secret is known.)
+            exp, // Base-10 exponent. Digits below above will be made public, but the proof will be made smaller. Allowed range is -1 to 18. (-1 is a special case that makes the value public. 0 is the most private.)
+            min_bits, // Number of bits of the value to keep private. (0 = auto/minimal, - 64).
+            additional_generator, // additional generator 'h'
         )
         .unwrap();
-        let range = range_proof.verify(&secp, pc, additional_commitment, additional_generator);
-        println!("{:?}", range);
-        /*
-         * https://docs.rs/secp256k1-zkp/0.9.2/secp256k1_zkp/struct.RangeProof.html
-         * pub fn new<C: Signing>(
-            secp: &Secp256k1<C>,
-            min_value: u64,
-            commitment: PedersenCommitment,
-            value: u64,
-            commitment_blinding: Tweak,
-            message: &[u8],
-            additional_commitment: &[u8],
-            sk: SecretKey,
-            exp: i32,
-            min_bits: u8,
-            additional_generator: Generator
-        ) -> Result<RangeProof, Error>
+        let range = range_proof.verify(&secp, pc, additional_commitment, additional_generator).unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, u64::pow(2, min_bits as u32));
 
-        Prove that commitment hides a value within a range, with the lower bound set to min_value.
-        source
-        pub fn verify<C: Verification>(
-            &self,
-            secp: &Secp256k1<C>,
-            commitment: PedersenCommitment,
-            additional_commitment: &[u8],
-            additional_generator: Generator
-        ) -> Result<Range<u64>, Error>
-
-        Verify that the committed value is within a range.
-
-        If the verification is successful, return the actual range of possible values.
-
-        *
-        */
+        let (opening, _range) = range_proof.rewind(&secp, pc, secret_key, additional_commitment, additional_generator).unwrap();
+        assert_eq!(opening.value, value);
+        assert_eq!(opening.blinding_factor, blinding_factor_r.unwrap());
     }
 }
