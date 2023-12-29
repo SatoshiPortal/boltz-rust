@@ -729,6 +729,8 @@ mod tests {
     LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None } , LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None }
      */
 
+    use std::fs::File;
+    use std::io::Write;
     use std::str::FromStr;
     #[test]
     fn test_liquid_swap_elements() {
@@ -791,11 +793,136 @@ mod tests {
         let bitcoin_txid = history.first().unwrap().tx_hash;
         let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
         let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
-        let outpoints = tx.clone().output;
-        println!("{:?}", outpoints);
+
+        // let outpoints = tx.clone().output;
+        // println!("{:?}", outpoints);
         // let balance = el_script.get_balance().unwrap();
         // println!("tx: {:?}", tx);
         // let balance = el_script.get_balance().unwrap();
         // println!("history: {:?}", history);
     }
 }
+
+/*
+Transaction {
+    version: 2,
+    lock_time: Blocks(
+        Height(
+            1195427,
+        ),
+    ),
+    input: [
+        TxIn {
+            previous_output: OutPoint {
+                txid: 0x10c31b81b93a69a635ab337bb48adeefe662d40d3e5d50b319a1fed17485104a,
+                vout: 1,
+            },
+            is_pegin: false,
+            script_sig: Script(),
+            sequence: Sequence(
+                4294967293,
+            ),
+            asset_issuance: AssetIssuance {
+                asset_blinding_nonce: Tweak(0000000000000000000000000000000000000000000000000000000000000000),
+                asset_entropy: [...],
+                amount: Null,
+                inflation_keys: Null,
+            },
+            witness: TxInWitness {
+                amount_rangeproof: None,
+                inflation_keys_rangeproof: None,
+                script_witness: [...],
+                pegin_witness: [],
+            },
+        },
+    ],
+    output: [
+        TxOut {
+            asset: Confidential(
+                Generator(
+                    8ff79b82771122d74473bd976a4293ab0bf36f53c87134d67f6f028e501bcab7819cd6587a3bc6a070b77e83de6beed2b8df88812cab0739846cca41de390f5f,
+                ),
+            ),
+            value: Confidential(
+                PedersenCommitment(
+                    08600d4a9eb4ee992ded59b62ecbb6bba602f77ffcd4a2dfe549e76f8937172ba900000000000000000000000000000000000000000000000000000000000000,
+                ),
+            ),
+            nonce: Confidential(
+                PublicKey(
+                    f145cb239a483a268e17397efd6a2b079f37bd9f872c6e1d2c467de322def7290197d31727b33a7fa6cf099feeff4a8d223f40459a1fdba393ba797a57aa3a14,
+                ),
+            ),
+            script_pubkey: Script(OP_0 OP_PUSHBYTES_32 f233649a711ff2dddef1b5f585f1375ec045099f83a1b3e1fc63d8fe010b1493),
+            witness: TxOutWitness {
+                surjection_proof: Some(
+                    SurjectionProof {
+                        inner: SurjectionProof {
+                            n_inputs: 1,
+                            used_inputs: [...],
+                            data: [...],
+                        },
+                    },
+                ),
+                rangeproof: Some(
+                    RangeProof {
+                        inner: RangeProof(
+                            [...],
+                        ),
+                    },
+                ),
+            },
+        },
+        TxOut {
+            asset: Confidential(
+                Generator(
+                    56addeefbaeb6543735b3ffefd71beed41cec402379b5aa486b9586757d0358be76dbc5de43796ec109a92866d081c07c87fe35bc228da98521867e58833d202,
+                ),
+            ),
+            value: Confidential(
+                PedersenCommitment(
+                    09bf4134766c6d659e018a94a6bcc1ef842a85c2b4360dae2daf9217aedfcdc57600000000000000000000000000000000000000000000000000000000000000,
+                ),
+            ),
+            nonce: Confidential(
+                PublicKey(
+                    125bcca9a718c16ea2f1e0623d4e2dc32008d3f278ddc9a423028d101c37bdac570128f0ba36c97ef7bb4cf034305053d6d3e091dcf0d2e742bebb2e05021bcb,
+                ),
+            ),
+            script_pubkey: Script(OP_0 OP_PUSHBYTES_20 53919f7c33109507ae46caedc81ad064f3bc6298),
+            witness: TxOutWitness {
+                surjection_proof: Some(
+                    SurjectionProof {
+                        inner: SurjectionProof {
+                            n_inputs: 1,
+                            used_inputs: [...],
+                            data: [...],
+                        },
+                    },
+                ),
+                rangeproof: Some(
+                    RangeProof {
+                        inner: RangeProof(
+                            [...],
+                        ),
+                    },
+                ),
+            },
+        },
+        TxOut {
+            asset: Explicit(
+                0x144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49,
+            ),
+            value: Explicit(
+                250,
+            ),
+            nonce: Null,
+            script_pubkey: Script(),
+            witness: TxOutWitness {
+                surjection_proof: None,
+                rangeproof: None,
+            },
+        },
+    ],
+}
+*/
