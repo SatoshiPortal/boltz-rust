@@ -2,3 +2,4 @@
 /builds
 .env
 Cargo.lock
+tx.hex

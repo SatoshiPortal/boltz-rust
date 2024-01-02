@@ -395,12 +395,7 @@ impl LBtcSwapTx {
         })
     }
 
-    pub fn drain(
-        &mut self,
-        keys: ZKKeyPair,
-        preimage: Preimage,
-        blinding_keys: ZKKeyPair,
-    ) -> Result<Transaction, S5Error> {
+    pub fn drain(&mut self, keys: ZKKeyPair, preimage: Preimage) -> Result<Transaction, S5Error> {
         self.fetch_utxo();
         if !self.has_utxo() {
             return Err(S5Error::new(
@@ -440,7 +435,7 @@ impl LBtcSwapTx {
         for output in tx.output {
             if output.script_pubkey == address.script_pubkey() {
                 let zksecp = Secp256k1::new();
-                println!("FOUND!\n{:?}", vout);
+                println!("FOUND SPENDABLE OUTPUT!\nvout: {:?}", vout);
                 let unblinded = output
                     .unblind(&zksecp, self.swap_script.blinding_key.secret_key())
                     .unwrap();
@@ -752,7 +747,7 @@ mod tests {
 
         tx_elements = tx_elements.manual_utxo_update(outpoint, out_value);
         println!("{:?}", tx_elements);
-        let signed = tx_elements.drain(_my_key_pair, preimage, blinding_key);
+        let signed = tx_elements.drain(_my_key_pair, preimage);
         println!("{:?}", hex::encode(signed.clone().unwrap().serialize()));
         // println!("{:?}", signed.unwrap())
     }
@@ -769,9 +764,9 @@ mod tests {
     LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None } , LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None }
      */
 
-    // use std::fs::File;
-    // use std::io::Write;
-    use std::str::FromStr;
+    use std::io::Write;
+    use std::path::Path;
+    use std::{fs::File, str::FromStr};
     #[test]
     fn test_liquid_swap_elements() {
         // let secp = Secp256k1::new();
@@ -823,49 +818,19 @@ mod tests {
         println!("Blinding Pub: {:?}", address.blinding_pubkey);
 
         assert_eq!(address.to_string(), expected_address);
-        let network_config = NetworkConfig::default_liquid();
-        let electrum_client = network_config.electrum_url.build_client().unwrap();
-        assert!(electrum_client.ping().is_ok());
 
-        let fees = electrum_client.batch_estimate_fee(6..10);
-        println!("FEES: {:?}", fees);
-
-        // let history = electrum_client
-        //     .script_get_history(BitcoinScript::from_bytes(
-        //         el_script.to_script().to_v0_p2wsh().as_bytes(),
-        //     ))
-        //     .unwrap();
-
-        // let bitcoin_txid = history.first().unwrap().tx_hash;
-        // let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
-        // let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
-
-        // let mut vout = 0;
-        // for output in tx.output {
-        //     if output.script_pubkey == address.script_pubkey() {
-        //         println!("FOUND!\n{:?}", vout);
-        //         let unblinded = output.unblind(&secp, boltz_blinding_key.secret_key());
-        //         println!("{:?}", unblinded.unwrap());
-        //         break;
-        //     }
-        //     vout += 1;
-        // }
         let mut liquid_swap_tx =
-            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), 1_000).unwrap();
-        let final_tx = liquid_swap_tx
-            .drain(my_key_pair, preimage, boltz_blinding_key)
-            .unwrap();
+            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), 5_000).unwrap();
+        let final_tx = liquid_swap_tx.drain(my_key_pair, preimage).unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         let serialized = hex::encode(serialize(&final_tx));
-        // let txid = liquid_swap_tx.broadcast(final_tx).unwrap();
-        println!("TX HEX: {:?}", serialized);
 
-        // let outpoints = tx.clone().output;
-        // println!("{:?}", outpoints);
-        // let balance = el_script.get_balance().unwrap();
-        // println!("tx: {:?}", tx);
-        // let balance = el_script.get_balance().unwrap();
-        // println!("history: {:?}", history);
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = Path::new(manifest_dir).join("tx.hex");
+        let mut file = File::create(file_path).unwrap();
+        writeln!(file, "{}", serialized).unwrap();
+        println!("CHECK FILE tx.hex!");
+        // let txid = liquid_swap_tx.broadcast(final_tx).unwrap();
     }
 }
 
