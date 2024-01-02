@@ -679,8 +679,7 @@ impl LBtcSwapTx {
         .electrum_url
         .build_client()?;
         let serialized = serialize(&signed_tx);
-        let bitcoin_tx: bitcoin::Transaction = deserialize(&serialized).unwrap();
-        match electrum_client.transaction_broadcast(&bitcoin_tx) {
+        match electrum_client.transaction_broadcast_raw(&serialized) {
             Ok(txid) => Ok(txid.to_string()),
             Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
         }
@@ -764,9 +763,9 @@ mod tests {
     LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None } , LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None }
      */
 
-    use std::io::Write;
-    use std::path::Path;
-    use std::{fs::File, str::FromStr};
+    // use std::io::Write;
+    // use std::path::Path;
+    // use std::{fs::File, str::FromStr};
     #[test]
     fn test_liquid_swap_elements() {
         // let secp = Secp256k1::new();
@@ -823,14 +822,8 @@ mod tests {
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), 5_000).unwrap();
         let final_tx = liquid_swap_tx.drain(my_key_pair, preimage).unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
-        let serialized = hex::encode(serialize(&final_tx));
-
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let file_path = Path::new(manifest_dir).join("tx.hex");
-        let mut file = File::create(file_path).unwrap();
-        writeln!(file, "{}", serialized).unwrap();
-        println!("CHECK FILE tx.hex!");
-        // let txid = liquid_swap_tx.broadcast(final_tx).unwrap();
+        let txid = liquid_swap_tx.broadcast(final_tx).unwrap();
+        println!("TXID: {}", txid);
     }
 }
 
@@ -957,3 +950,12 @@ Transaction {
     ],
 }
 */
+
+/*
+
+let manifest_dir = env!("CARGO_MANIFEST_DIR");
+let file_path = Path::new(manifest_dir).join("tx.hex");
+let mut file = File::create(file_path).unwrap();
+writeln!(file, "{}", serialized).unwrap();
+println!("CHECK FILE tx.hex!");
+ */
