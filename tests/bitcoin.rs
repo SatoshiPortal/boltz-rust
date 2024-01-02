@@ -1,7 +1,11 @@
 // mod bullbitcoin_rnd;
 // extern crate libbullwallet;
 
-use bitcoin::secp256k1::{KeyPair, Secp256k1};
+use bip39::Mnemonic;
+use bitcoin::{
+    bip32::ExtendedPrivKey,
+    secp256k1::{KeyPair, Secp256k1},
+};
 use boltzclient::{
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
@@ -35,12 +39,12 @@ pub fn pause_and_wait(msg: &str) {
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice_str = "lntb500u1pjch47vpp5uwzfvyng6kvp87qny8eyn7rxq0qzlqtzsgg8dgg0rgpa983n426qdqyda5sxqyjw5qcqp2sp5taxx2vtk6wsyq827rc42ccf0d2amsmlghvssaf4d4equwgnef05srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqgwy0l9y88r46895228vjl9lr8f30msypptf6tvew384cz2dmsjrr4vfqv34p76lv0yg2kqrt7ra0trjeywwd50yeleyntc2wfn45j0qpyqxfns";
+    let invoice_str = "lntb500u1pjeqvw7pp5gzea37hweufaa2y7clud9rk9tvvzwkh0lpnn9vqp0wd955hfaupsdq8w3ehx6gxqyjw5qcqp2sp5qnxwk5ntp6a9vua4e0e3nwccuzxk2sp4kn76w3z7xrf0ve7p5jfsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqlx2zzmaep37rrm9qg2xuqnm3teasy3p29jk3459ne9ts3uctc4syps2zqt94vlkqpdqn43y2z4w7rqdupz8mfdrw0qfrkvn34tt4m4gpq5g9c6";
     // ensure the payment hash is the one boltz uses in their swap script
-    let preimage_states = Preimage::from_invoice_str(invoice_str).unwrap();
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = ChildKeys::from_submarine_account(&mnemonic, 1)
+
+    let keypair = ChildKeys::from_submarine_account(&mnemonic.to_string(), 1)
         .unwrap()
         .keypair;
     println!(
@@ -68,6 +72,8 @@ fn test_bitcoin_ssi() {
         keypair.public_key().to_string().clone(),
     );
     let response = boltz_client.create_swap(request);
+    let preimage_states = Preimage::from_invoice_str(invoice_str).unwrap();
+
     assert!(response
         .as_ref()
         .unwrap()
@@ -141,7 +147,8 @@ fn test_bitcoin_rsi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = ChildKeys::from_reverse_account(&mnemonic, 1)
+
+    let keypair = ChildKeys::from_reverse_account(&&mnemonic.to_string(), 1)
         .unwrap()
         .keypair;
     println!(

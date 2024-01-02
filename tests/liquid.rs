@@ -98,8 +98,9 @@ fn test_liquid_rsi() {
     let keypair = ChildKeys::from_reverse_account(&mnemonic, 1)
         .unwrap()
         .keypair;
-    println!("{:?}", keypair);
+    println!("SECRET-KEY: {:?}", keypair.display_secret());
     let preimage = Preimage::new();
+    println!("PREIMAGE: {}", hex::encode(preimage.bytes.unwrap()));
     // SECRETS
     let network_config = NetworkConfig::default_liquid();
     let _electrum_client = network_config.electrum_url.build_client().unwrap();
@@ -122,7 +123,7 @@ fn test_liquid_rsi() {
     // println!("{:?}", response);
 
     assert!(response.is_ok());
-    println!("{:?}", preimage.clone());
+    // println!("{:?}", preimage.clone());
     assert!(response
         .as_ref()
         .unwrap()
@@ -138,6 +139,7 @@ fn test_liquid_rsi() {
     let _invoice = response.as_ref().unwrap().invoice.clone().unwrap();
     let _lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
     let blinding_string = response.as_ref().unwrap().blinding_key.clone().unwrap();
+    println!("BOLTZ-BLINDING-KEY: {}", blinding_string);
 
     let redeem_script_string = response
         .as_ref()
@@ -146,6 +148,7 @@ fn test_liquid_rsi() {
         .as_ref()
         .unwrap()
         .clone();
+    println!("REDEEM_SCRIPT: {}", redeem_script_string);
 
     let boltz_script_elements = LBtcSwapScript::reverse_from_str(
         BitcoinNetwork::LiquidTestnet,

@@ -11,6 +11,7 @@ use elements::{
     TxIn, TxInWitness, TxOut, TxOutSecrets, TxOutWitness, Txid,
 };
 
+use elements::encode::{deserialize, serialize};
 use elements::secp256k1_zkp::Message;
 
 use crate::{
@@ -586,8 +587,8 @@ impl LBtcSwapTx {
         let blinded_asset = elements::confidential::Asset::Confidential(asset_generator);
 
         let tx_out_witness = TxOutWitness {
-            surjection_proof: todo!(),
-            rangeproof: todo!(),
+            surjection_proof: None,
+            rangeproof: None,
         };
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
@@ -671,18 +672,26 @@ impl LBtcSwapTx {
     fn sign_refund_tx(&self, _keys: KeyPair) -> () {
         ()
     }
+    pub fn broadcast(&mut self, signed_tx: Transaction) -> Result<String, S5Error> {
+        let electrum_client = NetworkConfig::new(
+            BitcoinNetwork::LiquidTestnet,
+            &self.swap_script.electrum_url,
+            true,
+            true,
+            false,
+            None,
+        )
+        .electrum_url
+        .build_client()?;
+        let serialized = serialize(&signed_tx);
+        let bitcoin_tx: bitcoin::Transaction = deserialize(&serialized).unwrap();
+        match electrum_client.transaction_broadcast(&bitcoin_tx) {
+            Ok(txid) => Ok(txid.to_string()),
+            Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+        }
+    }
 }
 
-fn _mock_generator() -> elements::secp256k1_zkp::Generator {
-    let mut a = [2u8; 33];
-    a[0] = 10;
-    elements::secp256k1_zkp::Generator::from_slice(&a).unwrap()
-}
-
-fn _mock_pubkey() -> elements::secp256k1_zkp::PublicKey {
-    let a = [2u8; 33];
-    elements::secp256k1_zkp::PublicKey::from_slice(&a).unwrap()
-}
 #[cfg(test)]
 mod tests {
     use crate::network::electrum::DEFAULT_LIQUID_TESTNET_NODE;
@@ -767,16 +776,20 @@ mod tests {
     fn test_liquid_swap_elements() {
         // let secp = Secp256k1::new();
         let secp = Secp256k1::new();
-        let redeem_script_str = "8201208763a914fc9eeab62b946bd3e9681c082ac2b6d0bccea80f88210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750315f411b1752102285c72dca7aaa31d58334e20be181cfa2cb8eb8092a577ef6f77bba068b8c69868ac".to_string();
-        let expected_address = "tlq1qqv7fnca53ad6fnnn05rwtdc8q6gp8h3yd7s3gmw20updn44f8mvwkxqf8psf3e56k2k7393r3tkllznsdpphqa33rdvz00va429jq6j2zzg8f59kqhex";
-        let expected_timeout = 1176597;
-        let blinding_str = "852f5fb1a95ea3e16ad0bb1c12ce0eac94234e3c652e9b163accd41582c366ed";
-        let blinding_key = ZKKeyPair::from_seckey_str(&secp, blinding_str).unwrap();
+        const RETURN_ADDRESS: &str =
+        "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
+        let redeem_script_str = "8201208763a9142bdd03d431251598f46a625f1d3abfcd7f491535882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c677503715912b1752103fced00385bd14b174a571d88b4b6aced2cb1d532237c29c4ec61338fbb7eff4068ac".to_string();
+        let expected_address = "tlq1qq0gnj2my5tp8r77srvvdmwfrtr8va9mgz9e8ja0rzk75jvsanjvgz5sfvl093l5a7xztrtzhyhfmfyr2exdxtpw7cehfgtzgn62zdzcsgrz8c4pjfvtj";
+        let expected_timeout = 1202545;
+        let boltz_blinding_str = "02702ae71ec11a895f6255e26395983585a0d791ea1eb83d1aa54a66056469da";
+        let boltz_blinding_key = ZKKeyPair::from_seckey_str(&secp, boltz_blinding_str).unwrap();
+        let preimage_str = "6ef7d91c721ea06b3b65d824ae1d69777cd3892d41090234aef13a572ff0e64f";
+        let preimage = Preimage::from_str(preimage_str).unwrap();
         // println!("{}", blinding_key.public_key().to_string());
         let _id = "axtHXB";
         let my_key_pair = KeyPair::from_seckey_str(
             &secp,
-            "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1",
+            "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6",
         )
         .unwrap();
 
@@ -784,7 +797,7 @@ mod tests {
             BitcoinNetwork::LiquidTestnet,
             DEFAULT_LIQUID_TESTNET_NODE.to_string(),
             &redeem_script_str.clone(),
-            blinding_str.to_string(),
+            boltz_blinding_str.to_string(),
         )
         .unwrap();
         // println!("{:?}", decoded);
@@ -802,7 +815,7 @@ mod tests {
             network: BitcoinNetwork::LiquidTestnet,
             electrum_url: DEFAULT_LIQUID_TESTNET_NODE.to_string(),
             swap_type: SwapType::ReverseSubmarine,
-            blinding_key,
+            blinding_key: boltz_blinding_key,
         };
 
         let address = el_script.to_address();
@@ -817,31 +830,36 @@ mod tests {
         let fees = electrum_client.batch_estimate_fee(6..10);
         println!("FEES: {:?}", fees);
 
-        let history = electrum_client
-            .script_get_history(BitcoinScript::from_bytes(
-                el_script.to_script().to_v0_p2wsh().as_bytes(),
-            ))
-            .unwrap();
-        // let utxo = electrum_client
-        //     .script_list_unspent(BitcoinScript::from_bytes(
+        // let history = electrum_client
+        //     .script_get_history(BitcoinScript::from_bytes(
         //         el_script.to_script().to_v0_p2wsh().as_bytes(),
         //     ))
         //     .unwrap();
-        // println!("{:?}", utxo);
-        let bitcoin_txid = history.first().unwrap().tx_hash;
-        let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
-        let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
 
-        let mut vout = 0;
-        for output in tx.output {
-            if output.script_pubkey == address.script_pubkey() {
-                println!("FOUND!\n{:?}", vout);
-                let unblinded = output.unblind(&secp, blinding_key.secret_key());
-                println!("{:?}", unblinded.unwrap());
-                break;
-            }
-            vout += 1;
-        }
+        // let bitcoin_txid = history.first().unwrap().tx_hash;
+        // let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
+        // let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
+
+        // let mut vout = 0;
+        // for output in tx.output {
+        //     if output.script_pubkey == address.script_pubkey() {
+        //         println!("FOUND!\n{:?}", vout);
+        //         let unblinded = output.unblind(&secp, boltz_blinding_key.secret_key());
+        //         println!("{:?}", unblinded.unwrap());
+        //         break;
+        //     }
+        //     vout += 1;
+        // }
+        let mut liquid_swap_tx =
+            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), 1_000).unwrap();
+        let final_tx = liquid_swap_tx
+            .drain(my_key_pair, preimage, boltz_blinding_key)
+            .unwrap();
+        println!("FINALIZED TX SIZE: {:?}", final_tx.size());
+        let serialized = hex::encode(serialize(&final_tx));
+        // let txid = liquid_swap_tx.broadcast(final_tx).unwrap();
+        println!("TX HEX: {:?}", serialized);
+
         // let outpoints = tx.clone().output;
         // println!("{:?}", outpoints);
         // let balance = el_script.get_balance().unwrap();
@@ -872,7 +890,7 @@ Transaction {
             ),
             asset_issuance: AssetIssuance {
                 asset_blinding_nonce: Tweak(0000000000000000000000000000000000000000000000000000000000000000),
-                asset_entropy: [...],
+                asset_entropy: [1,0,0,0,0,0,0,0,0,0,0,0],
                 amount: Null,
                 inflation_keys: Null,
             },

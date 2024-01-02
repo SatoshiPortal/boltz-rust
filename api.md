@@ -256,11 +256,11 @@ let txid = rev_claim_tx.broadcast(&signed_tx);
 Incase of a Reverse Swap, `refund transaction` is the expiry of the Lightning invoice.
 
 
-# Unified FFI API
+# Unified FFI API 
 
 Language bindings written for the library will have a slightly different and more unified api, which can be found in src/api.rs
 
-This will later be migrated to a different crate `boltz-client-flutter`
+This will later be developed under a different crate `boltz-client-flutter`
 
 The final dart API would ideally look as follows:
 

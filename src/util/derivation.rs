@@ -1,4 +1,5 @@
 use crate::util::error::{ErrorKind, S5Error};
+use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey, Fingerprint};
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::{KeyPair, Secp256k1};
@@ -18,9 +19,11 @@ pub struct ChildKeys {
     pub keypair: KeyPair,
 }
 impl ChildKeys {
-    pub fn from_submarine_account(master_xprv: &str, index: u64) -> Result<ChildKeys, S5Error> {
+    pub fn from_submarine_account(mnemonic: &str, index: u64) -> Result<ChildKeys, S5Error> {
         let secp = Secp256k1::new();
-        let root = match ExtendedPrivKey::from_str(master_xprv) {
+        let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
+        let seed = mnemonic_struct.to_seed("");
+        let root = match ExtendedPrivKey::new_master(bitcoin::Network::Testnet, &seed) {
             Ok(xprv) => xprv,
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
         };
@@ -32,6 +35,12 @@ impl ChildKeys {
             Network::Testnet => "1",
             _ => "1",
         };
+
+        // 6777837e/purpose'/network'/account'/change|depost/index
+        // m/0' => XKeypair
+        // m/0'/1'/89718/29839823 => XKeypair
+        // BIP32
+        // m/
         let derivation_path = format!(
             "m/{}h/{}h/{}h/0/{}",
             purpose.to_string(),
@@ -67,9 +76,11 @@ impl ChildKeys {
             keypair: key_pair,
         })
     }
-    pub fn from_reverse_account(master_xprv: &str, index: u64) -> Result<ChildKeys, S5Error> {
+    pub fn from_reverse_account(mnemonic: &str, index: u64) -> Result<ChildKeys, S5Error> {
         let secp = Secp256k1::new();
-        let root = match ExtendedPrivKey::from_str(master_xprv) {
+        let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
+        let seed = mnemonic_struct.to_seed("");
+        let root = match ExtendedPrivKey::new_master(bitcoin::Network::Testnet, &seed) {
             Ok(xprv) => xprv,
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
         };
@@ -81,6 +92,7 @@ impl ChildKeys {
             Network::Testnet => "1",
             _ => "1",
         };
+        // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
         let derivation_path = format!(
             "m/{}h/{}h/{}h/0/{}",
             purpose.to_string(),

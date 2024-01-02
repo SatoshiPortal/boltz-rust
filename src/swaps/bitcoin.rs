@@ -525,6 +525,8 @@ impl BtcSwapTx {
             output: vec![output.clone()],
         };
         // signed_tx.size();
+        // calculate absolute fee as size * fee_rate
+        // then calcualte real output_amount as output_value - absolute_fees
 
         Ok(signed_tx)
     }
@@ -570,7 +572,6 @@ mod tests {
     use std::io;
     use std::io::Write;
     use std::str::FromStr;
-
     pub fn pause_and_wait(msg: &str) {
         let stdin = io::stdin();
         let mut stdout = io::stdout();
