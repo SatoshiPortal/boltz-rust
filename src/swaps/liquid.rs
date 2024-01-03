@@ -1,9 +1,10 @@
 use electrum_client::ElectrumApi;
+use serde::Serialize;
 use std::{fs::File, path::Path, str::FromStr};
 
 use bitcoin::{
     script::Script as BitcoinScript,
-    secp256k1::{KeyPair, SecretKey},
+    secp256k1::{KeyPair, Secp256k1 as OgSecp256k1, SecretKey},
 };
 use elements::{
     confidential::{self, AssetBlindingFactor, Nonce, ValueBlindingFactor},
@@ -501,24 +502,27 @@ impl LBtcSwapTx {
             .unwrap();
 
         let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
-        println!("OUTPUT_VALUE: {}", output_value);
-        let out_vbf = ValueBlindingFactor::new(&mut rng);
+        println!(
+            "OUTPUT_VALUE: {}\nOUTPUT_FEE: {}",
+            output_value, self.absolute_fees as u64
+        );
+        // let out_vbf = ValueBlindingFactor::new(&mut rng);
 
-        // let mut final_vbf = ValueBlindingFactor::last(
-        //     &secp,
-        //     output_value,
-        //     out_abf,
-        //     &[(
-        //         self.txout_secrets.unwrap().value,
-        //         self.txout_secrets.unwrap().asset_bf,
-        //         self.txout_secrets.unwrap().value_bf,
-        //     )],
-        //     &[(
-        //         self.absolute_fees as u64,
-        //         AssetBlindingFactor::zero(),
-        //         ValueBlindingFactor::zero(),
-        //     )],
-        // );
+        let final_vbf = ValueBlindingFactor::last(
+            &secp,
+            output_value,
+            out_abf,
+            &[(
+                self.txout_secrets.unwrap().value,
+                self.txout_secrets.unwrap().asset_bf,
+                self.txout_secrets.unwrap().value_bf,
+            )],
+            &[(
+                self.absolute_fees as u64,
+                AssetBlindingFactor::zero(),
+                ValueBlindingFactor::zero(),
+            )],
+        );
         // final_vbf += out_vbf;
         let explicit_value = elements::confidential::Value::Explicit(output_value);
         let msg = elements::RangeProofMessage {
@@ -530,7 +534,7 @@ impl LBtcSwapTx {
         let (blinded_value, nonce, rangeproof) = explicit_value
             .blind(
                 &secp,
-                out_vbf,
+                final_vbf,
                 self.output_address.blinding_pubkey.unwrap(),
                 ephemeral_sk,
                 &self.output_address.script_pubkey(),
@@ -568,8 +572,13 @@ impl LBtcSwapTx {
             )[..],
         )
         .unwrap();
-        let signature = secp.sign_ecdsa(&sighash, &keys.secret_key());
 
+        let ogsecp = OgSecp256k1::new();
+        let signature = ogsecp.sign_ecdsa(&sighash, &keys.secret_key());
+        // let mut sig = [0; 73];
+        // sig[..signature.len()].copy_from_slice(&signature);
+        // sig[signature.len()] = elements::EcdsaSighashType::All as u8;
+        // let final_sig_pushed = sig[..signature.len() + 1].to_vec();
         let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
         script_witness.push(signature.serialize_der().to_vec());
         script_witness.push(preimage.bytes.unwrap().to_vec());
