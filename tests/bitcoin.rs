@@ -1,11 +1,4 @@
-// mod bullbitcoin_rnd;
-// extern crate libbullwallet;
-
-use bip39::Mnemonic;
-use bitcoin::{
-    bip32::ExtendedPrivKey,
-    secp256k1::{KeyPair, Secp256k1},
-};
+use bitcoin::secp256k1::{KeyPair, Secp256k1};
 use boltzclient::{
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{

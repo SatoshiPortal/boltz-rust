@@ -1,21 +1,12 @@
-use bitcoin::secp256k1::Secp256k1;
-use bitcoin::secp256k1::SecretKey;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
-
-use crate::util::error::{ErrorKind, S5Error};
-
-use elements::secp256k1_zkp::{
-    KeyPair as ZKKeyPair, PublicKey as ZKPublicKey, SecretKey as ZKSecretKey,
-};
-use elements::secp256k1_zkp::{PedersenCommitment, Secp256k1 as ZKSecp256k1};
-
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use bitcoin::secp256k1::SecretKey;
     use elements::secp256k1_zkp::{Generator, RangeProof, Tag, Tweak};
     use hex::FromHex;
 
-    use super::*;
+    use elements::secp256k1_zkp::{PedersenCommitment, Secp256k1 as ZKSecp256k1};
 
     #[test]
     fn test_ct_primitives() {

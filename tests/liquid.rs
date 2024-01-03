@@ -6,8 +6,8 @@ use boltzclient::{
     },
     util::{derivation::ChildKeys, preimage::Preimage},
 };
+use elements::secp256k1_zkp::KeyPair as ZKKeyPair;
 use elements::secp256k1_zkp::Secp256k1;
-use elements::secp256k1_zkp::{KeyPair as ZKKeyPair, SurjectionProof};
 
 /// submarine swap integration
 /// update invoice before running

@@ -1,13 +1,5 @@
 # boltz-client
 
-The goal of this  is to develop a working boltz client in rust that supports:
-
-- [x] normal submarine swaps: OnChain->LN for both Bitcoin & Liquid
-Here we will pay an onchain script address for boltz and boltz will pay our LN invoice.
-
-- [ ] reverse submarine swaps LN->OnChain for both Bitcoin & Liquid
-Here we will pay an LN invoice to boltz and boltz will fund an onchain script for us to sweep.
-
 ## Script
 
 This requires building a `one-time use and dispose wallet` for the following bitcoin script:
@@ -171,5 +163,13 @@ For all ignored unit tests read the tests before running.
 - [x] ReverseSwap (BTC): Refund (Invoice expires)
 - [x] NormalSwap  (L-BTC): Claim (Invoice paid)
 - [ ] NormalSwap  (L-BTC): Refund
-- [ ] ReverseSwap (L-BTC): Claim
+- [x] ReverseSwap (L-BTC): Claim
 - [x] ReverseSwap (L-BTC): Refund (Invoice expires)
+
+## Acknowledgement
+
+Special thanks to:
+
+- @michael1011 for guidance on implementation and swaps
+- @stratospher for contributions and pairing with us through understanding liquid confidential transactions
+- @RCasatta for guidance on liquid

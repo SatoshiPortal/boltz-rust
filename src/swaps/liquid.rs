@@ -1,5 +1,5 @@
 use electrum_client::ElectrumApi;
-use std::{fs::File, path::Path, str::FromStr};
+use std::str::FromStr;
 
 use bitcoin::{
     script::Script as BitcoinScript,
@@ -27,18 +27,12 @@ use crate::{
     },
 };
 
-pub const DUST_VALUE: u64 = 546;
-// 3-input ASP
-pub const DEFAULT_SURJECTIONPROOF_SIZE: u64 = 135;
-// 52-bit rangeproof
-pub const DEFAULT_RANGEPROOF_SIZE: u64 = 4174;
 use bitcoin::PublicKey;
-use elements::secp256k1_zkp::{KeyPair as ZKKeyPair, PublicKey as NoncePublicKey};
+use elements::secp256k1_zkp::KeyPair as ZKKeyPair;
 use elements::{
     address::Address as EAddress,
     opcodes::all::*,
     script::{Builder as EBuilder, Instruction, Script as EScript},
-    secp256k1_zkp::PublicKey as ZKPublicKey,
     AddressParams, LockTime,
 };
 
@@ -83,9 +77,7 @@ impl LBtcSwapScript {
         redeem_script_str: &str,
         blinding_str: String,
     ) -> Result<Self, S5Error> {
-        // let script_bytes = hex::decode(redeem_script_str).unwrap().to_owned();
         let script = EScript::from_str(&redeem_script_str).unwrap();
-        // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
 
         let instructions = script.instructions();
         let mut last_op = OP_0NOTEQUAL;
@@ -98,7 +90,6 @@ impl LBtcSwapScript {
             match instruction {
                 Ok(Instruction::Op(opcode)) => {
                     last_op = opcode;
-                    // println!("{:?}", opcode)
                 }
 
                 Ok(Instruction::PushBytes(bytes)) => {
@@ -114,7 +105,6 @@ impl LBtcSwapScript {
                     if last_op == OP_DROP {
                         sender_pubkey = Some(hex::encode(bytes));
                     }
-                    // println!("{:?}", bytes)
                 }
                 Err(e) => println!("Error: {:?}", e),
             }
@@ -155,11 +145,7 @@ impl LBtcSwapScript {
         blinding_str: String,
     ) -> Result<Self, S5Error> {
         let script = EScript::from_str(&redeem_script_str).unwrap();
-        // let address = Address::p2shwsh(&script, bitcoin::Network::Testnet);
-        // println!("ADDRESS DECODED: {:?}",address);
-        // let script_hash = script.script_hash();
-        // let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
-        // println!("DECODED SCRIPT HASH: {}",sh_str);
+
         let instructions = script.instructions();
         let mut last_op = OP_0NOTEQUAL;
         let mut hashlock = None;
@@ -171,7 +157,6 @@ impl LBtcSwapScript {
             match instruction {
                 Ok(Instruction::Op(opcode)) => {
                     last_op = opcode;
-                    // println!("{:?}", opcode)
                 }
 
                 Ok(Instruction::PushBytes(bytes)) => {
@@ -188,7 +173,6 @@ impl LBtcSwapScript {
                             sender_pubkey = Some(hex::encode(bytes));
                         }
                     }
-                    // println!("{:?}: LENGTH: {}", bytes, bytes.len() )
                 }
                 Err(e) => println!("Error: {:?}", e),
             }
@@ -337,12 +321,21 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
     }
     result
 }
-fn u32_to_bytes_little_endian(value: u32) -> [u8; 4] {
+fn _u32_to_bytes_little_endian(value: u32) -> [u8; 4] {
     let b1: u8 = (value & 0xff) as u8;
     let b2: u8 = ((value >> 8) & 0xff) as u8;
     let b3: u8 = ((value >> 16) & 0xff) as u8;
     let b4: u8 = ((value >> 24) & 0xff) as u8;
     [b1, b2, b3, b4]
+}
+
+pub type ElementsSig = (secp256k1_zkp::ecdsa::Signature, elements::EcdsaSighashType);
+
+pub fn elementssig_to_rawsig(sig: &ElementsSig) -> Vec<u8> {
+    let ser_sig = sig.0.serialize_der();
+    let mut raw_sig = Vec::from(&ser_sig[..]);
+    raw_sig.push(sig.1 as u8);
+    raw_sig
 }
 
 #[derive(Debug, Clone)]
@@ -423,7 +416,6 @@ impl LBtcSwapTx {
                 ))
             }
         }
-        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
     }
 
     fn fetch_utxo(&mut self) -> () {
@@ -440,28 +432,16 @@ impl LBtcSwapTx {
         let bitcoin_txid = history.first().unwrap().tx_hash;
         let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
         let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
-        // println!("TXID: {}", tx.txid());
-        // WRITE TX TO FILE
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let file_path = Path::new(manifest_dir).join("tx.previous");
-        let mut file = File::create(file_path).unwrap();
-        use std::io::Write;
-        writeln!(file, "{:#?}", tx.clone()).unwrap();
-        // WRITE TX TO FILE
         let mut vout = 0;
         for output in tx.clone().output {
             if output.script_pubkey == address.script_pubkey() {
                 let zksecp = Secp256k1::new();
-                println!("FOUND SPENDABLE OUTPUT!\nvout: {:?}", vout);
-
                 let unblinded = output
                     .unblind(&zksecp, self.swap_script.blinding_key.secret_key())
                     .unwrap();
-                // println!("{:?}", unblinded);
                 let el_txid = tx.clone().txid();
                 let outpoint_0 = OutPoint::new(el_txid, vout);
                 let utxo_value = unblinded.value;
-                println!("VALUE:{:?}", utxo_value);
 
                 self.utxo = Some(outpoint_0);
                 self.utxo_value = Some(utxo_value);
@@ -506,11 +486,6 @@ impl LBtcSwapTx {
             .unwrap();
 
         let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
-        println!(
-            "OUTPUT_VALUE: {}\nOUTPUT_FEE: {}",
-            output_value, self.absolute_fees as u64
-        );
-        // let out_vbf = ValueBlindingFactor::new(&mut rng);
 
         let final_vbf = ValueBlindingFactor::last(
             &secp,
@@ -527,7 +502,6 @@ impl LBtcSwapTx {
                 ValueBlindingFactor::zero(),
             )],
         );
-        // final_vbf += out_vbf;
         let explicit_value = elements::confidential::Value::Explicit(output_value);
         let msg = elements::RangeProofMessage {
             asset: asset_id,
@@ -577,30 +551,17 @@ impl LBtcSwapTx {
             )[..],
         )
         .unwrap();
-        pub type ElementsSig = (secp256k1_zkp::ecdsa::Signature, elements::EcdsaSighashType);
 
-        pub fn elementssig_to_rawsig(sig: &ElementsSig) -> Vec<u8> {
-            let ser_sig = sig.0.serialize_der();
-            let mut raw_sig = Vec::from(&ser_sig[..]);
-            raw_sig.push(sig.1 as u8);
-            raw_sig
-        }
         let sig: secp256k1_zkp::ecdsa::Signature =
             secp.sign_ecdsa_low_r(&sighash, &keys.secret_key());
         let sig = elementssig_to_rawsig(&(sig, hash_type));
-        // let signature = secp.sign_ecdsa(&sighash, &keys.secret_key());
-        // let mut script_witness: Vec<Vec<u8>> = vec![sig];
-        // script_witness.push(sig);
-        // script_witness.push(preimage.bytes.unwrap().to_vec());
-        // script_witness.push(self.swap_script.to_script().as_bytes().to_vec());
+
         let mut witness = Witness::new();
         witness.push(sig);
         witness.push(preimage.bytes.unwrap());
         witness.push(self.swap_script.to_script().as_bytes());
 
         let script_witness = witness.to_vec();
-
-        // println!("WITNESS: {:#?}", script_witness.clone());
 
         let witness = TxInWitness {
             amount_rangeproof: None,
@@ -654,13 +615,6 @@ mod tests {
     use crate::network::electrum::DEFAULT_LIQUID_TESTNET_NODE;
     use std::{fs::File, path::Path};
 
-    /// https://liquidtestnet.com/utils
-    /// https://blockstream.info/liquidtestnet
-    ///
-
-    // use std::io::Write;
-    // use std::path::Path;
-    // use std::{fs::File, str::FromStr};
     #[test]
     #[ignore]
     fn test_liquid_swap_elements() {
@@ -675,7 +629,6 @@ mod tests {
         let boltz_blinding_key = ZKKeyPair::from_seckey_str(&secp, boltz_blinding_str).unwrap();
         let preimage_str = "6ef7d91c721ea06b3b65d824ae1d69777cd3892d41090234aef13a572ff0e64f";
         let preimage = Preimage::from_str(preimage_str).unwrap();
-        // println!("{}", blinding_key.public_key().to_string());
         let _id = "axtHXB";
         let my_key_pair = KeyPair::from_seckey_str(
             &secp,
@@ -730,132 +683,3 @@ mod tests {
         println!("TXID: {}", txid);
     }
 }
-
-/*
-Transaction {
-    version: 2,
-    lock_time: Blocks(
-        Height(
-            1195427,
-        ),
-    ),
-    input: [
-        TxIn {
-            previous_output: OutPoint {
-                txid: 0x10c31b81b93a69a635ab337bb48adeefe662d40d3e5d50b319a1fed17485104a,
-                vout: 1,
-            },
-            is_pegin: false,
-            script_sig: Script(),
-            sequence: Sequence(
-                4294967293,
-            ),
-            asset_issuance: AssetIssuance {
-                asset_blinding_nonce: Tweak(0000000000000000000000000000000000000000000000000000000000000000),
-                asset_entropy: [1,0,0,0,0,0,0,0,0,0,0,0],
-                amount: Null,
-                inflation_keys: Null,
-            },
-            witness: TxInWitness {
-                amount_rangeproof: None,
-                inflation_keys_rangeproof: None,
-                script_witness: [...],
-                pegin_witness: [],
-            },
-        },
-    ],
-    output: [
-        TxOut {
-            asset: Confidential(
-                Generator(
-                    8ff79b82771122d74473bd976a4293ab0bf36f53c87134d67f6f028e501bcab7819cd6587a3bc6a070b77e83de6beed2b8df88812cab0739846cca41de390f5f,
-                ),
-            ),
-            value: Confidential(
-                PedersenCommitment(
-                    08600d4a9eb4ee992ded59b62ecbb6bba602f77ffcd4a2dfe549e76f8937172ba900000000000000000000000000000000000000000000000000000000000000,
-                ),
-            ),
-            nonce: Confidential(
-                PublicKey(
-                    f145cb239a483a268e17397efd6a2b079f37bd9f872c6e1d2c467de322def7290197d31727b33a7fa6cf099feeff4a8d223f40459a1fdba393ba797a57aa3a14,
-                ),
-            ),
-            script_pubkey: Script(OP_0 OP_PUSHBYTES_32 f233649a711ff2dddef1b5f585f1375ec045099f83a1b3e1fc63d8fe010b1493),
-            witness: TxOutWitness {
-                surjection_proof: Some(
-                    SurjectionProof {
-                        inner: SurjectionProof {
-                            n_inputs: 1,
-                            used_inputs: [...],
-                            data: [...],
-                        },
-                    },
-                ),
-                rangeproof: Some(
-                    RangeProof {
-                        inner: RangeProof(
-                            [...],
-                        ),
-                    },
-                ),
-            },
-        },
-        TxOut {
-            asset: Confidential(
-                Generator(
-                    56addeefbaeb6543735b3ffefd71beed41cec402379b5aa486b9586757d0358be76dbc5de43796ec109a92866d081c07c87fe35bc228da98521867e58833d202,
-                ),
-            ),
-            value: Confidential(
-                PedersenCommitment(
-                    09bf4134766c6d659e018a94a6bcc1ef842a85c2b4360dae2daf9217aedfcdc57600000000000000000000000000000000000000000000000000000000000000,
-                ),
-            ),
-            nonce: Confidential(
-                PublicKey(
-                    125bcca9a718c16ea2f1e0623d4e2dc32008d3f278ddc9a423028d101c37bdac570128f0ba36c97ef7bb4cf034305053d6d3e091dcf0d2e742bebb2e05021bcb,
-                ),
-            ),
-            script_pubkey: Script(OP_0 OP_PUSHBYTES_20 53919f7c33109507ae46caedc81ad064f3bc6298),
-            witness: TxOutWitness {
-                surjection_proof: Some(
-                    SurjectionProof {
-                        inner: SurjectionProof {
-                            n_inputs: 1,
-                            used_inputs: [...],
-                            data: [...],
-                        },
-                    },
-                ),
-                rangeproof: Some(
-                    RangeProof {
-                        inner: RangeProof(
-                            [...],
-                        ),
-                    },
-                ),
-            },
-        },
-        TxOut {
-            asset: Explicit(
-                0x144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49,
-            ),
-            value: Explicit(
-                250,
-            ),
-            nonce: Null,
-            script_pubkey: Script(),
-            witness: TxOutWitness {
-                surjection_proof: None,
-                rangeproof: None,
-            },
-        },
-    ],
-}
-*/
-
-/*
-
-
-*/
