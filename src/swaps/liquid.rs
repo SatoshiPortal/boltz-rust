@@ -556,7 +556,7 @@ impl LBtcSwapTx {
         let fee_output: TxOut = TxOut::new_fee(self.absolute_fees as u64, asset_id);
 
         let unsigned_tx = Transaction {
-            version: 1,
+            version: 2,
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![unsigned_input],
             output: vec![payment_output.clone(), fee_output.clone()],
