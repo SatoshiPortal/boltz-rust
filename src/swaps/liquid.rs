@@ -601,7 +601,7 @@ impl LBtcSwapTx {
         };
 
         let signed_tx = Transaction {
-            version: 1,
+            version: 2,
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![signed_txin],
             output: vec![payment_output, fee_output],
