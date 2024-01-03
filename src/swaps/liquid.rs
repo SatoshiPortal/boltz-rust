@@ -516,7 +516,7 @@ impl LBtcSwapTx {
                 out_vbf,
                 self.output_address.blinding_pubkey.unwrap(),
                 ephemeral_sk,
-                &self.swap_script.to_script().to_v0_p2wsh(),
+                &self.output_address.script_pubkey(),
                 &msg,
             )
             .unwrap();
