@@ -503,6 +503,23 @@ impl LBtcSwapTx {
         let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
         println!("OUTPUT_VALUE: {}", output_value);
         let out_vbf = ValueBlindingFactor::new(&mut rng);
+
+        // let mut final_vbf = ValueBlindingFactor::last(
+        //     &secp,
+        //     output_value,
+        //     out_abf,
+        //     &[(
+        //         self.txout_secrets.unwrap().value,
+        //         self.txout_secrets.unwrap().asset_bf,
+        //         self.txout_secrets.unwrap().value_bf,
+        //     )],
+        //     &[(
+        //         self.absolute_fees as u64,
+        //         AssetBlindingFactor::zero(),
+        //         ValueBlindingFactor::zero(),
+        //     )],
+        // );
+        // final_vbf += out_vbf;
         let explicit_value = elements::confidential::Value::Explicit(output_value);
         let msg = elements::RangeProofMessage {
             asset: asset_id,
