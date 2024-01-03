@@ -481,7 +481,7 @@ impl LBtcSwapTx {
         let mut rng = OsRng::default();
         let secp = Secp256k1::new();
 
-        let asset_id = AssetId::LIQUID_BTC;
+        let asset_id = self.txout_secrets.unwrap().asset;
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);
         let inp_txout_secrets = self.txout_secrets.unwrap();
@@ -541,7 +541,7 @@ impl LBtcSwapTx {
         let signature = secp.sign_ecdsa(&sighash, &keys.secret_key());
 
         let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
-        script_witness.push(hex::decode(&signature.serialize_der().to_string()).unwrap());
+        script_witness.push(signature.serialize_der().to_vec());
         script_witness.push(preimage.bytes.unwrap().to_vec());
         script_witness.push(self.swap_script.to_script().as_bytes().to_vec());
 
