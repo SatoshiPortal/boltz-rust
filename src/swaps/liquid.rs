@@ -436,7 +436,7 @@ impl LBtcSwapTx {
         let bitcoin_txid = history.first().unwrap().tx_hash;
         let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
         let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
-
+        println!("TXID: {}", tx.txid());
         let mut vout = 0;
         for output in tx.output {
             if output.script_pubkey == address.script_pubkey() {
@@ -513,19 +513,20 @@ impl LBtcSwapTx {
             surjection_proof: Some(Box::new(asset_surjection_proof)), // from asset blinding
             rangeproof: Some(Box::new(rangeproof)),                   // from value blinding
         };
-        let output: TxOut = TxOut {
+        let payment_output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
             value: blinded_value,
             asset: blinded_asset,
             nonce: nonce,
             witness: tx_out_witness,
         };
+        let fee_output: TxOut = TxOut::new_fee(self.absolute_fees as u64, asset_id);
 
         let unsigned_tx = Transaction {
             version: 1,
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![unsigned_input],
-            output: vec![output.clone()],
+            output: vec![payment_output.clone(), fee_output.clone()],
         };
 
         // SIGN TRANSACTION
@@ -565,7 +566,7 @@ impl LBtcSwapTx {
             version: 1,
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![signed_txin],
-            output: vec![output.clone()],
+            output: vec![payment_output, fee_output],
         };
         signed_tx
     }
