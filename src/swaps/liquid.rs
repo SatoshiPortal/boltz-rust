@@ -436,26 +436,29 @@ impl LBtcSwapTx {
         let bitcoin_txid = history.first().unwrap().tx_hash;
         let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
         let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
-        println!("TXID: {}", tx.txid());
+        // println!("TXID: {}", tx.txid());
         // WRITE TX TO FILE
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let file_path = Path::new(manifest_dir).join("tx.previous");
         let mut file = File::create(file_path).unwrap();
         use std::io::Write;
-        writeln!(file, "{:#?}", tx).unwrap();
+        writeln!(file, "{:#?}", tx.clone()).unwrap();
         // WRITE TX TO FILE
         let mut vout = 0;
-        for output in tx.output {
+        for output in tx.clone().output {
             if output.script_pubkey == address.script_pubkey() {
                 let zksecp = Secp256k1::new();
                 println!("FOUND SPENDABLE OUTPUT!\nvout: {:?}", vout);
+
                 let unblinded = output
                     .unblind(&zksecp, self.swap_script.blinding_key.secret_key())
                     .unwrap();
                 // println!("{:?}", unblinded);
-                let el_txid = elements::Txid::from_str(&bitcoin_txid.to_string()).unwrap();
+                let el_txid = tx.clone().txid();
                 let outpoint_0 = OutPoint::new(el_txid, vout);
                 let utxo_value = unblinded.value;
+                println!("VALUE:{:?}", utxo_value);
+
                 self.utxo = Some(outpoint_0);
                 self.utxo_value = Some(utxo_value);
                 self.txout_secrets = Some(unblinded);
@@ -498,6 +501,7 @@ impl LBtcSwapTx {
             .unwrap();
 
         let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
+        println!("OUTPUT_VALUE: {}", output_value);
         let out_vbf = ValueBlindingFactor::new(&mut rng);
         let explicit_value = elements::confidential::Value::Explicit(output_value);
         let msg = elements::RangeProofMessage {
@@ -505,11 +509,12 @@ impl LBtcSwapTx {
             bf: out_abf,
         };
         let ephemeral_sk = SecretKey::new(&mut rng);
+
         let (blinded_value, nonce, rangeproof) = explicit_value
             .blind(
                 &secp,
                 out_vbf,
-                self.swap_script.blinding_key.public_key(),
+                self.output_address.blinding_pubkey.unwrap(),
                 ephemeral_sk,
                 &self.swap_script.to_script().to_v0_p2wsh(),
                 &msg,
