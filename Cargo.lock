@@ -215,14 +215,12 @@ dependencies = [
 [[package]]
 name = "elements"
 version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "686e85412860d3ac25988e55da4d65541714f1318bf10fd81711e08cbfdcf5b4"
+source = "git+https://github.com/i5hi/rust-elements#386e3b8ecf84b1162706c73e3db980fda30903ff"
 dependencies = [
  "bitcoin 0.30.2",
  "secp256k1-zkp",
  "serde",
  "serde_json",
- "slip21",
 ]
 
 [[package]]
@@ -1041,15 +1039,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "slip21"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "516f52f3cec67962a9c414130251b512f2ff47f81980411ae01b6ce540b1ca6b"
-dependencies = [
- "bitcoin_hashes 0.11.0",
 ]
 
 [[package]]

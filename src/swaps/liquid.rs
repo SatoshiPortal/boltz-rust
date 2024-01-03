@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use bitcoin::{script::Script as BitcoinScript, secp256k1::KeyPair};
 use elements::{
-    confidential::{self, AssetBlindingFactor, Nonce},
+    confidential::{self, AssetBlindingFactor, Nonce, ValueBlindingFactor},
     hashes::hash160,
     secp256k1_zkp::{Generator, PedersenCommitment, RangeProof, Secp256k1, Tag, Tweak},
     sighash::SighashCache,
@@ -349,6 +349,7 @@ pub struct LBtcSwapTx {
     absolute_fees: u32,
     utxo: Option<OutPoint>,
     utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
+    txout_secrets: Option<TxOutSecrets>,
 }
 
 impl LBtcSwapTx {
@@ -373,6 +374,7 @@ impl LBtcSwapTx {
             absolute_fees,
             utxo: None,
             utxo_value: None,
+            txout_secrets: None,
         })
     }
     pub fn new_refund(
@@ -392,6 +394,7 @@ impl LBtcSwapTx {
             absolute_fees,
             utxo: None,
             utxo_value: None,
+            txout_secrets: None,
         })
     }
 
@@ -445,6 +448,7 @@ impl LBtcSwapTx {
                 let utxo_value = unblinded.value;
                 self.utxo = Some(outpoint_0);
                 self.utxo_value = Some(utxo_value);
+                self.txout_secrets = Some(unblinded);
                 break;
             }
             vout += 1;
@@ -552,38 +556,51 @@ impl LBtcSwapTx {
         use bitcoin::secp256k1::rand::rngs::OsRng;
         let mut rng = OsRng::default();
         let secp = Secp256k1::new();
+
         let blinding_factor =
             Tweak::from_slice(self.swap_script.blinding_key.secret_bytes().as_ref()).unwrap();
         let nonce = Nonce::Confidential(self.swap_script.blinding_key.public_key());
         let asset_id = AssetId::LIQUID_BTC;
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);
-        let surject_inputs = SurjectionInput::Known {
-            asset: asset_id,
-            asset_bf: out_abf,
-        };
-        // let blind_res = exp_asset.blind(&mut rng, &secp, out_abf, surject_inputs.into());
-        // let (out_asset_commitment, surjection_proof) = blind_res
-        //     .map_err(|e| PsetBlindError::ConfidentialTxOutError(last_out_index, e))
-        //     .unwrap();
+        let inp_txout_secrets = self.txout_secrets.unwrap();
+
+        let (blinded_asset, asset_surjection_proof) = exp_asset
+            .blind(&mut rng, &secp, out_abf, &[inp_txout_secrets])
+            .unwrap();
 
         // let tx_out_secrets = TxOutSecrets::new(AssetId::LIQUID_BTC);
         let asset_generator = Generator::new_blinded(
             &secp,
-            // Tag::default(),
             AssetId::LIQUID_BTC.into_tag(), // as &[u8; 32]
             blinding_factor,
         );
         let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
+        let out_vbf = ValueBlindingFactor::new(&mut rng);
+
         let value_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
         let value_pedersen_commitment =
             PedersenCommitment::new(&secp, output_value, blinding_factor, value_generator);
         let explicit_value = elements::confidential::Value::Explicit(output_value);
+        let msg = elements::RangeProofMessage {
+            asset: asset_id,
+            bf: out_abf,
+        };
+        let (blinded_value, nonce, rangeproof) = explicit_value
+            .blind(
+                &secp,
+                out_vbf,
+                self.swap_script.blinding_key.public_key(),
+                self.swap_script.blinding_key.secret_key(),
+                &self.swap_script.to_script(),
+                &msg,
+            )
+            .unwrap();
         let blinded_asset = elements::confidential::Asset::Confidential(asset_generator);
 
         let tx_out_witness = TxOutWitness {
-            surjection_proof: None,
-            rangeproof: None,
+            surjection_proof: Some(Box::new(asset_surjection_proof)), // from asset blinding
+            rangeproof: None,                                         // from value blinding
         };
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),

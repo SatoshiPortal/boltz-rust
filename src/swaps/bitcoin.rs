@@ -503,7 +503,6 @@ impl BtcSwapTx {
 
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
-
         witness.push_bitcoin_signature(&signature.serialize_der(), hash_type);
         witness.push(preimage.bytes.unwrap());
         witness.push(self.swap_script.to_script().unwrap().as_bytes());
