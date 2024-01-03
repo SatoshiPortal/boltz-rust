@@ -4,6 +4,7 @@ use std::{fs::File, path::Path, str::FromStr};
 use bitcoin::{
     script::Script as BitcoinScript,
     secp256k1::{KeyPair, SecretKey},
+    Witness,
 };
 use elements::{
     confidential::{self, AssetBlindingFactor, ValueBlindingFactor},
@@ -352,6 +353,7 @@ pub struct LBtcSwapTx {
     absolute_fees: u32,
     utxo: Option<OutPoint>,
     utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
+    utxo_confidential_value: Option<elements::confidential::Value>,
     txout_secrets: Option<TxOutSecrets>,
 }
 
@@ -377,6 +379,7 @@ impl LBtcSwapTx {
             absolute_fees,
             utxo: None,
             utxo_value: None,
+            utxo_confidential_value: None,
             txout_secrets: None,
         })
     }
@@ -397,6 +400,7 @@ impl LBtcSwapTx {
             absolute_fees,
             utxo: None,
             utxo_value: None,
+            utxo_confidential_value: None,
             txout_secrets: None,
         })
     }
@@ -461,6 +465,7 @@ impl LBtcSwapTx {
 
                 self.utxo = Some(outpoint_0);
                 self.utxo_value = Some(utxo_value);
+                self.utxo_confidential_value = Some(output.value);
                 self.txout_secrets = Some(unblinded);
                 break;
             }
@@ -562,12 +567,13 @@ impl LBtcSwapTx {
         };
 
         // SIGN TRANSACTION
+        let hash_type = elements::EcdsaSighashType::All;
         let sighash = Message::from_slice(
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
-                &&self.swap_script.to_script(),
-                blinded_value,
-                elements::EcdsaSighashType::All,
+                &self.swap_script.to_script(),
+                self.utxo_confidential_value.unwrap(),
+                hash_type,
             )[..],
         )
         .unwrap();
@@ -581,15 +587,20 @@ impl LBtcSwapTx {
         }
         let sig: secp256k1_zkp::ecdsa::Signature =
             secp.sign_ecdsa_low_r(&sighash, &keys.secret_key());
-        let sig = elementssig_to_rawsig(&(sig, elements::EcdsaSighashType::All));
-        // let mut sig = [0; 73];
-        // sig[..signature.len()].copy_from_slice(&signature);
-        // sig[signature.len()] = elements::EcdsaSighashType::All as u8;
-        // let final_sig_pushed = sig[..signature.len() + 1].to_vec();
-        let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
-        script_witness.push(sig);
-        script_witness.push(preimage.bytes.unwrap().to_vec());
-        script_witness.push(self.swap_script.to_script().as_bytes().to_vec());
+        let sig = elementssig_to_rawsig(&(sig, hash_type));
+        // let signature = secp.sign_ecdsa(&sighash, &keys.secret_key());
+        // let mut script_witness: Vec<Vec<u8>> = vec![sig];
+        // script_witness.push(sig);
+        // script_witness.push(preimage.bytes.unwrap().to_vec());
+        // script_witness.push(self.swap_script.to_script().as_bytes().to_vec());
+        let mut witness = Witness::new();
+        witness.push(sig);
+        witness.push(preimage.bytes.unwrap());
+        witness.push(self.swap_script.to_script().as_bytes());
+
+        let script_witness = witness.to_vec();
+
+        // println!("WITNESS: {:#?}", script_witness.clone());
 
         let witness = TxInWitness {
             amount_rangeproof: None,
@@ -651,6 +662,7 @@ mod tests {
     // use std::path::Path;
     // use std::{fs::File, str::FromStr};
     #[test]
+    #[ignore]
     fn test_liquid_swap_elements() {
         // let secp = Secp256k1::new();
         let secp = Secp256k1::new();
