@@ -1,7 +1,10 @@
 use electrum_client::ElectrumApi;
 use std::str::FromStr;
 
-use bitcoin::{script::Script as BitcoinScript, secp256k1::KeyPair};
+use bitcoin::{
+    script::Script as BitcoinScript,
+    secp256k1::{KeyPair, SecretKey},
+};
 use elements::{
     confidential::{self, AssetBlindingFactor, Nonce, ValueBlindingFactor},
     hashes::hash160,
@@ -15,7 +18,7 @@ use elements::encode::{deserialize, serialize};
 use elements::secp256k1_zkp::Message;
 
 use crate::{
-    network::electrum::{BitcoinNetwork, NetworkConfig},
+    network::electrum::{BitcoinNetwork, NetworkConfig, LIQUID_TESTNET_POLICY_ASSET_STR},
     swaps::boltz::SwapTxKind,
     util::{
         error::{ErrorKind, S5Error},
@@ -464,27 +467,6 @@ impl LBtcSwapTx {
     }
 
     fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage) -> Transaction {
-        /*
-        *
-        * NOTES:
-        *
-        * decodetransaction additional fields in liquid
-           "is_pegin": false,
-           "value-minimum": 0.00000001,
-           "value-maximum": 687.19476736,
-           "ct-exponent": 0,
-           "ct-bits": 36,
-           "valuecommitment": "0844778d24db8b3454924e3b77d2aa00b4bd57bc20cb852a65238a336b93db7ac6",
-           "assetcommitment": "0b96a62e05fcf65a50ad58643a603f21bb033172336c653840accbae54e9fe7dd7",
-           "commitmentnonce": "02acc6606bdd8c65bdaeadf1eefec726d0d3b777586922b6255c557bb8e43ac946",
-           "commitmentnonce_fully_valid": true,
-
-
-           In Liquid, the fee is explicitly stated as a vout.
-           It is not derived from deducting the vout total from the vin total like in Bitcoin.
-        *
-        *
-        */
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
@@ -494,73 +476,12 @@ impl LBtcSwapTx {
             is_pegin: false,
             asset_issuance: AssetIssuance::default(),
         };
-        /*
-         *
-         *
-        let surject_inputs = self.surjection_inputs(inp_txout_sec)?;
-        let asset_id = self.outputs[last_out_index]
-            .asset
-            .ok_or(PsetBlindError::MustHaveExplicitTxOut(last_out_index))?;
-        let out_abf = AssetBlindingFactor::new(rng);
-        let exp_asset = confidential::Asset::Explicit(asset_id);
-        let blind_res = exp_asset.blind(rng, secp, out_abf, &surject_inputs);
 
-        let (out_asset_commitment, surjection_proof) =
-            blind_res.map_err(|e| PsetBlindError::ConfidentialTxOutError(last_out_index, e))?;
-
-        let value = self.outputs[last_out_index]
-            .amount
-            .ok_or(PsetBlindError::MustHaveExplicitTxOut(last_out_index))?;
-        let exp_value = confidential::Value::Explicit(value);
-        // Get all the explicit outputs
-        let mut exp_out_secrets = vec![];
-        for (i, out) in self.outputs.iter().enumerate() {
-            if out.blinding_key.is_none() {
-                let amt = out.amount.ok_or(PsetBlindError::MustHaveExplicitTxOut(i))?;
-                exp_out_secrets.push((
-                    amt,
-                    AssetBlindingFactor::zero(),
-                    ValueBlindingFactor::zero(),
-                ));
-            }
-        }
-        let mut final_vbf =
-            ValueBlindingFactor::last(secp, value, out_abf, &inp_secrets, &exp_out_secrets);
-
-        // Add all the scalars
-        for value_diff in self.global.scalars.iter() {
-            final_vbf += ValueBlindingFactor(*value_diff);
-        }
-
-        let receiver_blinding_pk = &self.outputs[last_out_index]
-            .blinding_key
-            .ok_or(PsetBlindError::MustHaveExplicitTxOut(last_out_index))?;
-        let ephemeral_sk = SecretKey::new(rng);
-        let spk = &self.outputs[last_out_index].script_pubkey;
-        let msg = RangeProofMessage {
-            asset: asset_id,
-            bf: out_abf,
-        };
-        let blind_res = exp_value.blind(
-            secp,
-            final_vbf,
-            receiver_blinding_pk.inner,
-            ephemeral_sk,
-            spk,
-            &msg,
-        );
-        let (value_commitment, nonce, rangeproof) =
-            blind_res.map_err(|e| PsetBlindError::ConfidentialTxOutError(last_out_index, e))?;
-         *
-         */
         use bitcoin::secp256k1::rand::rngs::OsRng;
         let mut rng = OsRng::default();
         let secp = Secp256k1::new();
 
-        let blinding_factor =
-            Tweak::from_slice(self.swap_script.blinding_key.secret_bytes().as_ref()).unwrap();
-        let nonce = Nonce::Confidential(self.swap_script.blinding_key.public_key());
-        let asset_id = AssetId::LIQUID_BTC;
+        let asset_id = AssetId::from_str(LIQUID_TESTNET_POLICY_ASSET_STR).unwrap();
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);
         let inp_txout_secrets = self.txout_secrets.unwrap();
@@ -569,42 +490,32 @@ impl LBtcSwapTx {
             .blind(&mut rng, &secp, out_abf, &[inp_txout_secrets])
             .unwrap();
 
-        // let tx_out_secrets = TxOutSecrets::new(AssetId::LIQUID_BTC);
-        let asset_generator = Generator::new_blinded(
-            &secp,
-            AssetId::LIQUID_BTC.into_tag(), // as &[u8; 32]
-            blinding_factor,
-        );
         let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
         let out_vbf = ValueBlindingFactor::new(&mut rng);
-
-        let value_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
-        let value_pedersen_commitment =
-            PedersenCommitment::new(&secp, output_value, blinding_factor, value_generator);
         let explicit_value = elements::confidential::Value::Explicit(output_value);
         let msg = elements::RangeProofMessage {
             asset: asset_id,
             bf: out_abf,
         };
+        let ephemeral_sk = SecretKey::new(&mut rng);
         let (blinded_value, nonce, rangeproof) = explicit_value
             .blind(
                 &secp,
                 out_vbf,
                 self.swap_script.blinding_key.public_key(),
-                self.swap_script.blinding_key.secret_key(),
-                &self.swap_script.to_script(),
+                ephemeral_sk,
+                &self.swap_script.to_script().to_v0_p2wsh(),
                 &msg,
             )
             .unwrap();
-        let blinded_asset = elements::confidential::Asset::Confidential(asset_generator);
 
         let tx_out_witness = TxOutWitness {
             surjection_proof: Some(Box::new(asset_surjection_proof)), // from asset blinding
-            rangeproof: None,                                         // from value blinding
+            rangeproof: Some(Box::new(rangeproof)),                   // from value blinding
         };
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
-            value: explicit_value,
+            value: blinded_value,
             asset: blinded_asset,
             nonce: nonce,
             witness: tx_out_witness,
@@ -622,7 +533,7 @@ impl LBtcSwapTx {
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
                 &&self.swap_script.to_script(),
-                explicit_value,
+                blinded_value,
                 elements::EcdsaSighashType::All,
             )[..],
         )
@@ -634,32 +545,9 @@ impl LBtcSwapTx {
         script_witness.push(preimage.bytes.unwrap().to_vec());
         script_witness.push(self.swap_script.to_script().as_bytes().to_vec());
 
-        let min_value: u64 = DUST_VALUE;
-        let exp: i32 = 0;
-        let min_bits: u8 = 36;
-        let message: &[u8] = &[];
-        let additional_commitment: &[u8] = &[];
-        let additional_generator = Generator::new_blinded(&secp, Tag::default(), blinding_factor);
-
-        let amount_rangeproof = RangeProof::new(
-            &secp,
-            min_value,
-            value_pedersen_commitment,
-            output_value,
-            blinding_factor,
-            message,
-            additional_commitment,
-            keys.secret_key(),
-            exp,
-            min_bits,
-            additional_generator,
-        )
-        .unwrap();
-        let inflation_keys_rangeproof = None;
-
         let witness = TxInWitness {
-            amount_rangeproof: Some(Box::new(amount_rangeproof)),
-            inflation_keys_rangeproof,
+            amount_rangeproof: None,
+            inflation_keys_rangeproof: None,
             script_witness: script_witness.clone(),
             pegin_witness: vec![],
         };
@@ -767,18 +655,6 @@ mod tests {
         println!("{:?}", hex::encode(signed.clone().unwrap().serialize()));
         // println!("{:?}", signed.unwrap())
     }
-
-    /*
-     *
-     *
-     * KeyPairString { seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1", pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986" }
-    {"info":[],"warnings":[],"pairs":{"BTC/BTC":{"hash":"a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5","rate":1,"limits":{"maximal":25000000,"minimal":50000,"maximalZeroConf":{"baseAsset":0,"quoteAsset":0}},"fees":{"percentage":0.5,"percentageSwapIn":0.1,"minerFees":{"baseAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}},"L-BTC/BTC":{"hash":"04df6e4b5a91d62a4e1a7ecb88ca462851d835c4bae955a6c5baad8e047b14e9","rate":1,"limits":{"maximal":25000000,"minimal":1000,"maximalZeroConf":{"baseAsset":100000,"quoteAsset":0}},"fees":{"percentage":0.25,"percentageSwapIn":0.1,"minerFees":{"baseAsset":{"normal":147,"reverse":{"claim":152,"lockup":276}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}},"RBTC/BTC":{"hash":"17acb1892ddaaaf60bf44a6e88a86405922d44f29265cc2ebe9f0f137277aa24","rate":1,"limits":{"maximal":4294967,"minimal":10000,"maximalZeroConf":{"baseAsset":0,"quoteAsset":0}},"fees":{"percentage":0.5,"percentageSwapIn":0.5,"minerFees":{"baseAsset":{"normal":162,"reverse":{"claim":162,"lockup":302}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}}}}
-    {"id":"s9EBbv","invoice":"lntb504030n1pjhu7w9sp5a2vkmm292fr6mlsjcdpdr3d5zjffttj66nucq9czmkez42pgzdpspp593c9qjvhfu57xzxeer2utmppd4kyxh9w2fmhc57uemha4z6jjgkqdpz2djkuepqw3hjqnpdgf2yxgrpv3j8yetnwvxqyp2xqcqz959qxpqysgqztrywvj30fqhsq6aawf4ew69y6vwea8ykt4qyendmc3vgn6la2534syaqrx296ud04gvaprex9ns687ljnk6s4d5xqrj2v2pfsqtvkqparpzcd","blindingKey":"bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d","redeemScript":"8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac","lockupAddress":"tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln","timeoutBlockHeight":1179263}
-    Ok(CreateSwapResponse { id: "s9EBbv", invoice: Some("lntb504030n1pjhu7w9sp5a2vkmm292fr6mlsjcdpdr3d5zjffttj66nucq9czmkez42pgzdpspp593c9qjvhfu57xzxeer2utmppd4kyxh9w2fmhc57uemha4z6jjgkqdpz2djkuepqw3hjqnpdgf2yxgrpv3j8yetnwvxqyp2xqcqz959qxpqysgqztrywvj30fqhsq6aawf4ew69y6vwea8ykt4qyendmc3vgn6la2534syaqrx296ud04gvaprex9ns687ljnk6s4d5xqrj2v2pfsqtvkqparpzcd"), redeem_script: Some("8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac"), timeout_block_height: Some(1179263), onchain_amount: None, lockup_address: Some("tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln"), miner_fee_invoice: None, service_fee_percentage: None, preimage: None, claim_address: None, claim_public_key: None, private_key: None, refund_address: None, refund_public_key: None, blinding_key: Some("bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d"), address: None, expected_amount: None })
-    Preimage { preimage: "a323c8c5abadca53bb4b732d62d0486ba49ecab7e340d2b44aac13ac813fed29", sha256: "2c705049974f29e308d9c8d5c5ec216d6c435cae52777c53dcceefda8b52922c", hash160: "8514cc9235824c914d94fda549e45d6dec629b97", preimage_bytes: [163, 35, 200, 197, 171, 173, 202, 83, 187, 75, 115, 45, 98, 208, 72, 107, 164, 158, 202, 183, 227, 64, 210, 180, 74, 172, 19, 172, 129, 63, 237, 41], sha256_bytes: [44, 112, 80, 73, 151, 79, 41, 227, 8, 217, 200, 213, 197, 236, 33, 109, 108, 67, 92, 174, 82, 119, 124, 83, 220, 206, 239, 218, 139, 82, 146, 44], hash160_bytes: [133, 20, 204, 146, 53, 130, 76, 145, 77, 148, 253, 165, 73, 228, 93, 109, 236, 98, 155, 151] }
-    8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac
-    LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None } , LBtcRevScriptElements { hashlock: "8514cc9235824c914d94fda549e45d6dec629b97", reciever_pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986", timelock: 1179263, sender_pubkey: "02869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec3598", preimage: None, signature: None }
-     */
 
     // use std::io::Write;
     // use std::path::Path;
