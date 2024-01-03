@@ -3,3 +3,5 @@
 .env
 Cargo.lock
 tx.hex
+tx.constructed
+tx.previous

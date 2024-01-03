@@ -1,5 +1,5 @@
 use electrum_client::ElectrumApi;
-use std::str::FromStr;
+use std::{fs::File, path::Path, str::FromStr};
 
 use bitcoin::{
     script::Script as BitcoinScript,
@@ -437,6 +437,13 @@ impl LBtcSwapTx {
         let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid).unwrap();
         let tx: Transaction = elements::encode::deserialize(&raw_tx).unwrap();
         println!("TXID: {}", tx.txid());
+        // WRITE TX TO FILE
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = Path::new(manifest_dir).join("tx.previous");
+        let mut file = File::create(file_path).unwrap();
+        use std::io::Write;
+        writeln!(file, "{:#?}", tx).unwrap();
+        // WRITE TX TO FILE
         let mut vout = 0;
         for output in tx.output {
             if output.script_pubkey == address.script_pubkey() {
@@ -549,7 +556,7 @@ impl LBtcSwapTx {
         let witness = TxInWitness {
             amount_rangeproof: None,
             inflation_keys_rangeproof: None,
-            script_witness: script_witness.clone(),
+            script_witness: script_witness,
             pegin_witness: vec![],
         };
 
@@ -594,6 +601,8 @@ impl LBtcSwapTx {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs::File, path::Path};
+
     use crate::network::electrum::DEFAULT_LIQUID_TESTNET_NODE;
 
     use super::*;
@@ -716,6 +725,14 @@ mod tests {
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), 5_000).unwrap();
         let final_tx = liquid_swap_tx.drain(my_key_pair, preimage).unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+
+        let file_path = Path::new(manifest_dir).join("tx.constructed");
+        let mut file = File::create(file_path).unwrap();
+        use std::io::Write;
+        writeln!(file, "{:#?}", final_tx).unwrap();
+        // println!("CHECK FILE tx.hex!");
+
         let txid = liquid_swap_tx.broadcast(final_tx).unwrap();
         println!("TXID: {}", txid);
     }
@@ -847,9 +864,5 @@ Transaction {
 
 /*
 
-let manifest_dir = env!("CARGO_MANIFEST_DIR");
-let file_path = Path::new(manifest_dir).join("tx.hex");
-let mut file = File::create(file_path).unwrap();
-writeln!(file, "{}", serialized).unwrap();
-println!("CHECK FILE tx.hex!");
- */
+
+*/
