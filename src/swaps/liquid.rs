@@ -481,7 +481,7 @@ impl LBtcSwapTx {
         let mut rng = OsRng::default();
         let secp = Secp256k1::new();
 
-        let asset_id = AssetId::from_str(LIQUID_TESTNET_POLICY_ASSET_STR).unwrap();
+        let asset_id = AssetId::LIQUID_BTC;
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);
         let inp_txout_secrets = self.txout_secrets.unwrap();
