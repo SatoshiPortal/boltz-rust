@@ -1,25 +1,24 @@
 use electrum_client::ElectrumApi;
-use serde::Serialize;
 use std::{fs::File, path::Path, str::FromStr};
 
 use bitcoin::{
     script::Script as BitcoinScript,
-    secp256k1::{KeyPair, Secp256k1 as OgSecp256k1, SecretKey},
+    secp256k1::{KeyPair, SecretKey},
 };
 use elements::{
-    confidential::{self, AssetBlindingFactor, Nonce, ValueBlindingFactor},
+    confidential::{self, AssetBlindingFactor, ValueBlindingFactor},
     hashes::hash160,
-    secp256k1_zkp::{Generator, PedersenCommitment, RangeProof, Secp256k1, Tag, Tweak},
+    secp256k1_zkp::{self, Secp256k1},
     sighash::SighashCache,
-    Address, AssetId, AssetIssuance, OutPoint, Script, Sequence, SurjectionInput, Transaction,
-    TxIn, TxInWitness, TxOut, TxOutSecrets, TxOutWitness, Txid,
+    Address, AssetIssuance, OutPoint, Script, Sequence, Transaction, TxIn, TxInWitness, TxOut,
+    TxOutSecrets, TxOutWitness,
 };
 
-use elements::encode::{deserialize, serialize};
+use elements::encode::serialize;
 use elements::secp256k1_zkp::Message;
 
 use crate::{
-    network::electrum::{BitcoinNetwork, NetworkConfig, LIQUID_TESTNET_POLICY_ASSET_STR},
+    network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::boltz::SwapTxKind,
     util::{
         error::{ErrorKind, S5Error},
@@ -572,15 +571,23 @@ impl LBtcSwapTx {
             )[..],
         )
         .unwrap();
+        pub type ElementsSig = (secp256k1_zkp::ecdsa::Signature, elements::EcdsaSighashType);
 
-        let ogsecp = OgSecp256k1::new();
-        let signature = ogsecp.sign_ecdsa(&sighash, &keys.secret_key());
+        pub fn elementssig_to_rawsig(sig: &ElementsSig) -> Vec<u8> {
+            let ser_sig = sig.0.serialize_der();
+            let mut raw_sig = Vec::from(&ser_sig[..]);
+            raw_sig.push(sig.1 as u8);
+            raw_sig
+        }
+        let sig: secp256k1_zkp::ecdsa::Signature =
+            secp.sign_ecdsa_low_r(&sighash, &keys.secret_key());
+        let sig = elementssig_to_rawsig(&(sig, elements::EcdsaSighashType::All));
         // let mut sig = [0; 73];
         // sig[..signature.len()].copy_from_slice(&signature);
         // sig[signature.len()] = elements::EcdsaSighashType::All as u8;
         // let final_sig_pushed = sig[..signature.len() + 1].to_vec();
         let mut script_witness: Vec<Vec<u8>> = vec![vec![]];
-        script_witness.push(signature.serialize_der().to_vec());
+        script_witness.push(sig);
         script_witness.push(preimage.bytes.unwrap().to_vec());
         script_witness.push(self.swap_script.to_script().as_bytes().to_vec());
 
@@ -632,70 +639,13 @@ impl LBtcSwapTx {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, path::Path};
-
-    use crate::network::electrum::DEFAULT_LIQUID_TESTNET_NODE;
-
     use super::*;
-
-    use elements::pset::serialize::Serialize;
+    use crate::network::electrum::DEFAULT_LIQUID_TESTNET_NODE;
+    use std::{fs::File, path::Path};
 
     /// https://liquidtestnet.com/utils
     /// https://blockstream.info/liquidtestnet
     ///
-    #[test]
-    #[ignore]
-    fn test_liquid_rev_tx() {
-        let secp = Secp256k1::new();
-        const RETURN_ADDRESS: &str =
-            "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
-
-        let redeem_script_str = "8201208763a9148514cc9235824c914d94fda549e45d6dec629b9788210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c54589866775037ffe11b1752102869bf2e041d122d67b222d7b2fdc1e2466e726bbcacd35feccdfb0101cec359868ac".to_string();
-        let expected_address = "tlq1qqtvg2v6wv2akxa8dpcdrfemgwnr09ragwlqagr57ezc8nzrvvd6x32rtt4s3e2xylcukuz64fm2zu0l4erdr2h98zjv07w4rearycpxqlz2gstkfw7ln";
-        let _expected_timeout = 1179263;
-        let blinding_str = "bf99362dff7e8f2ec01e081215cab9047779da4547a6f47d67bb1cbb8c96961d";
-        let blinding_key = ZKKeyPair::from_seckey_str(&secp, blinding_str).unwrap();
-
-        let _id = "s9EBbv";
-        let _my_key_pair = KeyPair::from_seckey_str(
-            &secp,
-            "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1",
-        )
-        .unwrap();
-        let preimage =
-            Preimage::from_str("a323c8c5abadca53bb4b732d62d0486ba49ecab7e340d2b44aac13ac813fed29")
-                .unwrap();
-
-        let script_elements = LBtcSwapScript::reverse_from_str(
-            BitcoinNetwork::LiquidTestnet,
-            DEFAULT_LIQUID_TESTNET_NODE.to_string(),
-            &redeem_script_str.clone(),
-            blinding_str.to_string(),
-        )
-        .unwrap();
-
-        let address = script_elements.to_address();
-        println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
-        assert!(address.to_string() == expected_address);
-
-        let mut tx_elements =
-            LBtcSwapTx::new_claim(script_elements, RETURN_ADDRESS.to_string(), 300).unwrap();
-
-        let outpoint = OutPoint {
-            txid: Txid::from_str(
-                "6a05897e425229a199abb2d3d5e5bccadafe41597d07c211dc9330e93bf3ac49",
-            )
-            .unwrap(),
-            vout: 0,
-        };
-        let out_value = 50_000;
-
-        tx_elements = tx_elements.manual_utxo_update(outpoint, out_value);
-        println!("{:?}", tx_elements);
-        let signed = tx_elements.drain(_my_key_pair, preimage);
-        println!("{:?}", hex::encode(signed.clone().unwrap().serialize()));
-        // println!("{:?}", signed.unwrap())
-    }
 
     // use std::io::Write;
     // use std::path::Path;
