@@ -157,7 +157,7 @@ fn test_bitcoin_rsi() {
     // SECRETS
 
     let network_config = NetworkConfig::default_bitcoin();
-    let electrum_client = network_config.electrum_url.build_client().unwrap();
+    let electrum_client = network_config.clone().electrum_url.build_client().unwrap();
 
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
@@ -220,11 +220,15 @@ fn test_bitcoin_rsi() {
 
     assert_eq!(constructed_rev_script, boltz_rev_script);
 
-    let constructed_address = constructed_rev_script.to_address().unwrap();
+    let constructed_address = constructed_rev_script
+        .to_address(network_config.network)
+        .unwrap();
     println!("{}", constructed_address.to_string());
     assert_eq!(constructed_address.to_string(), lockup_address);
 
-    let script_balance = constructed_rev_script.get_balance().unwrap();
+    let script_balance = constructed_rev_script
+        .get_balance(network_config.clone())
+        .unwrap();
     assert_eq!(script_balance.0, 0);
     assert_eq!(script_balance.1, 0);
     println!("*******PAY********************");
@@ -250,7 +254,9 @@ fn test_bitcoin_rsi() {
             println!("*******BOLTZ******************");
             println!("*******ONCHAIN-TX*************");
             println!("*******DETECTED***************");
-            let script_balance = constructed_rev_script.get_balance().unwrap();
+            let script_balance = constructed_rev_script
+                .get_balance(network_config.clone())
+                .unwrap();
             println!(
                 "confirmed: {}, unconfirmed: {}",
                 script_balance.0, script_balance.1
@@ -267,10 +273,13 @@ fn test_bitcoin_rsi() {
         constructed_rev_script,
         RETURN_ADDRESS.to_string(),
         absolute_fees,
+        network_config.network,
     )
     .unwrap();
 
-    let signed_tx = rv_claim_tx.drain(keypair, preimage, out_amount).unwrap();
+    let signed_tx = rv_claim_tx
+        .drain(keypair, preimage, out_amount, network_config)
+        .unwrap();
     let txid = electrum_client.transaction_broadcast(&signed_tx).unwrap();
     println!("{}", txid);
 }
@@ -305,6 +314,7 @@ fn test_recover_bitcoin_rsi() {
     );
 
     let absolute_fees = 300;
+    let network_config = NetworkConfig::default_bitcoin();
 
     let mut rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(
@@ -315,11 +325,14 @@ fn test_recover_bitcoin_rsi() {
         .unwrap(),
         RETURN_ADDRESS.to_string(),
         absolute_fees,
+        network_config.network,
     )
     .unwrap();
 
-    let signed_tx = rev_swap_tx.drain(keypair, preimage, out_amount).unwrap();
-    let txid = rev_swap_tx.broadcast(signed_tx).unwrap();
+    let signed_tx = rev_swap_tx
+        .drain(keypair, preimage, out_amount, network_config.clone())
+        .unwrap();
+    let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
 }
 /*

@@ -159,8 +159,6 @@ fn test_liquid_rsi() {
     .unwrap();
     let secp = Secp256k1::new();
     let constructed_script_elements = LBtcSwapScript::new(
-        BitcoinNetwork::LiquidTestnet,
-        DEFAULT_LIQUID_TESTNET_NODE.to_string(),
         boltzclient::swaps::boltz::SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
         keypair.public_key().to_string().clone(),

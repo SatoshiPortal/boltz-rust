@@ -39,8 +39,6 @@ use elements::{
 use super::boltz::SwapType;
 #[derive(Debug, Clone, PartialEq)]
 pub struct LBtcSwapScript {
-    network: BitcoinNetwork,
-    electrum_url: String,
     swap_type: SwapType,
     pub hashlock: String,
     pub reciever_pubkey: String,
@@ -51,8 +49,6 @@ pub struct LBtcSwapScript {
 
 impl LBtcSwapScript {
     pub fn new(
-        network: BitcoinNetwork,
-        electrum_url: String,
         swap_type: SwapType,
         hashlock: String,
         reciever_pubkey: String,
@@ -61,8 +57,6 @@ impl LBtcSwapScript {
         blinding_key: ZKKeyPair,
     ) -> Self {
         LBtcSwapScript {
-            network,
-            electrum_url,
             swap_type,
             hashlock,
             reciever_pubkey,
@@ -118,8 +112,6 @@ impl LBtcSwapScript {
             let zksecp = Secp256k1::new();
 
             Ok(LBtcSwapScript {
-                network,
-                electrum_url,
                 swap_type: SwapType::Submarine,
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
@@ -186,8 +178,6 @@ impl LBtcSwapScript {
             let zksecp = Secp256k1::new();
 
             Ok(LBtcSwapScript {
-                network,
-                electrum_url,
                 swap_type: SwapType::ReverseSubmarine,
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
@@ -290,9 +280,9 @@ impl LBtcSwapScript {
         }
     }
 
-    pub fn to_address(&self) -> EAddress {
+    pub fn to_address(&self, network: BitcoinNetwork) -> EAddress {
         let script = self.to_script();
-        let address_params = match self.network {
+        let address_params = match network {
             BitcoinNetwork::Liquid => &AddressParams::LIQUID,
             _ => &AddressParams::LIQUID_TESTNET,
         };
@@ -398,8 +388,13 @@ impl LBtcSwapTx {
         })
     }
 
-    pub fn drain(&mut self, keys: ZKKeyPair, preimage: Preimage) -> Result<Transaction, S5Error> {
-        self.fetch_utxo();
+    pub fn drain(
+        &mut self,
+        keys: ZKKeyPair,
+        preimage: Preimage,
+        network_config: NetworkConfig,
+    ) -> Result<Transaction, S5Error> {
+        self.fetch_utxo(network_config);
         if !self.has_utxo() {
             return Err(S5Error::new(
                 ErrorKind::Transaction,
@@ -418,12 +413,9 @@ impl LBtcSwapTx {
         }
     }
 
-    fn fetch_utxo(&mut self) -> () {
-        let electrum_client = NetworkConfig::default_liquid()
-            .electrum_url
-            .build_client()
-            .unwrap();
-        let address = self.swap_script.to_address();
+    fn fetch_utxo(&mut self, network_config: NetworkConfig) -> () {
+        let electrum_client = network_config.clone().electrum_url.build_client().unwrap();
+        let address = self.swap_script.to_address(network_config.network);
         let history = electrum_client
             .script_get_history(BitcoinScript::from_bytes(
                 self.swap_script.to_script().to_v0_p2wsh().as_bytes(),
@@ -590,17 +582,12 @@ impl LBtcSwapTx {
     fn sign_refund_tx(&self, _keys: KeyPair) -> () {
         ()
     }
-    pub fn broadcast(&mut self, signed_tx: Transaction) -> Result<String, S5Error> {
-        let electrum_client = NetworkConfig::new(
-            BitcoinNetwork::LiquidTestnet,
-            &self.swap_script.electrum_url,
-            true,
-            true,
-            false,
-            None,
-        )
-        .electrum_url
-        .build_client()?;
+    pub fn broadcast(
+        &mut self,
+        signed_tx: Transaction,
+        network_config: NetworkConfig,
+    ) -> Result<String, S5Error> {
+        let electrum_client = network_config.electrum_url.build_client()?;
         let serialized = serialize(&signed_tx);
         match electrum_client.transaction_broadcast_raw(&serialized) {
             Ok(txid) => Ok(txid.to_string()),
@@ -635,7 +622,7 @@ mod tests {
             "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6",
         )
         .unwrap();
-
+        let network_config = NetworkConfig::default_liquid();
         let decoded = LBtcSwapScript::reverse_from_str(
             BitcoinNetwork::LiquidTestnet,
             DEFAULT_LIQUID_TESTNET_NODE.to_string(),
@@ -655,13 +642,11 @@ mod tests {
             reciever_pubkey: decoded.reciever_pubkey,
             sender_pubkey: decoded.sender_pubkey,
             timelock: decoded.timelock,
-            network: BitcoinNetwork::LiquidTestnet,
-            electrum_url: DEFAULT_LIQUID_TESTNET_NODE.to_string(),
             swap_type: SwapType::ReverseSubmarine,
             blinding_key: boltz_blinding_key,
         };
 
-        let address = el_script.to_address();
+        let address = el_script.to_address(network_config.clone().network);
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         println!("Blinding Pub: {:?}", address.blinding_pubkey);
 
@@ -669,7 +654,9 @@ mod tests {
 
         let mut liquid_swap_tx =
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), 5_000).unwrap();
-        let final_tx = liquid_swap_tx.drain(my_key_pair, preimage).unwrap();
+        let final_tx = liquid_swap_tx
+            .drain(my_key_pair, preimage, network_config.clone())
+            .unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
 
@@ -679,7 +666,9 @@ mod tests {
         writeln!(file, "{:#?}", final_tx).unwrap();
         // println!("CHECK FILE tx.hex!");
 
-        let txid = liquid_swap_tx.broadcast(final_tx).unwrap();
+        let txid = liquid_swap_tx
+            .broadcast(final_tx, network_config.clone())
+            .unwrap();
         println!("TXID: {}", txid);
     }
 }

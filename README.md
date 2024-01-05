@@ -170,6 +170,6 @@ For all ignored unit tests read the tests before running.
 
 Special thanks to:
 
-- @michael1011 for guidance on implementation and swaps
-- @stratospher for contributions and pairing with us through understanding liquid confidential transactions
-- @RCasatta for guidance on liquid
+- [michael1011](https://github.com/michael1011) for guidance on implementation and swaps
+- [stratospher](https://github.com/stratospher) for contributions and pairing with us through understanding liquid confidential transactions
+- [RCasatta](https://github.com/RCasatta) for guidance on liquid
