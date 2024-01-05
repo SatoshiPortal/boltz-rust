@@ -65,13 +65,8 @@ fn test_liquid_ssi() {
         .unwrap()
         .clone();
 
-    let boltz_script_elements = LBtcSwapScript::submarine_from_str(
-        BitcoinNetwork::LiquidTestnet,
-        DEFAULT_LIQUID_TESTNET_NODE.to_string(),
-        &redeem_script_string,
-        blinding_string,
-    )
-    .unwrap();
+    let boltz_script_elements =
+        LBtcSwapScript::submarine_from_str(&redeem_script_string, blinding_string).unwrap();
 
     println!("{:?}", boltz_script_elements);
 
@@ -150,13 +145,8 @@ fn test_liquid_rsi() {
         .clone();
     println!("REDEEM_SCRIPT: {}", redeem_script_string);
 
-    let boltz_script_elements = LBtcSwapScript::reverse_from_str(
-        BitcoinNetwork::LiquidTestnet,
-        DEFAULT_LIQUID_TESTNET_NODE.to_string(),
-        &redeem_script_string,
-        blinding_string.clone(),
-    )
-    .unwrap();
+    let boltz_script_elements =
+        LBtcSwapScript::reverse_from_str(&redeem_script_string, blinding_string.clone()).unwrap();
     let secp = Secp256k1::new();
     let constructed_script_elements = LBtcSwapScript::new(
         boltzclient::swaps::boltz::SwapType::ReverseSubmarine,
