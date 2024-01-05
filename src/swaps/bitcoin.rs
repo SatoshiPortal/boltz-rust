@@ -87,7 +87,7 @@ impl BtcSwapScript {
                         sender_pubkey = Some(hex::encode(bytes.as_bytes()));
                     }
                 }
-                Err(e) => println!("Error: {:?}", e),
+                _ => (),
             }
         }
 
@@ -136,7 +136,6 @@ impl BtcSwapScript {
             match instruction {
                 Ok(Instruction::Op(opcode)) => {
                     last_op = opcode;
-                    // println!("{:?}", opcode)
                 }
 
                 Ok(Instruction::PushBytes(bytes)) => {
@@ -153,9 +152,8 @@ impl BtcSwapScript {
                             sender_pubkey = Some(hex::encode(bytes.as_bytes()));
                         }
                     }
-                    // println!("{:?}: LENGTH: {}", bytes, bytes.len() )
                 }
-                Err(e) => println!("Error: {:?}", e),
+                _ => (),
             }
         }
 
@@ -245,10 +243,19 @@ impl BtcSwapScript {
                     OP_ENDIF
                     OP_CHECKSIG
                 */
-                let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
-                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+                let reciever_pubkey = match PublicKey::from_str(&self.reciever_pubkey) {
+                    Ok(result) => result.to_owned(),
+                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+                };
+                let sender_pubkey = match PublicKey::from_str(&self.sender_pubkey) {
+                    Ok(result) => result.to_owned(),
+                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+                };
                 let locktime = LockTime::from_consensus(self.timelock);
-                let hashvalue = Hash::from_str(&self.hashlock).unwrap();
+                let hashvalue = match Hash::from_str(&self.hashlock) {
+                    Ok(result) => result.to_owned(),
+                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+                };
                 let hashbytes: [u8; 20] = *hashvalue.as_ref();
 
                 let script = Builder::new()
@@ -389,19 +396,16 @@ impl BtcSwapTx {
         if !self.has_utxo() {
             return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
         }
-        // FETCH UTXOS HERE
-
         match self.kind {
             SwapTxKind::Claim => self.sign_claim_tx(keys, preimage),
             SwapTxKind::Refund => {
-                self.sign_refund_tx(keys);
+                // self.sign_refund_tx(keys);
                 Err(S5Error::new(
                     ErrorKind::Transaction,
                     "Refund transaction signing not supported yet",
                 ))
             }
         }
-        // let sweep_psbt = Psbt::from_unsigned_tx(sweep_tx);
     }
     fn fetch_utxo(
         &mut self,
@@ -410,9 +414,12 @@ impl BtcSwapTx {
     ) -> Result<(), S5Error> {
         let electrum_client = network_config.electrum_url.build_client()?;
 
-        let utxos = electrum_client
+        let utxos = match electrum_client
             .script_list_unspent(&self.swap_script.to_script()?.to_v0_p2wsh())
-            .unwrap();
+        {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+        };
         if utxos.len() == 0 {
             return Err(S5Error::new(
                 ErrorKind::Transaction,
@@ -441,15 +448,23 @@ impl BtcSwapTx {
     }
 
     fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage) -> Result<Transaction, S5Error> {
+        let preimage_bytes = if preimage.bytes.is_some() {
+            preimage.bytes.unwrap()
+        } else {
+            return Err(S5Error::new(ErrorKind::Input, "No preimage provided"));
+        };
+        let redeem_script = self.swap_script.to_script()?;
+
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
 
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo.unwrap(),
-            script_sig: Script::empty().into(), // always empty because segwit
+            script_sig: Script::empty().into(),
             witness: Witness::new(),
         };
 
+        // use fee
         let output_amount = self.utxo_value.unwrap() - self.absolute_fees as u64;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload.script_pubkey(),
@@ -467,7 +482,7 @@ impl BtcSwapTx {
         let secp = Secp256k1::new();
         let sighash = match SighashCache::new(unsigned_tx.clone()).segwit_signature_hash(
             0,
-            &self.swap_script.to_script()?,
+            &redeem_script,
             self.utxo_value.unwrap(),
             hash_type,
         ) {
@@ -484,11 +499,9 @@ impl BtcSwapTx {
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
         witness.push_bitcoin_signature(&signature.serialize_der(), hash_type);
-        witness.push(preimage.bytes.unwrap());
-        witness.push(self.swap_script.to_script().unwrap().as_bytes());
+        witness.push(preimage_bytes);
+        witness.push(redeem_script.as_bytes());
 
-        // https://github.com/bitcoin-teleport/teleport-transactions/blob/master/src/wallet_sync.rs#L255
-        // println!("{:?}", witness);
         // BUILD SIGNED TX w/ WITNESS
         let signed_txin = TxIn {
             previous_output: self.utxo.unwrap(),
@@ -509,7 +522,7 @@ impl BtcSwapTx {
 
         Ok(signed_tx)
     }
-    fn sign_refund_tx(&self, _keys: KeyPair) -> () {
+    fn _sign_refund_tx(&self, _keys: KeyPair) -> () {
         // submarine
         ()
     }
