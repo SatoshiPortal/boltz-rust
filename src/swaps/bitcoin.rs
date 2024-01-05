@@ -33,8 +33,6 @@ pub struct BtcSwapScript {
 
 impl BtcSwapScript {
     pub fn new(
-        network: BitcoinNetwork,
-        electrum_url: String,
         swap_type: SwapType,
         hashlock: String,
         reciever_pubkey: String,
@@ -49,11 +47,7 @@ impl BtcSwapScript {
             sender_pubkey,
         }
     }
-    pub fn submarine_from_str(
-        network: BitcoinNetwork,
-        electrum_url: String,
-        redeem_script_str: &str,
-    ) -> Result<Self, S5Error> {
+    pub fn submarine_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
         let script_bytes = match hex::decode(redeem_script_str) {
             Ok(result) => result.to_owned(),
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
@@ -114,11 +108,7 @@ impl BtcSwapScript {
         }
     }
 
-    pub fn reverse_from_str(
-        network: BitcoinNetwork,
-        electrum_url: String,
-        redeem_script_str: &str,
-    ) -> Result<Self, S5Error> {
+    pub fn reverse_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
         let script_bytes = match hex::decode(redeem_script_str) {
             Ok(result) => result.to_owned(),
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
@@ -662,12 +652,7 @@ mod tests {
             "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
         )
         .unwrap();
-        let decoded = BtcSwapScript::submarine_from_str(
-            BitcoinNetwork::BitcoinTestnet,
-            DEFAULT_TESTNET_NODE.to_owned(),
-            &redeem_script_str.clone(),
-        )
-        .unwrap();
+        let decoded = BtcSwapScript::submarine_from_str(&redeem_script_str.clone()).unwrap();
         println!("{:?}", decoded);
         assert!(decoded.sender_pubkey == sender_key_pair.public_key().to_string());
         assert!(decoded.timelock == expected_timeout);

@@ -488,11 +488,7 @@ impl CreateSwapResponse {
     pub fn validate_script_preimage160(&self, preimage_hash160: hash160::Hash) -> bool {
         match &self.redeem_script {
             Some(rs) => {
-                let script_elements = match BtcSwapScript::submarine_from_str(
-                    BitcoinNetwork::Bitcoin,
-                    DEFAULT_MAINNET_NODE.to_string(),
-                    &rs,
-                ) {
+                let script_elements = match BtcSwapScript::submarine_from_str(&rs) {
                     // network doesnt matter here, we just want the hashlock extracted
                     Ok(se) => se,
                     Err(e) => {

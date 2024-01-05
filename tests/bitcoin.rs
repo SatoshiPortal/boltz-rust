@@ -98,16 +98,9 @@ fn test_bitcoin_ssi() {
         .unwrap()
         .clone();
 
-    let boltz_script = BtcSwapScript::submarine_from_str(
-        BitcoinNetwork::BitcoinTestnet,
-        DEFAULT_TESTNET_NODE.to_owned(),
-        &redeem_script_string,
-    )
-    .unwrap();
+    let boltz_script = BtcSwapScript::submarine_from_str(&redeem_script_string).unwrap();
 
     let constructed_script = BtcSwapScript::new(
-        BitcoinNetwork::BitcoinTestnet,
-        DEFAULT_TESTNET_NODE.to_owned(),
         SwapType::Submarine,
         preimage_states.hash160.to_string(),
         boltz_script.reciever_pubkey.clone(),
@@ -201,16 +194,9 @@ fn test_bitcoin_rsi() {
         .unwrap()
         .clone();
 
-    let boltz_rev_script = BtcSwapScript::reverse_from_str(
-        BitcoinNetwork::BitcoinTestnet,
-        DEFAULT_TESTNET_NODE.to_owned(),
-        &redeem_script_string,
-    )
-    .unwrap();
+    let boltz_rev_script = BtcSwapScript::reverse_from_str(&redeem_script_string).unwrap();
 
     let constructed_rev_script = BtcSwapScript::new(
-        BitcoinNetwork::BitcoinTestnet,
-        DEFAULT_TESTNET_NODE.to_owned(),
         SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
         keypair.public_key().to_string().clone(),
@@ -317,12 +303,7 @@ fn test_recover_bitcoin_rsi() {
     let network_config = NetworkConfig::default_bitcoin();
 
     let mut rev_swap_tx = BtcSwapTx::new_claim(
-        BtcSwapScript::reverse_from_str(
-            BitcoinNetwork::BitcoinTestnet,
-            DEFAULT_TESTNET_NODE.to_owned(),
-            &redeem_script,
-        )
-        .unwrap(),
+        BtcSwapScript::reverse_from_str(&redeem_script).unwrap(),
         RETURN_ADDRESS.to_string(),
         absolute_fees,
         network_config.network,
