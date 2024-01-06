@@ -10,9 +10,9 @@ use boltz_client::{
     util::{derivation::ChildKeys, preimage::Preimage},
 };
 
+mod secrets;
 
 pub struct Api {}
-
 
 pub fn helloWorld() -> String {
     String::from("Hello from Rust! 🦀")
