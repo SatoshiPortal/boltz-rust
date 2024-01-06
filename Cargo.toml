@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "boltz-client",
+    "boltz-dart",
+]
+resolver = "2"

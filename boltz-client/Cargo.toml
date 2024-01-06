@@ -5,7 +5,7 @@ version = "0.3.0"
 edition = "2021"
 
 [lib]
-name = "boltzclient"
+name = "boltz_client"
 path = "src/lib.rs"
 doctest = false
 crate-type = ["lib"] 

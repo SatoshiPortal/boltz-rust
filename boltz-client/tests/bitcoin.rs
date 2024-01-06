@@ -1,5 +1,5 @@
 use bitcoin::secp256k1::{KeyPair, Secp256k1};
-use boltzclient::{
+use boltz_client::{
     network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_TESTNET_NODE},
     swaps::{
         bitcoin::{BtcSwapScript, BtcSwapTx},

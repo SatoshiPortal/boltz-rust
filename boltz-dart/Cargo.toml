@@ -1,0 +1,25 @@
+[package]
+name = "boltz-dart"
+authors = ["i5hi <ishi@satoshiportal.com>, mocodesmo <morteza@satoshiportal.com>"]
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "boltz_dart"
+path = "src/lib.rs"
+doctest = false
+crate-type = ["staticlib", "cdylib"] 
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[build]
+profiler = true
+
+[dependencies]
+
+boltz-client = { path = "../boltz-client" }
