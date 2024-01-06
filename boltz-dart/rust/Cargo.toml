@@ -6,7 +6,7 @@ edition = "2021"
 
 [lib]
 name = "boltz_dart"
-path = "src/lib.rs"
+# path = "src/api.rs"
 doctest = false
 crate-type = ["staticlib", "cdylib", "lib"] 
 
