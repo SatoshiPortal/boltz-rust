@@ -8,7 +8,7 @@ edition = "2021"
 name = "boltz_dart"
 path = "src/lib.rs"
 doctest = false
-crate-type = ["staticlib", "cdylib"] 
+crate-type = ["staticlib", "cdylib", "lib"] 
 
 [profile.release]
 strip = true
@@ -22,4 +22,5 @@ profiler = true
 
 [dependencies]
 
-boltz-client = { path = "../boltz-client" }
+boltz-client = { path = "../../boltz-client" }
+flutter_rust_bridge = "1.82.6"

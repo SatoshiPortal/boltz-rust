@@ -1,6 +1,3 @@
 [workspace]
-members = [
-    "boltz-client",
-    "boltz-dart",
-]
+members = ["boltz-dart/rust/", "boltz-client"]
 resolver = "2"

@@ -1,0 +1,37 @@
+name: flutter_rust_bridge_template
+description: A new Flutter project.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.2
+  ffi: ^2.0.1
+  flutter_rust_bridge: ^1.82.3
+  meta: ^1.8.0
+  uuid: ^4.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^3.0.0
+  ffigen: ^9.0.0
+
+flutter:
+  assets:
+    - assets/
+
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
