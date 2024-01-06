@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 # Function to check if Cargo is installed
 check_cargo() {
     if command -v cargo >/dev/null 2>&1; then
@@ -64,12 +63,18 @@ fi
 
 run_cargo_test_with_flags() {
     echo "Running cargo test for $1 with flags..."
+    cd boltz-client || exit
     cargo test "$1" -- --nocapture --include-ignored
+    cd ..
 }
 
 run_cargo_test() {
     echo "Running cargo test for $1..."
+    cd boltz-client || exit
+
     cargo test "$1"
+    cd ..
+
 }
 
 function notice() {
@@ -115,24 +120,36 @@ read -p "Enter the number of your choice: " choice
 case $choice in
     1)
         notice "test_bitcoin_ssi"
+        cd boltz-client || exit      
         run_cargo_test_with_flags "test_bitcoin_ssi"
+        cd ..
+
         ;;
     2)
         notice "test_bitcoin_rsi"
+        cd boltz-client || exit    
         run_cargo_test_with_flags "test_bitcoin_rsi"
+        cd ..
         ;;
     3)
         notice "test_liquid_ssi"
+        cd boltz-client || exit      
         run_cargo_test_with_flags "test_liquid_ssi"
+        cd ..
         ;;
     4)
         notice "test_liquid_rsi"
+        cd boltz-client || exit
         run_cargo_test_with_flags "test_liquid_rsi"
+        cd ..
+
         ;;
     5)
+        cd boltz-client || exit        
         run_cargo_test ""
+        cd ..
         ;;
-    *)
+    *)  
         echo "Invalid choice. Please run the script again and select a valid option."
         ;;
 esac
