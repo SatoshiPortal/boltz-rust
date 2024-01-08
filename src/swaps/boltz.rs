@@ -529,9 +529,9 @@ pub struct SwapStatusResponse {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetFeeEstimationResponse {
     #[serde(rename = "BTC")]
-    btc: f64,
+    pub btc: f64,
     #[serde(rename = "L-BTC")]
-    lbtc: f64,
+    pub lbtc: f64,
 }
 
 #[cfg(test)]
