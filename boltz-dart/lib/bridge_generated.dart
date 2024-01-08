@@ -26,22 +26,32 @@ class BoltzDartImpl implements BoltzDart {
   factory BoltzDartImpl.wasm(FutureOr<WasmModule> module) =>
       BoltzDartImpl(module as ExternalLibrary);
   BoltzDartImpl.raw(this._platform);
-  Future<String> helloWorld({dynamic hint}) {
+  Future<KeyPair> keypairFromMnemonicStaticMethodApi(
+      {required String mnemonic,
+      required int index,
+      required BoltzSwapType swapType,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(mnemonic);
+    var arg1 = _platform.api2wire_u64(index);
+    var arg2 = api2wire_boltz_swap_type(swapType);
     return _platform.executeNormal(FlutterRustBridgeTask(
-      callFfi: (port_) => _platform.inner.wire_helloWorld(port_),
-      parseSuccessData: _wire2api_String,
-      parseErrorData: null,
-      constMeta: kHelloWorldConstMeta,
-      argValues: [],
+      callFfi: (port_) => _platform.inner
+          .wire_keypair_from_mnemonic__static_method__Api(
+              port_, arg0, arg1, arg2),
+      parseSuccessData: _wire2api_key_pair,
+      parseErrorData: _wire2api_boltz_error,
+      constMeta: kKeypairFromMnemonicStaticMethodApiConstMeta,
+      argValues: [mnemonic, index, swapType],
       hint: hint,
     ));
   }
 
-  FlutterRustBridgeTaskConstMeta get kHelloWorldConstMeta =>
-      const FlutterRustBridgeTaskConstMeta(
-        debugName: "helloWorld",
-        argNames: [],
-      );
+  FlutterRustBridgeTaskConstMeta
+      get kKeypairFromMnemonicStaticMethodApiConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "keypair_from_mnemonic__static_method__Api",
+            argNames: ["mnemonic", "index", "swapType"],
+          );
 
   void dispose() {
     _platform.dispose();
@@ -50,6 +60,26 @@ class BoltzDartImpl implements BoltzDart {
 
   String _wire2api_String(dynamic raw) {
     return raw as String;
+  }
+
+  BoltzError _wire2api_boltz_error(dynamic raw) {
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return BoltzError(
+      kind: _wire2api_String(arr[0]),
+      message: _wire2api_String(arr[1]),
+    );
+  }
+
+  KeyPair _wire2api_key_pair(dynamic raw) {
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return KeyPair(
+      secretKey: _wire2api_String(arr[0]),
+      publicKey: _wire2api_String(arr[1]),
+    );
   }
 
   int _wire2api_u8(dynamic raw) {
@@ -63,6 +93,21 @@ class BoltzDartImpl implements BoltzDart {
 
 // Section: api2wire
 
+@protected
+int api2wire_boltz_swap_type(BoltzSwapType raw) {
+  return api2wire_i32(raw.index);
+}
+
+@protected
+int api2wire_i32(int raw) {
+  return raw;
+}
+
+@protected
+int api2wire_u8(int raw) {
+  return raw;
+}
+
 // Section: finalizer
 
 class BoltzDartPlatform extends FlutterRustBridgeBase<BoltzDartWire> {
@@ -70,6 +115,22 @@ class BoltzDartPlatform extends FlutterRustBridgeBase<BoltzDartWire> {
 
 // Section: api2wire
 
+  @protected
+  ffi.Pointer<wire_uint_8_list> api2wire_String(String raw) {
+    return api2wire_uint_8_list(utf8.encoder.convert(raw));
+  }
+
+  @protected
+  int api2wire_u64(int raw) {
+    return raw;
+  }
+
+  @protected
+  ffi.Pointer<wire_uint_8_list> api2wire_uint_8_list(Uint8List raw) {
+    final ans = inner.new_uint_8_list_0(raw.length);
+    ans.ref.ptr.asTypedList(raw.length).setAll(0, raw);
+    return ans;
+  }
 // Section: finalizer
 
 // Section: api_fill_to_wire
@@ -171,19 +232,45 @@ class BoltzDartWire implements FlutterRustBridgeWireBase {
   late final _init_frb_dart_api_dl = _init_frb_dart_api_dlPtr
       .asFunction<int Function(ffi.Pointer<ffi.Void>)>();
 
-  void wire_helloWorld(
+  void wire_keypair_from_mnemonic__static_method__Api(
     int port_,
+    ffi.Pointer<wire_uint_8_list> mnemonic,
+    int index,
+    int swap_type,
   ) {
-    return _wire_helloWorld(
+    return _wire_keypair_from_mnemonic__static_method__Api(
       port_,
+      mnemonic,
+      index,
+      swap_type,
     );
   }
 
-  late final _wire_helloWorldPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
-          'wire_helloWorld');
-  late final _wire_helloWorld =
-      _wire_helloWorldPtr.asFunction<void Function(int)>();
+  late final _wire_keypair_from_mnemonic__static_method__ApiPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Uint64,
+              ffi.Int32)>>('wire_keypair_from_mnemonic__static_method__Api');
+  late final _wire_keypair_from_mnemonic__static_method__Api =
+      _wire_keypair_from_mnemonic__static_method__ApiPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>, int, int)>();
+
+  ffi.Pointer<wire_uint_8_list> new_uint_8_list_0(
+    int len,
+  ) {
+    return _new_uint_8_list_0(
+      len,
+    );
+  }
+
+  late final _new_uint_8_list_0Ptr = _lookup<
+          ffi
+          .NativeFunction<ffi.Pointer<wire_uint_8_list> Function(ffi.Int32)>>(
+      'new_uint_8_list_0');
+  late final _new_uint_8_list_0 = _new_uint_8_list_0Ptr
+      .asFunction<ffi.Pointer<wire_uint_8_list> Function(int)>();
 
   void free_WireSyncReturn(
     WireSyncReturn ptr,
@@ -201,6 +288,13 @@ class BoltzDartWire implements FlutterRustBridgeWireBase {
 }
 
 final class _Dart_Handle extends ffi.Opaque {}
+
+final class wire_uint_8_list extends ffi.Struct {
+  external ffi.Pointer<ffi.Uint8> ptr;
+
+  @ffi.Int32()
+  external int len;
+}
 
 typedef DartPostCObjectFnType = ffi.Pointer<
     ffi.NativeFunction<

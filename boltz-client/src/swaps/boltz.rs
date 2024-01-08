@@ -294,7 +294,7 @@ impl FromStr for RevSwapStates {
 #[serde(rename_all = "lowercase")]
 pub enum SwapType {
     Submarine,
-    ReverseSubmarine,
+    Reverse,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -376,7 +376,7 @@ impl CreateSwapRequest {
         onchain_amount: u64,
     ) -> CreateSwapRequest {
         CreateSwapRequest {
-            swap_type: SwapType::ReverseSubmarine,
+            swap_type: SwapType::Reverse,
             pair_id: PairId::BtcBtc,
             order_side: OrderSide::Buy,
             pair_hash,
@@ -416,7 +416,7 @@ impl CreateSwapRequest {
         onchain_amount: u64,
     ) -> CreateSwapRequest {
         CreateSwapRequest {
-            swap_type: SwapType::ReverseSubmarine,
+            swap_type: SwapType::Reverse,
             pair_id: PairId::LBtcBtc,
             order_side: OrderSide::Buy,
             pair_hash,

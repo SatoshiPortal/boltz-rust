@@ -9,7 +9,37 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:uuid/uuid.dart';
 
 abstract class BoltzDart {
-  Future<String> helloWorld({dynamic hint});
+  Future<KeyPair> keypairFromMnemonicStaticMethodApi(
+      {required String mnemonic,
+      required int index,
+      required BoltzSwapType swapType,
+      dynamic hint});
 
-  FlutterRustBridgeTaskConstMeta get kHelloWorldConstMeta;
+  FlutterRustBridgeTaskConstMeta
+      get kKeypairFromMnemonicStaticMethodApiConstMeta;
+}
+
+class BoltzError implements FrbException {
+  final String kind;
+  final String message;
+
+  const BoltzError({
+    required this.kind,
+    required this.message,
+  });
+}
+
+enum BoltzSwapType {
+  Submarine,
+  Reverse,
+}
+
+class KeyPair {
+  final String secretKey;
+  final String publicKey;
+
+  const KeyPair({
+    required this.secretKey,
+    required this.publicKey,
+  });
 }

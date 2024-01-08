@@ -4,8 +4,8 @@ use boltz_client::{
 };
 
 pub struct KeyPair {
-    secret_key: String,
-    public_key: String,
+    pub secret_key: String,
+    pub public_key: String,
 }
 
 impl KeyPair {
@@ -18,7 +18,7 @@ impl KeyPair {
                     public_key: child_keys.keypair.public_key().to_string(),
                 })
             }
-            SwapType::ReverseSubmarine => {
+            SwapType::Reverse => {
                 let child_keys = ChildKeys::from_reverse_account(&mnemonic, index)?;
                 Ok(KeyPair {
                     secret_key: child_keys.keypair.display_secret().to_string(),
@@ -40,10 +40,10 @@ mod tests {
         let kps = KeyPair::new(mnemonic.clone(), 1, SwapType::Submarine).unwrap();
         let expected_seckey = "5416f1e024c191605502017d066786e294f841e711d3d437d13e9d27e40e066e";
         assert_eq!(&kps.secret_key, expected_seckey);
-        let kps = KeyPair::new(mnemonic.clone(), 0, SwapType::ReverseSubmarine).unwrap();
+        let kps = KeyPair::new(mnemonic.clone(), 0, SwapType::Reverse).unwrap();
         let expected_seckey = "a0a62dd7225288f41a741c293a3220035b4c71686dc34c01ec84cbe6ab11b4e1";
         assert_eq!(&kps.secret_key, expected_seckey);
-        let kps = KeyPair::new(mnemonic.clone(), 1, SwapType::ReverseSubmarine).unwrap();
+        let kps = KeyPair::new(mnemonic.clone(), 1, SwapType::Reverse).unwrap();
         let expected_seckey = "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6";
         assert_eq!(&kps.secret_key, expected_seckey);
     }

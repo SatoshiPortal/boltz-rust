@@ -197,7 +197,7 @@ fn test_bitcoin_rsi() {
     let boltz_rev_script = BtcSwapScript::reverse_from_str(&redeem_script_string).unwrap();
 
     let constructed_rev_script = BtcSwapScript::new(
-        SwapType::ReverseSubmarine,
+        SwapType::Reverse,
         preimage.hash160.to_string(),
         keypair.public_key().to_string().clone(),
         timeout as u32,

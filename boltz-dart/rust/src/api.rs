@@ -1,17 +1,23 @@
 /* AUTO INJECTED BY flutter_rust_bridge. This line may not be accurate, and you can change it according to your needs. */
-use boltz_client::{swaps::boltz::SwapType, util::error::S5Error};
 
 use crate::secrets::KeyPair;
 
+use crate::boltzswap::BoltzSwapType;
+use crate::error::BoltzError;
+
+// pub type BoltzError = boltz_client::util::error::S5Error;
 pub struct Api {}
 
 impl Api {
     pub fn keypair_from_mnemonic(
         mnemonic: String,
         index: u64,
-        swap_type: SwapType,
-    ) -> Result<KeyPair, S5Error> {
-        KeyPair::new(mnemonic, index, swap_type)
+        swap_type: BoltzSwapType,
+    ) -> Result<KeyPair, BoltzError> {
+        match KeyPair::new(mnemonic, index, swap_type.into()) {
+            Ok(keypair) => Ok(keypair),
+            Err(err) => Err(err.into()),
+        }
     }
 }
 

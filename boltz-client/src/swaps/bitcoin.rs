@@ -153,7 +153,7 @@ impl BtcSwapScript {
             && sender_pubkey.is_some()
         {
             Ok(BtcSwapScript {
-                swap_type: SwapType::ReverseSubmarine,
+                swap_type: SwapType::Reverse,
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
@@ -218,7 +218,7 @@ impl BtcSwapScript {
 
                 Ok(script)
             }
-            SwapType::ReverseSubmarine => {
+            SwapType::Reverse => {
                 /*
                     OP_SIZE
                     [32]
@@ -280,7 +280,7 @@ impl BtcSwapScript {
         };
         match self.swap_type {
             SwapType::Submarine => Ok(Address::p2shwsh(&script, network)),
-            SwapType::ReverseSubmarine => Ok(Address::p2wsh(&script, network)),
+            SwapType::Reverse => Ok(Address::p2wsh(&script, network)),
         }
     }
     pub fn get_balance(&self, network_config: NetworkConfig) -> Result<(u64, i64), S5Error> {
