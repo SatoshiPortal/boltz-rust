@@ -149,7 +149,7 @@ fn test_liquid_rsi() {
         LBtcSwapScript::reverse_from_str(&redeem_script_string, blinding_string.clone()).unwrap();
     let secp = Secp256k1::new();
     let constructed_script_elements = LBtcSwapScript::new(
-        boltz_client::swaps::boltz::SwapType::Reverse,
+        boltz_client::swaps::boltz::SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
         keypair.public_key().to_string().clone(),
         timeout as u32,

@@ -180,7 +180,7 @@ impl LBtcSwapScript {
             let zksecp = Secp256k1::new();
 
             Ok(LBtcSwapScript {
-                swap_type: SwapType::Reverse,
+                swap_type: SwapType::ReverseSubmarine,
                 hashlock: hashlock.unwrap(),
                 reciever_pubkey: reciever_pubkey.unwrap(),
                 timelock: timelock.unwrap(),
@@ -247,7 +247,7 @@ impl LBtcSwapScript {
 
                 Ok(script)
             }
-            SwapType::Reverse => {
+            SwapType::ReverseSubmarine => {
                 /*
                     OP_SIZE
                     [32]
@@ -308,7 +308,7 @@ impl LBtcSwapScript {
                 address_params,
             )
             .to_confidential(self.blinding_key.public_key())),
-            SwapType::Reverse => Ok(EAddress::p2wsh(
+            SwapType::ReverseSubmarine => Ok(EAddress::p2wsh(
                 &script,
                 Some(self.blinding_key.public_key()),
                 address_params,
@@ -680,7 +680,7 @@ mod tests {
             reciever_pubkey: decoded.reciever_pubkey,
             sender_pubkey: decoded.sender_pubkey,
             timelock: decoded.timelock,
-            swap_type: SwapType::Reverse,
+            swap_type: SwapType::ReverseSubmarine,
             blinding_key: boltz_blinding_key,
         };
 
