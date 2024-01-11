@@ -2,7 +2,6 @@ use crate::network::electrum::BitcoinNetwork;
 use crate::util::error::{ErrorKind, S5Error};
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey, Fingerprint};
-use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::{KeyPair, Secp256k1};
 
 use serde::{Deserialize, Serialize};

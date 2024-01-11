@@ -63,7 +63,7 @@ We would be the `sender`; and can only spend after a timeout incase of a dispute
 In case of `reverse swaps`; In the happy case, the client (us) will ALWAYS be required to build and spend from the script to claim onchain funds. 
 We would be the `receiver` ; and the solution we have to create to the reverse swap is the `preimage` of a hash and a `signature` from our key.
 
-For the most parts, normal swaps only requires interaction with the boltz.exchange api, making it quite straight forward. In case of a dispute and we need to claim back funds, we will need to build the script and spend it.
+For the most parts, normal swaps only requires interaction with the boltz.exchange api, making it quite straight forward. In case of a dispute and we need to claim back funds from the onchain script we funded, for which, we will need to build the script and spend it (refund tx).
 
 For the sake of unifying the implementation challenge, we will look at the standard procedure when doing a `reverse swap` happy case.
 
@@ -84,11 +84,9 @@ For the sake of unifying the implementation challenge, we will look at the stand
 - [x] sweep the utxo to your existing bitcoin wallet
 - [x] once the utxo is spent, the preimage is publically revealed and boltz can now claim the `invoice`
 
-### Liquid (WIP)
+### Liquid
 
-The swap procedure will be similar for liquid with a few additions like using a blindingKey for confidential transactions.
-
-The elements library is very similar to bitcoin and solving this problem for bitcoin will also solve majority of the problem for liquid.
+The procedure for liquid is the same as Bitcoin, with the addition of blinding logic associated to `Asset` and `Value`
 
 ## Core Libraries/API
 

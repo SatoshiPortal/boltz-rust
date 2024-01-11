@@ -1,5 +1,5 @@
 use boltz_client::{
-    network::electrum::{BitcoinNetwork, NetworkConfig, DEFAULT_LIQUID_TESTNET_NODE},
+    network::electrum::{BitcoinNetwork, NetworkConfig},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
         liquid::LBtcSwapScript,

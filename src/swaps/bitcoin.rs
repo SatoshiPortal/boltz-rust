@@ -533,7 +533,7 @@ impl BtcSwapTx {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::electrum::{NetworkConfig, DEFAULT_TESTNET_NODE};
+    use crate::network::electrum::NetworkConfig;
     use bitcoin::opcodes::all::{OP_EQUAL, OP_HASH160};
     use bitcoin::script::Builder;
     use bitcoin::secp256k1::hashes::{hash160, Hash};

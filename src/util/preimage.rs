@@ -35,12 +35,12 @@ impl Preimage {
 
     pub fn from_str(preimage: &str) -> Result<Preimage, S5Error> {
         // Check if the input string is exactly 64 characters (32 bytes)
-        if preimage.len() != 64 {
-            return Err(S5Error::new(
-                ErrorKind::Input,
-                "Preimage input is not 32 bytes",
-            ));
-        }
+        // if preimage.len() != 64 {
+        //     return Err(S5Error::new(
+        //         ErrorKind::Input,
+        //         "Preimage input is not 32 bytes",
+        //     ));
+        // }
 
         let decoded = match hex::decode(preimage) {
             Ok(decoded) => decoded,

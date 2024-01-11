@@ -11,7 +11,6 @@ use std::str::FromStr;
 
 use crate::util::error::{ErrorKind, S5Error};
 
-use crate::network::electrum::{BitcoinNetwork, DEFAULT_MAINNET_NODE};
 use crate::swaps::bitcoin::BtcSwapScript;
 
 pub const BOLTZ_TESTNET_URL: &str = "https://api.testnet.boltz.exchange";

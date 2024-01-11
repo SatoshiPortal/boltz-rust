@@ -1,7 +1,2 @@
-**target/
-**builds/
-**.env
-**Cargo.lock
-**tx.hex
-**tx.constructed
-**tx.previous
+target/
+Cargo.lock
