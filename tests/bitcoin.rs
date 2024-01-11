@@ -37,7 +37,7 @@ fn test_bitcoin_ssi() {
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
 
-    let keypair = ChildKeys::from_submarine_account(&mnemonic.to_string(), 1)
+    let keypair = ChildKeys::from_submarine_account(&mnemonic.to_string(), BitcoinNetwork::BitcoinTestnet, 1)
         .unwrap()
         .keypair;
     println!(
@@ -134,7 +134,7 @@ fn test_bitcoin_rsi() {
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
 
-    let keypair = ChildKeys::from_reverse_account(&&mnemonic.to_string(), 1)
+    let keypair = ChildKeys::from_reverse_account(&&mnemonic.to_string(), BitcoinNetwork::BitcoinTestnet, 1)
         .unwrap()
         .keypair;
     println!(

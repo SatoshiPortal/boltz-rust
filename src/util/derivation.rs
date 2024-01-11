@@ -1,3 +1,4 @@
+use crate::network::electrum::BitcoinNetwork;
 use crate::util::error::{ErrorKind, S5Error};
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey, Fingerprint};
@@ -19,7 +20,7 @@ pub struct ChildKeys {
     pub keypair: KeyPair,
 }
 impl ChildKeys {
-    pub fn from_submarine_account(mnemonic: &str, index: u64) -> Result<ChildKeys, S5Error> {
+    pub fn from_submarine_account(mnemonic: &str, network: BitcoinNetwork, index: u64) -> Result<ChildKeys, S5Error> {
         let secp = Secp256k1::new();
         let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
         let seed = mnemonic_struct.to_seed("");
@@ -28,23 +29,16 @@ impl ChildKeys {
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
         };
         let fingerprint = root.fingerprint(&secp);
-        let network = root.network;
         let purpose = DerivationPurpose::Compatible;
-        let coin = match network {
-            Network::Bitcoin => "0",
-            Network::Testnet => "1",
+        let network_path = match network {
+            BitcoinNetwork::Bitcoin => "0",
+            BitcoinNetwork::Liquid => "1776",
             _ => "1",
         };
-
-        // 6777837e/purpose'/network'/account'/change|depost/index
-        // m/0' => XKeypair
-        // m/0'/1'/89718/29839823 => XKeypair
-        // BIP32
-        // m/
         let derivation_path = format!(
             "m/{}h/{}h/{}h/0/{}",
             purpose.to_string(),
-            coin,
+            network_path,
             SUBMARINE_SWAP_ACCOUNT,
             index
         );
@@ -76,7 +70,7 @@ impl ChildKeys {
             keypair: key_pair,
         })
     }
-    pub fn from_reverse_account(mnemonic: &str, index: u64) -> Result<ChildKeys, S5Error> {
+    pub fn from_reverse_account(mnemonic: &str, network: BitcoinNetwork, index: u64) -> Result<ChildKeys, S5Error> {
         let secp = Secp256k1::new();
         let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
         let seed = mnemonic_struct.to_seed("");
@@ -85,18 +79,17 @@ impl ChildKeys {
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
         };
         let fingerprint = root.fingerprint(&secp);
-        let network = root.network;
         let purpose = DerivationPurpose::Native;
-        let coin = match network {
-            Network::Bitcoin => "0",
-            Network::Testnet => "1",
+        let network_path = match network {
+            BitcoinNetwork::Bitcoin => "0",
+            BitcoinNetwork::Liquid => "1776",
             _ => "1",
         };
         // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
         let derivation_path = format!(
             "m/{}h/{}h/{}h/0/{}",
             purpose.to_string(),
-            coin,
+            network_path,
             REVERSE_SWAP_ACCOUNT,
             index
         );
@@ -159,7 +152,7 @@ mod tests {
     fn test_derivation() {
         let mnemonic: &str = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let index = 0 as u64; // 0
-        let derived = ChildKeys::from_submarine_account(mnemonic, index);
+        let derived = ChildKeys::from_submarine_account(mnemonic, BitcoinNetwork::Bitcoin, index);
         assert!(derived.is_ok());
     }
 

@@ -23,7 +23,7 @@ fn test_liquid_ssi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = ChildKeys::from_submarine_account(&mnemonic, 1)
+    let keypair = ChildKeys::from_submarine_account(&mnemonic, BitcoinNetwork::LiquidTestnet, 1)
         .unwrap()
         .keypair;
     println!("{:?}", keypair);
@@ -90,7 +90,7 @@ fn test_liquid_rsi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = ChildKeys::from_reverse_account(&mnemonic, 1)
+    let keypair = ChildKeys::from_reverse_account(&mnemonic, BitcoinNetwork::LiquidTestnet, 1)
         .unwrap()
         .keypair;
     println!("SECRET-KEY: {:?}", keypair.display_secret());
