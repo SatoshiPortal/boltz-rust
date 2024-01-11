@@ -1,9 +1,10 @@
 use bitcoin::hashes::{hash160, sha256};
 use lightning_invoice::Bolt11Invoice;
-use reqwest;
+// use reqwest;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use ureq::Error;
 use std::str::FromStr;
 // use std::time::Duration;
 // use ureq::{Agent, AgentBuilder, Error};
@@ -22,7 +23,7 @@ pub enum SwapTxKind {
     Refund,
 }
 
-use reqwest::blocking::Client;
+// use reqwest::blocking::Client;
 
 pub struct BoltzApiClient {
     base_url: String,
@@ -38,58 +39,75 @@ impl BoltzApiClient {
     pub fn get_pairs(&self) -> Result<GetPairsResponse, S5Error> {
         let url = format!("{}/getpairs", self.base_url);
 
-        let res = Client::new().get(&url).send().unwrap();
-
-        if res.status().is_success() {
-            let body = res.text().unwrap();
-            let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
-            Ok(get_pairs_response)
-        } else {
-            Err(S5Error::new(ErrorKind::BoltzApi, &res.text().unwrap()))
+        match ureq::get(&url).call() {
+            Ok(res) => {
+                let body = res.into_string().unwrap();
+                let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
+                Ok(get_pairs_response)
+            },
+            Err(Error::Status(_code, res)) => {
+                Err(S5Error::new(ErrorKind::BoltzApi, &res.into_string().unwrap()))
+            },
+            Err(_) => {
+                Err(S5Error::new(ErrorKind::BoltzApi, "Request failed"))
+            }
         }
     }
 
     pub fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, S5Error> {
         let url = format!("{}/getfeeestimation", self.base_url);
-        let res = Client::new().get(&url).send().unwrap();
 
-        if res.status().is_success() {
-            let body = res.text().unwrap();
-            let get_fee_estimation_response: GetFeeEstimationResponse =
-                serde_json::from_str(&body).unwrap();
-            Ok(get_fee_estimation_response)
-        } else {
-            Err(S5Error::new(ErrorKind::BoltzApi, &res.text().unwrap()))
+        match ureq::get(&url).call() {
+            Ok(res) => {
+                let body = res.into_string().unwrap();
+                let get_fee_estimation_response: GetFeeEstimationResponse =
+                    serde_json::from_str(&body).unwrap();
+                Ok(get_fee_estimation_response)
+            },
+            Err(Error::Status(_code, res)) => {
+                Err(S5Error::new(ErrorKind::BoltzApi, &res.into_string().unwrap()))
+            },
+            Err(_) => {
+                Err(S5Error::new(ErrorKind::BoltzApi, "Request failed"))
+            }
         }
     }
 
     pub fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, S5Error> {
         let url = format!("{}/createswap", self.base_url);
-        let res = Client::new().post(&url).json(&request).send().unwrap();
 
-        if res.status().is_success() {
-            let body = res.text().unwrap();
-            let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
-            Ok(create_swap_response)
-        } else {
-            Err(S5Error::new(ErrorKind::BoltzApi, &res.text().unwrap()))
+        match ureq::post(&url).send_json(serde_json::to_value(request).unwrap()) {
+            Ok(res) => {
+                let body = res.into_string().unwrap();
+                let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
+                Ok(create_swap_response)
+            },
+            Err(Error::Status(_code, res)) => {
+                Err(S5Error::new(ErrorKind::BoltzApi, &res.into_string().unwrap()))
+            },
+            Err(_) => {
+                Err(S5Error::new(ErrorKind::BoltzApi, "Request failed"))
+            }
         }
     }
 
     pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, S5Error> {
         let url = format!("{}/swapstatus", self.base_url);
 
-        let res = Client::new().post(&url).json(&request).send().unwrap();
-
-        if res.status().is_success() {
-            let body = res.text().unwrap();
-            let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
-            Ok(swap_status_response)
-        } else {
-            Err(S5Error::new(ErrorKind::BoltzApi, &res.text().unwrap()))
+        match ureq::post(&url).send_json(serde_json::to_value(request).unwrap()) {
+            Ok(res) => {
+                let body = res.into_string().unwrap();
+                let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
+                Ok(swap_status_response)
+            },
+            Err(Error::Status(_code, res)) => {
+                Err(S5Error::new(ErrorKind::BoltzApi, &res.into_string().unwrap()))
+            },
+            Err(_) => {
+                Err(S5Error::new(ErrorKind::BoltzApi, "Request failed"))
+            }
         }
-    }
-}
+    }}
 
 #[derive(Deserialize, Debug)]
 pub enum PairId {
