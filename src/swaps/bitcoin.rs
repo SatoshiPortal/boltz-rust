@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use bitcoin::absolute;
 use bitcoin::secp256k1::{KeyPair, Message, Secp256k1};
 use bitcoin::{
     blockdata::script::{Builder, Instruction, Script, ScriptBuf},
@@ -313,7 +314,6 @@ pub struct BtcSwapTx {
     kind: SwapTxKind,
     swap_script: BtcSwapScript,
     output_address: Address,
-    absolute_fees: u32,
     utxo: Option<OutPoint>,
     utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
 }
@@ -323,7 +323,6 @@ impl BtcSwapTx {
     pub fn new_claim(
         swap_script: BtcSwapScript,
         output_address: String,
-        absolute_fees: u32,
         network: Chain,
     ) -> Result<BtcSwapTx, S5Error> {
         let network = if network == Chain::Bitcoin {
@@ -342,7 +341,7 @@ impl BtcSwapTx {
             kind: SwapTxKind::Claim,
             swap_script,
             output_address: address.assume_checked(),
-            absolute_fees,
+            
             utxo: None,
             utxo_value: None,
         })
@@ -351,7 +350,6 @@ impl BtcSwapTx {
     pub fn new_refund(
         swap_script: BtcSwapScript,
         output_address: String,
-        absolute_fees: u32,
         network: Chain,
     ) -> Result<BtcSwapTx, S5Error> {
         let network = if network == Chain::Bitcoin {
@@ -370,7 +368,6 @@ impl BtcSwapTx {
             kind: SwapTxKind::Refund,
             swap_script: swap_script,
             output_address: address.assume_checked(),
-            absolute_fees,
             utxo: None,
             utxo_value: None,
         })
@@ -380,6 +377,7 @@ impl BtcSwapTx {
         keys: KeyPair,
         preimage: Preimage,
         expected_utxo_value: u64,
+        absolute_fees: u64,
         network_config: ElectrumConfig,
     ) -> Result<Transaction, S5Error> {
         self.fetch_utxo(expected_utxo_value, network_config)?;
@@ -387,7 +385,7 @@ impl BtcSwapTx {
             return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
         }
         match self.kind {
-            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage),
+            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage,absolute_fees),
             SwapTxKind::Refund => {
                 // self.sign_refund_tx(keys);
                 Err(S5Error::new(
@@ -442,7 +440,7 @@ impl BtcSwapTx {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
 
-    fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage) -> Result<Transaction, S5Error> {
+    fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage, absolute_fees: u64) -> Result<Transaction, S5Error> {
         let preimage_bytes = if preimage.bytes.is_some() {
             preimage.bytes.unwrap()
         } else {
@@ -460,7 +458,7 @@ impl BtcSwapTx {
         };
 
         // use fee
-        let output_amount = self.utxo_value.unwrap() - self.absolute_fees as u64;
+        let output_amount = self.utxo_value.unwrap() - absolute_fees;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload.script_pubkey(),
             value: output_amount,
@@ -535,8 +533,9 @@ impl BtcSwapTx {
     }
 
     pub fn size(&self, keys: KeyPair, preimage: Preimage)->Result<usize, S5Error>{
+        let dummy_abs_fee = 5_000;
         let tx = match self.kind{
-            _=>self.sign_claim_tx(keys, preimage)?,
+            _=>self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
         };
         Ok(tx.size())
     }

@@ -256,13 +256,12 @@ fn test_bitcoin_rsi() {
     let mut rv_claim_tx = BtcSwapTx::new_claim(
         constructed_rev_script,
         RETURN_ADDRESS.to_string(),
-        absolute_fees,
         network_config.network,
     )
     .unwrap();
 
     let signed_tx = rv_claim_tx
-        .drain(keypair, preimage, out_amount, network_config.clone())
+        .drain(keypair, preimage, out_amount, absolute_fees, network_config.clone())
         .unwrap();
     let txid = rv_claim_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
@@ -303,13 +302,12 @@ fn test_recover_bitcoin_rsi() {
     let mut rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(&redeem_script).unwrap(),
         RETURN_ADDRESS.to_string(),
-        absolute_fees,
         network_config.network,
     )
     .unwrap();
 
     let signed_tx = rev_swap_tx
-        .drain(keypair, preimage, out_amount, network_config.clone())
+        .drain(keypair, preimage, out_amount, absolute_fees, network_config.clone())
         .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);

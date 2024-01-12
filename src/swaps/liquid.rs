@@ -347,7 +347,6 @@ pub struct LBtcSwapTx {
     kind: SwapTxKind,
     swap_script: LBtcSwapScript,
     output_address: Address,
-    absolute_fees: u32,
     utxo: Option<OutPoint>,
     utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
     utxo_confidential_value: Option<elements::confidential::Value>,
@@ -363,7 +362,6 @@ impl LBtcSwapTx {
     pub fn new_claim(
         swap_script: LBtcSwapScript,
         output_address: String,
-        absolute_fees: u32,
     ) -> Result<LBtcSwapTx, S5Error> {
         let address = match Address::from_str(&output_address) {
             Ok(result) => result,
@@ -373,7 +371,6 @@ impl LBtcSwapTx {
             kind: SwapTxKind::Claim,
             swap_script: swap_script,
             output_address: address,
-            absolute_fees,
             utxo: None,
             utxo_value: None,
             utxo_confidential_value: None,
@@ -383,7 +380,6 @@ impl LBtcSwapTx {
     pub fn new_refund(
         swap_script: LBtcSwapScript,
         output_address: String,
-        absolute_fees: u32,
     ) -> Result<LBtcSwapTx, S5Error> {
         let address = match Address::from_str(&output_address) {
             Ok(result) => result,
@@ -394,7 +390,6 @@ impl LBtcSwapTx {
             kind: SwapTxKind::Refund,
             swap_script: swap_script,
             output_address: address,
-            absolute_fees,
             utxo: None,
             utxo_value: None,
             utxo_confidential_value: None,
@@ -406,6 +401,7 @@ impl LBtcSwapTx {
         &mut self,
         keys: ZKKeyPair,
         preimage: Preimage,
+        absolute_fees: u64,
         network_config: ElectrumConfig,
     ) -> Result<Transaction, S5Error> {
         self.fetch_utxo(network_config)?;
@@ -416,7 +412,7 @@ impl LBtcSwapTx {
             ));
         }
         match self.kind {
-            SwapTxKind::Claim => Ok(self.sign_claim_tx(keys, preimage)?),
+            SwapTxKind::Claim => Ok(self.sign_claim_tx(keys, preimage, absolute_fees)?),
             SwapTxKind::Refund => {
                 self.sign_refund_tx(keys);
                 Err(S5Error::new(
@@ -489,7 +485,7 @@ impl LBtcSwapTx {
         self.has_utxo() && self.utxo_value.unwrap() == expected_value
     }
 
-    fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage) -> Result<Transaction, S5Error> {
+    fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage, absolute_fees: u64) -> Result<Transaction, S5Error> {
         let preimage_bytes = if preimage.bytes.is_some() {
             preimage.bytes.unwrap()
         } else {
@@ -522,7 +518,7 @@ impl LBtcSwapTx {
                 Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
             };
 
-        let output_value = self.utxo_value.unwrap() - self.absolute_fees as u64;
+        let output_value = self.utxo_value.unwrap() - absolute_fees;
 
         let final_vbf = ValueBlindingFactor::last(
             &secp,
@@ -534,7 +530,7 @@ impl LBtcSwapTx {
                 self.txout_secrets.unwrap().value_bf,
             )],
             &[(
-                self.absolute_fees as u64,
+                absolute_fees,
                 AssetBlindingFactor::zero(),
                 ValueBlindingFactor::zero(),
             )],
@@ -569,7 +565,7 @@ impl LBtcSwapTx {
             nonce: nonce,
             witness: tx_out_witness,
         };
-        let fee_output: TxOut = TxOut::new_fee(self.absolute_fees as u64, asset_id);
+        let fee_output: TxOut = TxOut::new_fee(absolute_fees, asset_id);
 
         let unsigned_tx = Transaction {
             version: 2,
@@ -629,8 +625,9 @@ impl LBtcSwapTx {
         ()
     }
     pub fn size(&self, keys: KeyPair, preimage: Preimage)->Result<usize, S5Error>{
+        let dummy_abs_fee = 5_000;
         let tx = match self.kind{
-            _=>self.sign_claim_tx(keys, preimage)?,
+            _=>self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
         };
         Ok(tx.size())
     }
@@ -704,9 +701,9 @@ mod tests {
         assert_eq!(address.to_string(), expected_address);
 
         let mut liquid_swap_tx =
-            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), 5_000).unwrap();
+            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
         let final_tx = liquid_swap_tx
-            .drain(my_key_pair, preimage, network_config.clone())
+            .drain(my_key_pair, preimage, 5_000, network_config.clone())
             .unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         let manifest_dir = env!("CARGO_MANIFEST_DIR");

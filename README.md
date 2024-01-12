@@ -168,13 +168,19 @@ For all ignored unit tests read the tests before running.
 
 This library makes the following assumptions:
 
-- Reverse swaps only spend a single utxo
+- Reverse swaps spends only 1 utxo
 
-In bitcoin, we use listunspent and take the first utxo only (0 index). The only case where something could go wrong here is if the script at any point has more than one utxo, which is unlikely. If it does, you will not be able to sweep this script using this library.
+In bitcoin, we use listunspent and take the first utxo only (0 index). The only case where something could go wrong here is if the script at any point has more than one utxo, which is unlikely. If it does, you will not be able to spend all utxos at once.
 
-In liquid, listunspent does not directly work, so we use get_transactions. We parse through transaction outputs and match against the scriptpubkey. The result is similar and if more than one transaction has been made to this address, this library will not be able to easily spend.
+In liquid, listunspent does not directly work, so we use get_transactions. We parse through transaction outputs and match against the scriptpubkey. The result is similar and if more than one transaction has been made to this address, this library will not be able to spend all utxos.
 
 The fix for this is to make the utxos field in SwapTx use a Vec and make sweeps always use all available/spendable utxos.
+
+- Bitcoin reverse swap sweep is 1 output
+
+- Liquid reverse swap sweep is 1 confidential output and 1 explicit fee output
+
+- Liquid reverse swap utxo is always confidential
 
 ## Acknowledgement
 
