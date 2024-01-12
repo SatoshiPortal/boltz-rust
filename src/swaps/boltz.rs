@@ -4,8 +4,8 @@ use lightning_invoice::Bolt11Invoice;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use ureq::Error;
 use std::str::FromStr;
+use ureq::Error;
 // use std::time::Duration;
 // use ureq::{Agent, AgentBuilder, Error};
 
@@ -43,13 +43,12 @@ impl BoltzApiClient {
                 let body = res.into_string().unwrap();
                 let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
                 Ok(get_pairs_response)
-            },
-            Err(Error::Status(_code, res)) => {
-                Err(S5Error::new(ErrorKind::BoltzApi, &res.into_string().unwrap()))
-            },
-            Err(_) => {
-                Err(S5Error::new(ErrorKind::BoltzApi, "Request failed"))
             }
+            Err(Error::Status(_code, res)) => Err(S5Error::new(
+                ErrorKind::BoltzApi,
+                &res.into_string().unwrap(),
+            )),
+            Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
         }
     }
 
@@ -62,13 +61,12 @@ impl BoltzApiClient {
                 let get_fee_estimation_response: GetFeeEstimationResponse =
                     serde_json::from_str(&body).unwrap();
                 Ok(get_fee_estimation_response)
-            },
-            Err(Error::Status(_code, res)) => {
-                Err(S5Error::new(ErrorKind::BoltzApi, &res.into_string().unwrap()))
-            },
-            Err(_) => {
-                Err(S5Error::new(ErrorKind::BoltzApi, "Request failed"))
             }
+            Err(Error::Status(_code, res)) => Err(S5Error::new(
+                ErrorKind::BoltzApi,
+                &res.into_string().unwrap(),
+            )),
+            Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
         }
     }
 
@@ -80,13 +78,12 @@ impl BoltzApiClient {
                 let body = res.into_string().unwrap();
                 let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
                 Ok(create_swap_response)
-            },
-            Err(Error::Status(_code, res)) => {
-                Err(S5Error::new(ErrorKind::BoltzApi, &res.into_string().unwrap()))
-            },
-            Err(_) => {
-                Err(S5Error::new(ErrorKind::BoltzApi, "Request failed"))
             }
+            Err(Error::Status(_code, res)) => Err(S5Error::new(
+                ErrorKind::BoltzApi,
+                &res.into_string().unwrap(),
+            )),
+            Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
         }
     }
 
@@ -98,15 +95,15 @@ impl BoltzApiClient {
                 let body = res.into_string().unwrap();
                 let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
                 Ok(swap_status_response)
-            },
-            Err(Error::Status(_code, res)) => {
-                Err(S5Error::new(ErrorKind::BoltzApi, &res.into_string().unwrap()))
-            },
-            Err(_) => {
-                Err(S5Error::new(ErrorKind::BoltzApi, "Request failed"))
             }
+            Err(Error::Status(_code, res)) => Err(S5Error::new(
+                ErrorKind::BoltzApi,
+                &res.into_string().unwrap(),
+            )),
+            Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
         }
-    }}
+    }
+}
 
 #[derive(Deserialize, Debug)]
 pub enum PairId {

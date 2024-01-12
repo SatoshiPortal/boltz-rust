@@ -1,6 +1,5 @@
-use bitcoin::secp256k1::{KeyPair, Secp256k1};
 use boltz_client::{
-    network::electrum::{BitcoinNetwork, NetworkConfig},
+    network::{electrum::ElectrumConfig, Chain},
     swaps::{
         bitcoin::{BtcSwapScript, BtcSwapTx},
         boltz::{
@@ -8,16 +7,14 @@ use boltz_client::{
         },
     },
     util::{derivation::ChildKeys, preimage::Preimage},
+    Bolt11Invoice, KeyPair, Secp256k1,
 };
-use electrum_client::ElectrumApi;
-use lightning_invoice::Bolt11Invoice;
 
 use std::{io, io::Write, str::FromStr};
 
 /// submarine swap integration
 /// Always run this with --no-capture so you get all the data to recover (if needed)
 /// Always update invoice before running
-
 pub fn pause_and_wait(msg: &str) {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -37,17 +34,18 @@ fn test_bitcoin_ssi() {
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
 
-    let keypair = ChildKeys::from_submarine_account(&mnemonic.to_string(), BitcoinNetwork::BitcoinTestnet, 1)
-        .unwrap()
-        .keypair;
+    let keypair =
+        ChildKeys::from_submarine_account(&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
+            .unwrap()
+            .keypair;
     println!(
         "****SECRETS****:\n sec: {:?}, pub: {:?}",
         keypair.display_secret(),
         keypair.public_key()
     );
     // SECRETS
-    let network_config = NetworkConfig::default_bitcoin();
-    let _electrum_client = network_config.electrum_url.build_client().unwrap();
+    let network_config = ElectrumConfig::default_bitcoin();
+    let _electrum_client = network_config.build_client().unwrap();
 
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
@@ -134,9 +132,10 @@ fn test_bitcoin_rsi() {
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
 
-    let keypair = ChildKeys::from_reverse_account(&&mnemonic.to_string(), BitcoinNetwork::BitcoinTestnet, 1)
-        .unwrap()
-        .keypair;
+    let keypair =
+        ChildKeys::from_reverse_account(&&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
+            .unwrap()
+            .keypair;
     println!(
         "****SECRETS****:\n sec: {:?}, pub: {:?}",
         keypair.display_secret(),
@@ -149,8 +148,7 @@ fn test_bitcoin_rsi() {
     );
     // SECRETS
 
-    let network_config = NetworkConfig::default_bitcoin();
-    let electrum_client = network_config.clone().electrum_url.build_client().unwrap();
+    let network_config = ElectrumConfig::default_bitcoin();
 
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
@@ -264,9 +262,9 @@ fn test_bitcoin_rsi() {
     .unwrap();
 
     let signed_tx = rv_claim_tx
-        .drain(keypair, preimage, out_amount, network_config)
+        .drain(keypair, preimage, out_amount, network_config.clone())
         .unwrap();
-    let txid = electrum_client.transaction_broadcast(&signed_tx).unwrap();
+    let txid = rv_claim_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
 }
 
@@ -300,7 +298,7 @@ fn test_recover_bitcoin_rsi() {
     );
 
     let absolute_fees = 300;
-    let network_config = NetworkConfig::default_bitcoin();
+    let network_config = ElectrumConfig::default_bitcoin();
 
     let mut rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(&redeem_script).unwrap(),

@@ -34,19 +34,10 @@ impl Preimage {
     }
 
     pub fn from_str(preimage: &str) -> Result<Preimage, S5Error> {
-        // Check if the input string is exactly 64 characters (32 bytes)
-        // if preimage.len() != 64 {
-        //     return Err(S5Error::new(
-        //         ErrorKind::Input,
-        //         "Preimage input is not 32 bytes",
-        //     ));
-        // }
-
         let decoded = match hex::decode(preimage) {
             Ok(decoded) => decoded,
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
-
         // Ensure the decoded bytes are exactly 32 bytes long
         let preimage_bytes: [u8; 32] = match decoded.try_into() {
             Ok(bytes) => bytes,
@@ -57,10 +48,8 @@ impl Preimage {
                 ))
             }
         };
-
         let sha256 = sha256::Hash::hash(&preimage_bytes);
         let hash160 = hash160::Hash::hash(&preimage_bytes);
-
         Ok(Preimage {
             bytes: Some(preimage_bytes),
             sha256: sha256,

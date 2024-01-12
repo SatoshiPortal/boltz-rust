@@ -19,7 +19,7 @@ use elements::encode::serialize;
 use elements::secp256k1_zkp::Message;
 
 use crate::{
-    network::electrum::{BitcoinNetwork, NetworkConfig},
+    network::{electrum::ElectrumConfig, Chain},
     swaps::boltz::SwapTxKind,
     util::{
         error::{ErrorKind, S5Error},
@@ -294,10 +294,10 @@ impl LBtcSwapScript {
         }
     }
 
-    pub fn to_address(&self, network: BitcoinNetwork) -> Result<EAddress, S5Error> {
+    pub fn to_address(&self, network: Chain) -> Result<EAddress, S5Error> {
         let script = self.to_script()?;
         let address_params = match network {
-            BitcoinNetwork::Liquid => &AddressParams::LIQUID,
+            Chain::Liquid => &AddressParams::LIQUID,
             _ => &AddressParams::LIQUID_TESTNET,
         };
 
@@ -406,7 +406,7 @@ impl LBtcSwapTx {
         &mut self,
         keys: ZKKeyPair,
         preimage: Preimage,
-        network_config: NetworkConfig,
+        network_config: ElectrumConfig,
     ) -> Result<Transaction, S5Error> {
         self.fetch_utxo(network_config)?;
         if !self.has_utxo() {
@@ -427,8 +427,8 @@ impl LBtcSwapTx {
         }
     }
 
-    fn fetch_utxo(&mut self, network_config: NetworkConfig) -> Result<(), S5Error> {
-        let electrum_client = network_config.clone().electrum_url.build_client()?;
+    fn fetch_utxo(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
+        let electrum_client = network_config.clone().build_client()?;
         let address = self.swap_script.to_address(network_config.network)?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
             self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
@@ -626,9 +626,9 @@ impl LBtcSwapTx {
     pub fn broadcast(
         &mut self,
         signed_tx: Transaction,
-        network_config: NetworkConfig,
+        network_config: ElectrumConfig,
     ) -> Result<String, S5Error> {
-        let electrum_client = network_config.electrum_url.build_client()?;
+        let electrum_client = network_config.build_client()?;
         let serialized = serialize(&signed_tx);
         match electrum_client.transaction_broadcast_raw(&serialized) {
             Ok(txid) => Ok(txid.to_string()),
@@ -662,7 +662,7 @@ mod tests {
             "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6",
         )
         .unwrap();
-        let network_config = NetworkConfig::default_liquid();
+        let network_config = ElectrumConfig::default_liquid();
         let decoded = LBtcSwapScript::reverse_from_str(
             &redeem_script_str.clone(),
             boltz_blinding_str.to_string(),

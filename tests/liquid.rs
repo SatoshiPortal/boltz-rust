@@ -1,13 +1,12 @@
 use boltz_client::{
-    network::electrum::{BitcoinNetwork, NetworkConfig},
+    network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
         liquid::LBtcSwapScript,
     },
     util::{derivation::ChildKeys, preimage::Preimage},
+    Secp256k1, ZKKeyPair,
 };
-use elements::secp256k1_zkp::KeyPair as ZKKeyPair;
-use elements::secp256k1_zkp::Secp256k1;
 
 /// submarine swap integration
 /// update invoice before running
@@ -23,13 +22,13 @@ fn test_liquid_ssi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = ChildKeys::from_submarine_account(&mnemonic, BitcoinNetwork::LiquidTestnet, 1)
+    let keypair = ChildKeys::from_submarine_account(&mnemonic, "", Chain::LiquidTestnet, 1)
         .unwrap()
         .keypair;
     println!("{:?}", keypair);
     // SECRETS
-    let network_config = NetworkConfig::default_liquid();
-    let _electrum_client = network_config.electrum_url.build_client().unwrap();
+    let network_config = ElectrumConfig::default_liquid();
+    let _electrum_client = network_config.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let pair_hash = boltz_pairs
@@ -90,15 +89,15 @@ fn test_liquid_rsi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = ChildKeys::from_reverse_account(&mnemonic, BitcoinNetwork::LiquidTestnet, 1)
+    let keypair = ChildKeys::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1)
         .unwrap()
         .keypair;
     println!("SECRET-KEY: {:?}", keypair.display_secret());
     let preimage = Preimage::new();
     println!("PREIMAGE: {}", hex::encode(preimage.bytes.unwrap()));
     // SECRETS
-    let network_config = NetworkConfig::default_liquid();
-    let _electrum_client = network_config.electrum_url.build_client().unwrap();
+    let network_config = ElectrumConfig::default_liquid();
+    let _electrum_client = network_config.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let pair_hash = boltz_pairs

@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::fmt::Formatter;
-use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum ErrorKind {

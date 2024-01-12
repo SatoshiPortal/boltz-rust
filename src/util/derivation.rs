@@ -1,7 +1,7 @@
-use crate::network::electrum::BitcoinNetwork;
+use crate::network::Chain;
 use crate::util::error::{ErrorKind, S5Error};
 use bip39::Mnemonic;
-use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey, Fingerprint};
+use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, Fingerprint};
 use bitcoin::secp256k1::{KeyPair, Secp256k1};
 
 use serde::{Deserialize, Serialize};
@@ -9,8 +9,12 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::str::FromStr;
 
-const SUBMARINE_SWAP_ACCOUNT: &str = "21";
-const REVERSE_SWAP_ACCOUNT: &str = "42";
+const SUBMARINE_SWAP_ACCOUNT: u32 = 21;
+const REVERSE_SWAP_ACCOUNT: u32 = 42;
+
+const BITCOIN_NETWORK_PATH: u32 = 0;
+const LIQUID_NETWORK_PATH: u32 = 1776;
+const TESTNET_NETWORK_PATH: u32 = 1;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChildKeys {
@@ -19,10 +23,15 @@ pub struct ChildKeys {
     pub keypair: KeyPair,
 }
 impl ChildKeys {
-    pub fn from_submarine_account(mnemonic: &str, network: BitcoinNetwork, index: u64) -> Result<ChildKeys, S5Error> {
+    pub fn from_submarine_account(
+        mnemonic: &str,
+        passphrase: &str,
+        network: Chain,
+        index: u64,
+    ) -> Result<ChildKeys, S5Error> {
         let secp = Secp256k1::new();
         let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
-        let seed = mnemonic_struct.to_seed("");
+        let seed = mnemonic_struct.to_seed(passphrase);
         let root = match ExtendedPrivKey::new_master(bitcoin::Network::Testnet, &seed) {
             Ok(xprv) => xprv,
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
@@ -30,9 +39,9 @@ impl ChildKeys {
         let fingerprint = root.fingerprint(&secp);
         let purpose = DerivationPurpose::Compatible;
         let network_path = match network {
-            BitcoinNetwork::Bitcoin => "0",
-            BitcoinNetwork::Liquid => "1776",
-            _ => "1",
+            Chain::Bitcoin => BITCOIN_NETWORK_PATH,
+            Chain::Liquid => LIQUID_NETWORK_PATH,
+            _ => TESTNET_NETWORK_PATH,
         };
         let derivation_path = format!(
             "m/{}h/{}h/{}h/0/{}",
@@ -69,10 +78,15 @@ impl ChildKeys {
             keypair: key_pair,
         })
     }
-    pub fn from_reverse_account(mnemonic: &str, network: BitcoinNetwork, index: u64) -> Result<ChildKeys, S5Error> {
+    pub fn from_reverse_account(
+        mnemonic: &str,
+        passphrase: &str,
+        network: Chain,
+        index: u64,
+    ) -> Result<ChildKeys, S5Error> {
         let secp = Secp256k1::new();
         let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
-        let seed = mnemonic_struct.to_seed("");
+        let seed = mnemonic_struct.to_seed(passphrase);
         let root = match ExtendedPrivKey::new_master(bitcoin::Network::Testnet, &seed) {
             Ok(xprv) => xprv,
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
@@ -80,9 +94,9 @@ impl ChildKeys {
         let fingerprint = root.fingerprint(&secp);
         let purpose = DerivationPurpose::Native;
         let network_path = match network {
-            BitcoinNetwork::Bitcoin => "0",
-            BitcoinNetwork::Liquid => "1776",
-            _ => "1",
+            Chain::Bitcoin => BITCOIN_NETWORK_PATH,
+            Chain::Liquid => LIQUID_NETWORK_PATH,
+            _ => TESTNET_NETWORK_PATH,
         };
         // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
         let derivation_path = format!(
@@ -139,10 +153,6 @@ impl Display for DerivationPurpose {
     }
 }
 
-pub fn check_xpub(xpub: &str) -> bool {
-    ExtendedPubKey::from_str(xpub).is_ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,13 +161,21 @@ mod tests {
     fn test_derivation() {
         let mnemonic: &str = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let index = 0 as u64; // 0
-        let derived = ChildKeys::from_submarine_account(mnemonic, BitcoinNetwork::Bitcoin, index);
+        let derived = ChildKeys::from_submarine_account(mnemonic, "", Chain::Bitcoin, index);
+        // println!("{:?}", derived.unwrap().keypair.display_secret());
         assert!(derived.is_ok());
-    }
-
-    #[test]
-    fn test_check_xpub() {
-        assert!(check_xpub("tpubDDXskyWJLq5pUioZn8sGQ46aieCybzsjLb5BGmRPBAdwfGyvwiyXaoho8EYJcgJa5QGHGYpDjLQ8gWzczWbxadeRkCuExW32Boh696yuQ9m"));
-        assert_eq!(check_xpub("tpubTRICKSkyWJLq5pUioZn8sGQ46aieCybzsjLb5BGmRPBAdwfGyvwiyXaoho8EYJcgJa5QGHGYpDjLQ8gWzczWbxadeRkCuExW32Boh696yuQ9m"),false);
+        assert_eq!(
+            &derived.as_ref().unwrap().fingerprint.to_string(),
+            "9a6a2580"
+        );
+        assert_eq!(
+            &derived
+                .as_ref()
+                .unwrap()
+                .keypair
+                .display_secret()
+                .to_string(),
+            "d8d26ab9ba4e2c44f1a1fb9e10dc9d78707aaaaf38b5d42cf5c8bf00306acd85"
+        );
     }
 }
