@@ -205,7 +205,7 @@ fn test_bitcoin_rsi() {
     assert_eq!(constructed_rev_script, boltz_rev_script);
 
     let constructed_address = constructed_rev_script
-        .to_address(network_config.network)
+        .to_address(network_config.network())
         .unwrap();
     println!("{}", constructed_address.to_string());
     assert_eq!(constructed_address.to_string(), lockup_address);
@@ -256,12 +256,12 @@ fn test_bitcoin_rsi() {
     let mut rv_claim_tx = BtcSwapTx::new_claim(
         constructed_rev_script,
         RETURN_ADDRESS.to_string(),
-        network_config.network,
+        network_config.network(),
     )
     .unwrap();
-
+    let _ = rv_claim_tx.fetch_utxo(out_amount, network_config.clone());
     let signed_tx = rv_claim_tx
-        .drain(keypair, preimage, out_amount, absolute_fees, network_config.clone())
+        .drain(keypair, preimage, absolute_fees)
         .unwrap();
     let txid = rv_claim_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
@@ -302,12 +302,13 @@ fn test_recover_bitcoin_rsi() {
     let mut rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(&redeem_script).unwrap(),
         RETURN_ADDRESS.to_string(),
-        network_config.network,
+        network_config.network(),
     )
     .unwrap();
-
+    
+    let _ = rev_swap_tx.fetch_utxo(out_amount, network_config.clone());
     let signed_tx = rev_swap_tx
-        .drain(keypair, preimage, out_amount, absolute_fees, network_config.clone())
+        .drain(keypair, preimage, absolute_fees)
         .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);

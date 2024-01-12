@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-use bitcoin::absolute;
 use bitcoin::secp256k1::{KeyPair, Message, Secp256k1};
 use bitcoin::{
     blockdata::script::{Builder, Instruction, Script, ScriptBuf},
@@ -23,6 +22,7 @@ use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160::Hash};
 
 use super::boltz::SwapType;
 
+/// Bitcoin swap script helper.
 #[derive(Debug, PartialEq)]
 pub struct BtcSwapScript {
     swap_type: SwapType,
@@ -33,6 +33,7 @@ pub struct BtcSwapScript {
 }
 
 impl BtcSwapScript {
+    /// Create the struct from raw elements
     pub fn new(
         swap_type: SwapType,
         hashlock: String,
@@ -48,6 +49,8 @@ impl BtcSwapScript {
             sender_pubkey,
         }
     }
+    /// Create the struct from a submarine swap redeem_script string. 
+    ///Usually created from the string provided by boltz api response.
     pub fn submarine_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
         let script_bytes = match hex::decode(redeem_script_str) {
             Ok(result) => result.to_owned(),
@@ -109,6 +112,8 @@ impl BtcSwapScript {
         }
     }
 
+    /// Create the struct from a reverse swap redeem_script string. 
+    /// Usually created from the string provided by boltz api response.
     pub fn reverse_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
         let script_bytes = match hex::decode(redeem_script_str) {
             Ok(result) => result.to_owned(),
@@ -170,6 +175,7 @@ impl BtcSwapScript {
         }
     }
 
+    /// Internally used to convert struct into a bitcoin::Script type
     fn to_script(&self) -> Result<ScriptBuf, S5Error> {
         match self.swap_type {
             SwapType::Submarine => {
@@ -273,6 +279,8 @@ impl BtcSwapScript {
         }
     }
 
+    /// Get address for the swap script.
+    /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
     pub fn to_address(&self, network: Chain) -> Result<Address, S5Error> {
         let script = self.to_script()?;
         let network = match network {
@@ -284,6 +292,7 @@ impl BtcSwapScript {
             SwapType::ReverseSubmarine => Ok(Address::p2wsh(&script, network)),
         }
     }
+    /// Get the balance of the script
     pub fn get_balance(&self, network_config: ElectrumConfig) -> Result<(u64, i64), S5Error> {
         let electrum_client = network_config.build_client()?;
 
@@ -303,13 +312,8 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
     result
 }
 
-// fn find_difference(s1: &str, s2: &str) -> Vec<(usize, char, char)> {
-//     s1.char_indices()
-//         .zip(s2.chars())
-//         .filter(|((_, char1), char2)| char1 != char2)
-//         .map(|((i, char1), char2)| (i, char1, char2))
-//         .collect()
-// }
+
+/// Bitcoin swap transaction helper.
 pub struct BtcSwapTx {
     kind: SwapTxKind,
     swap_script: BtcSwapScript,
@@ -319,12 +323,15 @@ pub struct BtcSwapTx {
 }
 
 impl BtcSwapTx {
-    /// BTC Swap claim Tx is constructed for successful reverse swaps
+    /// Required to claim reverse swaps only. This is never used for submarine swaps.
     pub fn new_claim(
         swap_script: BtcSwapScript,
         output_address: String,
         network: Chain,
     ) -> Result<BtcSwapTx, S5Error> {
+        if swap_script.swap_type == SwapType::Submarine {
+            return Err(S5Error::new(ErrorKind::Script, "Claim transactions can only be constructed for Reverse swaps."))
+        }
         let network = if network == Chain::Bitcoin {
             Network::Bitcoin
         } else {
@@ -346,12 +353,15 @@ impl BtcSwapTx {
             utxo_value: None,
         })
     }
-    /// BTC Swap refund Tx is constructed only for a failed submarine swap
+    /// Required to claim submarine swaps only. This is never used for reverse swaps.
     pub fn new_refund(
         swap_script: BtcSwapScript,
         output_address: String,
         network: Chain,
     ) -> Result<BtcSwapTx, S5Error> {
+        if swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(S5Error::new(ErrorKind::Script, "Refund transactions can only be constructed for Submarine swaps."))
+        }
         let network = if network == Chain::Bitcoin {
             Network::Bitcoin
         } else {
@@ -372,15 +382,13 @@ impl BtcSwapTx {
             utxo_value: None,
         })
     }
+    /// Sweep the script utxo.
     pub fn drain(
         &mut self,
         keys: KeyPair,
         preimage: Preimage,
-        expected_utxo_value: u64,
         absolute_fees: u64,
-        network_config: ElectrumConfig,
     ) -> Result<Transaction, S5Error> {
-        self.fetch_utxo(expected_utxo_value, network_config)?;
         if !self.has_utxo() {
             return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
         }
@@ -395,7 +403,8 @@ impl BtcSwapTx {
             }
         }
     }
-    fn fetch_utxo(
+    /// Fetch utxo for the script
+    pub fn fetch_utxo(
         &mut self,
         expected_value: u64,
         network_config: ElectrumConfig,
@@ -436,11 +445,18 @@ impl BtcSwapTx {
             }
         }
     }
+
+    /// Internally used to check if utxos are present in the struct to build the transaction.
     fn has_utxo(&self) -> bool {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
 
+    /// Sign a reverse swap transaction
     fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage, absolute_fees: u64) -> Result<Transaction, S5Error> {
+        if self.swap_script.swap_type == SwapType::Submarine {
+            return Err(S5Error::new(ErrorKind::Script, "Claim transactions can only be constructed for Reverse swaps."))
+        }
+
         let preimage_bytes = if preimage.bytes.is_some() {
             preimage.bytes.unwrap()
         } else {
@@ -457,7 +473,6 @@ impl BtcSwapTx {
             witness: Witness::new(),
         };
 
-        // use fee
         let output_amount = self.utxo_value.unwrap() - absolute_fees;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload.script_pubkey(),
@@ -470,7 +485,6 @@ impl BtcSwapTx {
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
-        // SIGN TRANSACTION
         let hash_type = bitcoin::sighash::EcdsaSighashType::All;
         let secp = Secp256k1::new();
         let sighash = match SighashCache::new(unsigned_tx.clone()).segwit_signature_hash(
@@ -482,7 +496,6 @@ impl BtcSwapTx {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
-
         let sighash_message = match Message::from_slice(&sighash[..]) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
@@ -495,43 +508,29 @@ impl BtcSwapTx {
         witness.push(preimage_bytes);
         witness.push(redeem_script.as_bytes());
 
-        // BUILD SIGNED TX w/ WITNESS
         let signed_txin = TxIn {
             previous_output: self.utxo.unwrap(),
             script_sig: Script::empty().into(),
             sequence: sequence,
             witness: witness,
         };
-
         let signed_tx = Transaction {
             version: 1,
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![signed_txin],
             output: vec![output.clone()],
         };
-        // signed_tx.size();
-        // calculate absolute fee as size * fee_rate
-        // then calcualte real output_amount as output_value - absolute_fees
-
         Ok(signed_tx)
     }
-    fn _sign_refund_tx(&self, _keys: KeyPair) -> () {
-        // submarine
-        ()
-    }
-    pub fn broadcast(
-        &mut self,
-        signed_tx: Transaction,
-        network_config: ElectrumConfig,
-    ) -> Result<String, S5Error> {
-        let electrum_client = network_config.build_client()?;
-
-        match electrum_client.transaction_broadcast(&signed_tx) {
-            Ok(txid) => Ok(txid.to_string()),
-            Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+    fn _sign_refund_tx(&self, _keys: KeyPair) -> Result<(),S5Error> {
+        if self.swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(S5Error::new(ErrorKind::Script, "Refund transactions can only be constructed for Submarine swaps."))
         }
+        Ok(())
     }
-
+    /// Calculate the size of a transaction.
+    /// Use this before calling drain to help calculate the absolute fees.
+    /// Multiply the size by the fee_rate to get the absolute fees.
     pub fn size(&self, keys: KeyPair, preimage: Preimage)->Result<usize, S5Error>{
         let dummy_abs_fee = 5_000;
         let tx = match self.kind{
@@ -539,6 +538,18 @@ impl BtcSwapTx {
         };
         Ok(tx.size())
     }
+        /// Broadcast transaction to the network
+        pub fn broadcast(
+            &mut self,
+            signed_tx: Transaction,
+            network_config: ElectrumConfig,
+        ) -> Result<String, S5Error> {
+            let electrum_client = network_config.build_client()?;
+            match electrum_client.transaction_broadcast(&signed_tx) {
+                Ok(txid) => Ok(txid.to_string()),
+                Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+            }
+        }
 }
 
 #[cfg(test)]

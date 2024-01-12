@@ -37,6 +37,8 @@ use elements::{
 };
 
 use super::boltz::SwapType;
+
+/// Liquid swap script helper.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LBtcSwapScript {
     swap_type: SwapType,
@@ -48,6 +50,7 @@ pub struct LBtcSwapScript {
 }
 
 impl LBtcSwapScript {
+    /// Create the struct from raw elements
     pub fn new(
         swap_type: SwapType,
         hashlock: String,
@@ -65,6 +68,8 @@ impl LBtcSwapScript {
             blinding_key,
         }
     }
+    /// Create the struct from a submarine swap redeem_script string. 
+    ///Usually created from the string provided by boltz api response.
     pub fn submarine_from_str(
         redeem_script_str: &str,
         blinding_str: String,
@@ -134,6 +139,8 @@ impl LBtcSwapScript {
         }
     }
 
+    /// Create the struct from a reverse swap redeem_script string. 
+    /// Usually created from the string provided by boltz api response.
     pub fn reverse_from_str(
         redeem_script_str: &str,
         blinding_str: String,
@@ -200,6 +207,8 @@ impl LBtcSwapScript {
             ))
         }
     }
+
+    /// Internally used to convert struct into a bitcoin::Script type
     pub fn to_script(&self) -> Result<EScript, S5Error> {
         /*
             HASH160 <hash of the preimage>
@@ -294,6 +303,9 @@ impl LBtcSwapScript {
         }
     }
 
+    /// Get address for the swap script.
+    /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
+    /// Always returns a confidential address
     pub fn to_address(&self, network: Chain) -> Result<EAddress, S5Error> {
         let script = self.to_script()?;
         let address_params = match network {
@@ -335,13 +347,15 @@ fn _u32_to_bytes_little_endian(value: u32) -> [u8; 4] {
 
 pub type ElementsSig = (secp256k1_zkp::ecdsa::Signature, elements::EcdsaSighashType);
 
-pub fn elementssig_to_rawsig(sig: &ElementsSig) -> Vec<u8> {
+/// Internal elements signature helper
+fn elementssig_to_rawsig(sig: &ElementsSig) -> Vec<u8> {
     let ser_sig = sig.0.serialize_der();
     let mut raw_sig = Vec::from(&ser_sig[..]);
     raw_sig.push(sig.1 as u8);
     raw_sig
 }
 
+/// Liquid swap transaction helper.
 #[derive(Debug, Clone)]
 pub struct LBtcSwapTx {
     kind: SwapTxKind,
@@ -354,15 +368,14 @@ pub struct LBtcSwapTx {
 }
 
 impl LBtcSwapTx {
-    pub fn manual_utxo_update(&mut self, utxo: OutPoint, value: u64) -> LBtcSwapTx {
-        self.utxo = Some(utxo);
-        self.utxo_value = Some(value);
-        self.clone()
-    }
+    /// Required to claim reverse swaps only. This is never used for submarine swaps.
     pub fn new_claim(
         swap_script: LBtcSwapScript,
         output_address: String,
     ) -> Result<LBtcSwapTx, S5Error> {
+        if swap_script.swap_type == SwapType::Submarine {
+            return Err(S5Error::new(ErrorKind::Script, "Claim transactions can only be constructed for Reverse swaps."))
+        }
         let address = match Address::from_str(&output_address) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
@@ -377,10 +390,14 @@ impl LBtcSwapTx {
             txout_secrets: None,
         })
     }
+    /// Required to claim submarine swaps only. This is never used for reverse swaps.
     pub fn new_refund(
         swap_script: LBtcSwapScript,
         output_address: String,
     ) -> Result<LBtcSwapTx, S5Error> {
+        if swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(S5Error::new(ErrorKind::Script, "Refund transactions can only be constructed for Submarine swaps."))
+        }
         let address = match Address::from_str(&output_address) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
@@ -396,15 +413,13 @@ impl LBtcSwapTx {
             txout_secrets: None,
         })
     }
-
+    /// Sweep the script utxo.
     pub fn drain(
         &mut self,
         keys: ZKKeyPair,
         preimage: Preimage,
         absolute_fees: u64,
-        network_config: ElectrumConfig,
     ) -> Result<Transaction, S5Error> {
-        self.fetch_utxo(network_config)?;
         if !self.has_utxo() {
             return Err(S5Error::new(
                 ErrorKind::Transaction,
@@ -414,7 +429,7 @@ impl LBtcSwapTx {
         match self.kind {
             SwapTxKind::Claim => Ok(self.sign_claim_tx(keys, preimage, absolute_fees)?),
             SwapTxKind::Refund => {
-                self.sign_refund_tx(keys);
+                let _ = self._sign_refund_tx(keys);
                 Err(S5Error::new(
                     ErrorKind::Transaction,
                     "Refund transaction signing not supported yet",
@@ -422,15 +437,15 @@ impl LBtcSwapTx {
             }
         }
     }
-
-    fn fetch_utxo(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
+    /// Fetch utxo for the script
+    pub fn fetch_utxo(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
         // if (self.has_utxo()){
         //     return Ok(())
         // }
         // don't rely on self.has_utxo
         // be safe and always update to the latest
         let electrum_client = network_config.clone().build_client()?;
-        let address = self.swap_script.to_address(network_config.network)?;
+        let address = self.swap_script.to_address(network_config.network())?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
             self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
         )) {
@@ -473,8 +488,10 @@ impl LBtcSwapTx {
         }
         Ok(())
     }
-    /// this will always return false if the utxo is Explicit
+
+    /// Internally used to check if utxos are present in the struct to build the transaction.
     fn has_utxo(&self) -> bool {
+        // this will always return false if the utxo is Explicit
         self.utxo.is_some()
             && self.utxo_value.is_some()
             && self.txout_secrets.is_some()
@@ -485,7 +502,11 @@ impl LBtcSwapTx {
         self.has_utxo() && self.utxo_value.unwrap() == expected_value
     }
 
+    /// Sign a reverse swap transaction
     fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage, absolute_fees: u64) -> Result<Transaction, S5Error> {
+        if self.swap_script.swap_type == SwapType::Submarine {
+            return Err(S5Error::new(ErrorKind::Script, "Claim transactions can only be constructed for Reverse swaps."))
+        }
         let preimage_bytes = if preimage.bytes.is_some() {
             preimage.bytes.unwrap()
         } else {
@@ -621,9 +642,15 @@ impl LBtcSwapTx {
         };
         Ok(signed_tx)
     }
-    fn sign_refund_tx(&self, _keys: KeyPair) -> () {
-        ()
+    fn _sign_refund_tx(&self, _keys: KeyPair) -> Result<(),S5Error> {
+        if self.swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(S5Error::new(ErrorKind::Script, "Refund transactions can only be constructed for Submarine swaps."))
+        }
+        Ok(())
     }
+    /// Calculate the size of a transaction.
+    /// Use this before calling drain to help calculate the absolute fees.
+    /// Multiply the size by the fee_rate to get the absolute fees.
     pub fn size(&self, keys: KeyPair, preimage: Preimage)->Result<usize, S5Error>{
         let dummy_abs_fee = 5_000;
         let tx = match self.kind{
@@ -631,6 +658,8 @@ impl LBtcSwapTx {
         };
         Ok(tx.size())
     }
+
+    /// Broadcast transaction to the network
     pub fn broadcast(
         &mut self,
         signed_tx: Transaction,
@@ -693,7 +722,7 @@ mod tests {
         };
 
         let address = el_script
-            .to_address(network_config.clone().network)
+            .to_address(network_config.clone().network())
             .unwrap();
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         println!("Blinding Pub: {:?}", address.blinding_pubkey);
@@ -702,8 +731,9 @@ mod tests {
 
         let mut liquid_swap_tx =
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
+        let _  = liquid_swap_tx.fetch_utxo(network_config.clone());
         let final_tx = liquid_swap_tx
-            .drain(my_key_pair, preimage, 5_000, network_config.clone())
+            .drain(my_key_pair, preimage, 5_000)
             .unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         let manifest_dir = env!("CARGO_MANIFEST_DIR");

@@ -7,7 +7,7 @@ pub const DEFAULT_LIQUID_TESTNET_NODE: &str = "blockstream.info:465";
 pub const DEFAULT_MAINNET_NODE: &str = "electrum.bullbitcoin.com:50002";
 
 #[derive(Debug, Clone)]
-pub enum ElectrumUrl {
+enum ElectrumUrl {
     Tls(String, bool), // the bool value indicates if the domain name should be validated
     Plaintext(String),
 }
@@ -29,11 +29,12 @@ impl ElectrumUrl {
     }
 }
 
+/// Electrum client configuration. 
 #[derive(Debug, Clone)]
 pub struct ElectrumConfig {
-    pub network: Chain,
-    pub url: ElectrumUrl,
-    pub timeout: u8,
+    network: Chain,
+    url: ElectrumUrl,
+    timeout: u8,
 }
 
 impl ElectrumConfig {
@@ -70,7 +71,7 @@ impl ElectrumConfig {
     pub fn network(&self) -> Chain {
         self.network
     }
-
+    /// Builds an electrum_client::Client which can be used to make calls to electrum api
     pub fn build_client(&self) -> Result<electrum_client::Client, S5Error> {
         self.url.clone().build_client(self.timeout)
     }
