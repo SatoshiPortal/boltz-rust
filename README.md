@@ -164,6 +164,18 @@ For all ignored unit tests read the tests before running.
 - [x] ReverseSwap (L-BTC): Claim
 - [x] ReverseSwap (L-BTC): Refund (Invoice expires)
 
+## Assumptions
+
+This library makes the following assumptions:
+
+- Reverse swaps only spend a single utxo
+
+In bitcoin, we use listunspent and take the first utxo only (0 index). The only case where something could go wrong here is if the script at any point has more than one utxo, which is unlikely. If it does, you will not be able to sweep this script using this library.
+
+In liquid, listunspent does not directly work, so we use get_transactions. We parse through transaction outputs and match against the scriptpubkey. The result is similar and if more than one transaction has been made to this address, this library will not be able to easily spend.
+
+The fix for this is to make the utxos field in SwapTx use a Vec and make sweeps always use all available/spendable utxos.
+
 ## Acknowledgement
 
 Special thanks to:

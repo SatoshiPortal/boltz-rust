@@ -402,6 +402,11 @@ impl BtcSwapTx {
         expected_value: u64,
         network_config: ElectrumConfig,
     ) -> Result<(), S5Error> {
+        // if (self.has_utxo()){
+        //     return Ok(())
+        // }
+        // don't rely on self.has_utxo
+        // be safe and always update to the latest
         let electrum_client = network_config.build_client()?;
 
         let utxos = match electrum_client
@@ -527,6 +532,13 @@ impl BtcSwapTx {
             Ok(txid) => Ok(txid.to_string()),
             Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
         }
+    }
+
+    pub fn size(&self, keys: KeyPair, preimage: Preimage)->Result<usize, S5Error>{
+        let tx = match self.kind{
+            _=>self.sign_claim_tx(keys, preimage)?,
+        };
+        Ok(tx.size())
     }
 }
 
