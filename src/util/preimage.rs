@@ -7,12 +7,14 @@ use crate::util::error::{ErrorKind, S5Error};
 use bitcoin::secp256k1::rand::rngs::OsRng;
 use rand_core::RngCore;
 
+/// Internally used rng to generate secure 32 byte preimages
 fn rng_32b() -> [u8; 32] {
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     bytes
 }
 
+/// Helper to work with Preimage & Hashes required for swap scripts.
 #[derive(Debug, Clone)]
 pub struct Preimage {
     pub bytes: Option<[u8; 32]>,
@@ -21,6 +23,7 @@ pub struct Preimage {
 }
 
 impl Preimage {
+    /// Creates a new random preimage
     pub fn new() -> Preimage {
         let preimage = rng_32b();
         let sha256 = sha256::Hash::hash(&preimage);
@@ -33,6 +36,7 @@ impl Preimage {
         }
     }
 
+    /// Creates a struct from a preimage string.
     pub fn from_str(preimage: &str) -> Result<Preimage, S5Error> {
         let decoded = match hex::decode(preimage) {
             Ok(decoded) => decoded,
@@ -57,6 +61,7 @@ impl Preimage {
         })
     }
 
+    /// Creates a Preimage struct without a value and only a hash
     pub fn from_sha256_str(preimage_sha256: &str) -> Result<Preimage, S5Error> {
         let sha256 = match sha256::Hash::from_str(preimage_sha256) {
             Ok(result) => result,
@@ -73,6 +78,8 @@ impl Preimage {
             hash160: hash160,
         })
     }
+
+    /// Extracts the preimage sha256 hash from a lightning invoice
     pub fn from_invoice_str(invoice_str: &str) -> Result<Preimage, S5Error> {
         let invoice = match Bolt11Invoice::from_str(&invoice_str) {
             Ok(invoice) => invoice,
@@ -88,6 +95,8 @@ impl Preimage {
             &invoice.payment_hash().to_string(),
         )?)
     }
+
+    /// Converts the preimage bytes to String
     pub fn to_string(&self) -> Option<String> {
         match &self.bytes {
             Some(result) => Some(hex::encode(result)),

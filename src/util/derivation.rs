@@ -16,6 +16,7 @@ const BITCOIN_NETWORK_PATH: u32 = 0;
 const LIQUID_NETWORK_PATH: u32 = 1776;
 const TESTNET_NETWORK_PATH: u32 = 1;
 
+/// Derived KeyPair for use in a script.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChildKeys {
     pub fingerprint: Fingerprint,
@@ -23,6 +24,8 @@ pub struct ChildKeys {
     pub keypair: KeyPair,
 }
 impl ChildKeys {
+    /// Derives keys for a submarine swap at standardized path
+    /// m/49'/<0;1777;1>/21'/0/*
     pub fn from_submarine_account(
         mnemonic: &str,
         passphrase: &str,
@@ -78,6 +81,8 @@ impl ChildKeys {
             keypair: key_pair,
         })
     }
+    /// Derives keys for a submarine swap at standardized path
+    /// m/49'/<0;1777;1>/42'/0/*
     pub fn from_reverse_account(
         mnemonic: &str,
         passphrase: &str,
