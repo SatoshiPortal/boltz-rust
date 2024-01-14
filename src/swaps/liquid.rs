@@ -439,11 +439,6 @@ impl LBtcSwapTx {
     }
     /// Fetch utxo for the script
     pub fn fetch_utxo(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
-        // if (self.has_utxo()){
-        //     return Ok(())
-        // }
-        // don't rely on self.has_utxo
-        // be safe and always update to the latest
         let electrum_client = network_config.clone().build_client()?;
         let address = self.swap_script.to_address(network_config.network())?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
@@ -469,20 +464,31 @@ impl LBtcSwapTx {
         for output in tx.clone().output {
             if output.script_pubkey == address.script_pubkey() {
                 let zksecp = Secp256k1::new();
-                let unblinded =
+                let is_blinded = output.asset.is_confidential() && output.value.is_confidential();
+                if !is_blinded {
+                    let el_txid = tx.clone().txid();
+                    let outpoint_0 = OutPoint::new(el_txid, vout);
+                    self.utxo = Some(outpoint_0);
+                    self.utxo_value = output.value.explicit();
+                    self.utxo_confidential_value = None;
+                    self.txout_secrets = None;
+                    break;                    
+                } else {
+                    let unblinded =
                     match output.unblind(&zksecp, self.swap_script.blinding_key.secret_key()) {
                         Ok(result) => result,
                         Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
                     };
-                let el_txid = tx.clone().txid();
-                let outpoint_0 = OutPoint::new(el_txid, vout);
-                let utxo_value = unblinded.value;
+                    let el_txid = tx.clone().txid();
+                    let outpoint_0 = OutPoint::new(el_txid, vout);
+                    let utxo_value = unblinded.value;
 
-                self.utxo = Some(outpoint_0);
-                self.utxo_value = Some(utxo_value);
-                self.utxo_confidential_value = Some(output.value);
-                self.txout_secrets = Some(unblinded);
-                break;
+                    self.utxo = Some(outpoint_0);
+                    self.utxo_value = Some(utxo_value);
+                    self.utxo_confidential_value = Some(output.value);
+                    self.txout_secrets = Some(unblinded);
+                    break;
+                }
             }
             vout += 1;
         }

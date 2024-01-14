@@ -409,11 +409,6 @@ impl BtcSwapTx {
         expected_value: u64,
         network_config: ElectrumConfig,
     ) -> Result<(), S5Error> {
-        // if (self.has_utxo()){
-        //     return Ok(())
-        // }
-        // don't rely on self.has_utxo
-        // be safe and always update to the latest
         let electrum_client = network_config.build_client()?;
 
         let utxos = match electrum_client
@@ -430,7 +425,7 @@ impl BtcSwapTx {
         } else {
             let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
             let utxo_value = utxos[0].value;
-            if utxo_value == expected_value {
+            if utxo_value >= expected_value {
                 self.utxo = Some(outpoint_0);
                 self.utxo_value = Some(utxo_value);
                 Ok(())
