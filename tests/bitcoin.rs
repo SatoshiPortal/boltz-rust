@@ -296,7 +296,7 @@ fn test_recover_bitcoin_rsi() {
         preimage.sha256.to_string()
     );
 
-    let absolute_fees = 300;
+    let absolute_fees = 1_200;
     let network_config = ElectrumConfig::default_bitcoin();
 
     let mut rev_swap_tx = BtcSwapTx::new_claim(

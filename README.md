@@ -170,17 +170,18 @@ This library makes the following assumptions:
 
 - Reverse swaps spends only 1 utxo
 
-In bitcoin, we use listunspent and take the first utxo only (0 index). The only case where something could go wrong here is if the script at any point has more than one utxo, which is unlikely. If it does, you will not be able to spend all utxos at once.
+In bitcoin, we use listunspent and take the first utxo only (array 0 index). The only case where something could go wrong here is if the script at any point has more than one utxo, which is unlikely. Boltz will always fund the script address with the entire amount.
 
-In liquid, listunspent does not directly work, so we use get_transactions. We parse through transaction outputs and match against the scriptpubkey. The result is similar and if more than one transaction has been made to this address, this library will not be able to spend all utxos.
+When we fetch utxos now, we expect a single utxo funded with the exact amount of the swap. If the amount does not match or if there is more than one utxo, we do not claim the transaction.
 
-The fix for this is to make the utxos field in SwapTx use a Vec and make sweeps always use all available/spendable utxos.
+An improvement on this is to make the utxos field in SwapTx use a Vec and make sweeps always use all available/spendable utxos. We should also ensure that the amount is equal to or more than the value of the swap and accordingly notify the user of unexpected amount.
 
-- Bitcoin reverse swap sweep is 1 output
+- Bitcoin reverse swap sweep/drain is 1 output
 
-- Liquid reverse swap sweep is 1 confidential output and 1 explicit fee output
+- Liquid reverse swap sweep/drain is 1 confidential output and 1 explicit fee output
 
 - Liquid reverse swap utxo is always confidential
+If boltz funds the swap script with Explicit values, the library will error. It currently only handles Confidential transactions.
 
 ## Acknowledgement
 

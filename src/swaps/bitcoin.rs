@@ -538,18 +538,18 @@ impl BtcSwapTx {
         };
         Ok(tx.size())
     }
-        /// Broadcast transaction to the network
-        pub fn broadcast(
-            &mut self,
-            signed_tx: Transaction,
-            network_config: ElectrumConfig,
-        ) -> Result<String, S5Error> {
-            let electrum_client = network_config.build_client()?;
-            match electrum_client.transaction_broadcast(&signed_tx) {
-                Ok(txid) => Ok(txid.to_string()),
-                Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-            }
+    /// Broadcast transaction to the network
+    pub fn broadcast(
+        &mut self,
+        signed_tx: Transaction,
+        network_config: ElectrumConfig,
+    ) -> Result<String, S5Error> {
+        let electrum_client = network_config.build_client()?;
+        match electrum_client.transaction_broadcast(&signed_tx) {
+            Ok(txid) => Ok(txid.to_string()),
+            Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
         }
+    }
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@ use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
-        liquid::LBtcSwapScript,
+        liquid::{LBtcSwapScript, LBtcSwapTx},
     },
     util::{derivation::ChildKeys, preimage::Preimage},
     Secp256k1, ZKKeyPair,
@@ -83,7 +83,7 @@ fn test_liquid_ssi() {
 #[ignore]
 fn test_liquid_rsi() {
     // https://liquidtestnet.com/faucet
-    const _RETURN_ADDRESS: &str =
+    const RETURN_ADDRESS: &str =
         "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
     let out_amount = 50_000;
 
@@ -114,10 +114,8 @@ fn test_liquid_rsi() {
         out_amount,
     );
     let response = boltz_client.create_swap(request);
-    // println!("{:?}", response);
 
     assert!(response.is_ok());
-    // println!("{:?}", preimage.clone());
     assert!(response
         .as_ref()
         .unwrap()
@@ -155,7 +153,20 @@ fn test_liquid_rsi() {
         boltz_script_elements.sender_pubkey.clone(),
         ZKKeyPair::from_seckey_str(&secp, &blinding_string).unwrap(),
     );
-
     assert_eq!(constructed_script_elements, boltz_script_elements);
-    println!("{:?}", constructed_script_elements);
+
+    let absolute_fees = 900;
+    let network_config = ElectrumConfig::default_bitcoin();
+
+    let mut rev_swap_tx = LBtcSwapTx::new_claim(
+        constructed_script_elements,
+        RETURN_ADDRESS.to_string(),
+    )
+    .unwrap();
+    let _ = rev_swap_tx.fetch_utxo(network_config.clone());
+    let signed_tx = rev_swap_tx
+        .drain(keypair, preimage, absolute_fees)
+        .unwrap();
+    let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
+    println!("{}", txid);
 }

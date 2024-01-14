@@ -40,3 +40,24 @@ impl S5Error {
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Error {
+    Key(String),
+    BoltzApi(String),
+    Network(String),
+    Input(String),
+    Script(String),
+    Transaction(String),
+}impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Error::Input(s) => write!(f, "Input: {s}"),
+            Error::BoltzApi(s) => write!(f, "BoltzApi: {s}"),
+            Error::Key(s) => write!(f, "Key: {s}"),
+            Error::Network(s) => write!(f, "Network: {s}"),
+            Error::Script(s) => write!(f, "Script: {s}"),
+            Error::Transaction(s) => write!(f, "Transaction: {s}"),
+        }
+    }
+}
