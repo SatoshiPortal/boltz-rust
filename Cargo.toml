@@ -1,7 +1,8 @@
 [package]
 name = "boltz-client"
+description = "a boltz client for swaps between BTC/LBTC & LN"
 authors = ["i5hi <ishi@satoshiportal.com>"]
-version = "0.3.1"
+version = "0.1.0"
 edition = "2021"
 
 [lib]
