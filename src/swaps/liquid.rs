@@ -457,6 +457,7 @@ impl LBtcSwapTx {
             None => return Err(S5Error::new(ErrorKind::Input, "No Trasnaction History")),
         }
         .tx_hash;
+        println!("{}", bitcoin_txid);
         let raw_tx = match electrum_client.transaction_get_raw(&bitcoin_txid) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),

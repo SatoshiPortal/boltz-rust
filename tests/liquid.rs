@@ -1,13 +1,13 @@
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
-        boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
+        boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL, SwapStatusRequest},
         liquid::{LBtcSwapScript, LBtcSwapTx},
     },
     util::{derivation::SwapKey, preimage::Preimage},
     ZKKeyPair, ZKSecp256k1,
 };
-
+pub mod test_utils;
 /// submarine swap integration
 /// update invoice before running
 #[test]
@@ -127,8 +127,8 @@ fn test_liquid_rsi() {
         .timeout_block_height
         .unwrap()
         .clone();
-    let _id = response.as_ref().unwrap().id.as_str();
-    let _invoice = response.as_ref().unwrap().invoice.clone().unwrap();
+    let id = response.as_ref().unwrap().id.as_str();
+    let invoice = response.as_ref().unwrap().invoice.clone().unwrap();
     let _lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
     let blinding_string = response.as_ref().unwrap().blinding_key.clone().unwrap();
     println!("BOLTZ-BLINDING-KEY: {}", blinding_string);
@@ -158,9 +158,39 @@ fn test_liquid_rsi() {
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();
 
+    println!("*******PAY********************");
+    println!("*******LN*********************");
+    println!("*******INVOICE****************");
+    println!("{}", invoice);
+    println!("");
+    println!("Once you have paid the invoice, press enter to continue the tests.");
+    println!("******************************");
+
+    loop {
+        test_utils::pause_and_wait("Continue will check swap status and act accordingly");
+        let request = SwapStatusRequest { id: id.to_string() };
+        let response = boltz_client.swap_status(request);
+        assert!(response.is_ok());
+        let swap_status = response.unwrap().status;
+        println!("SwapStatus: {}", swap_status);
+
+        if swap_status == "swap.created" {
+            println!("Your turn: Pay the invoice");
+        }
+        if swap_status == "transaction.mempool" || swap_status == "transaction.confirmed" {
+            println!("*******BOLTZ******************");
+            println!("*******ONCHAIN-TX*************");
+            println!("*******DETECTED***************");
+            test_utils::pause_and_wait(
+                "WE ARE ABOUT TO BREAK: Give it 20-30 seconds for tx to propogate into the testnet mempool.",
+            );
+            break;
+        }
+    }
+
     let mut rev_swap_tx =
         LBtcSwapTx::new_claim(constructed_script_elements, RETURN_ADDRESS.to_string()).unwrap();
-    let _ = rev_swap_tx.fetch_utxo(network_config.clone());
+    let _ = rev_swap_tx.fetch_utxo(network_config.clone()).unwrap();
     let signed_tx = rev_swap_tx.drain(ZKKeyPair::from_seckey_str(&secp, &keypair.display_secret().to_string()).unwrap(), preimage, absolute_fees).unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);

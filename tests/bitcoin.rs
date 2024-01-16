@@ -10,21 +10,12 @@ use boltz_client::{
     Bolt11Invoice, KeyPair, Secp256k1,
 };
 
-use std::{io, io::Write, str::FromStr};
+use std::{ str::FromStr};
+pub mod test_utils;
 
 /// submarine swap integration
 /// Always run this with --no-capture so you get all the data to recover (if needed)
 /// Always update invoice before running
-pub fn pause_and_wait(msg: &str) {
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    write!(stdout, "\n").unwrap();
-    write!(stdout, "******{msg}******").unwrap();
-    write!(stdout, "\n").unwrap();
-    write!(stdout, "Press Enter to continue...").unwrap();
-    stdout.flush().unwrap();
-    let _ = stdin.read_line(&mut String::new()).unwrap();
-}
 
 #[test]
 #[ignore]
@@ -224,7 +215,7 @@ fn test_bitcoin_rsi() {
     println!("******************************");
 
     loop {
-        pause_and_wait("Continue will check swap status and act accordingly");
+        test_utils::pause_and_wait("Continue will check swap status and act accordingly");
         let request = SwapStatusRequest { id: id.to_string() };
         let response = boltz_client.swap_status(request);
         assert!(response.is_ok());
@@ -245,7 +236,7 @@ fn test_bitcoin_rsi() {
                 "confirmed: {}, unconfirmed: {}",
                 script_balance.0, script_balance.1
             );
-            pause_and_wait(
+            test_utils::pause_and_wait(
                 "!!!!!WE ARE ABOUT TO BREAK: if tx is not shown above, just hang on a moment!!!!!",
             );
             break;
@@ -309,21 +300,3 @@ fn test_recover_bitcoin_rsi() {
     let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
 }
-/*
-
-EXAMPLE LOG OF test_bitcoin_rsi
-
-KeyPairString { seckey: "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1", pubkey: "0223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c5458986" }
-{"info":[],"warnings":[],"pairs":{"BTC/BTC":{"hash":"a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5","rate":1,"limits":{"maximal":25000000,"minimal":50000,"maximalZeroConf":{"baseAsset":0,"quoteAsset":0}},"fees":{"percentage":0.5,"percentageSwapIn":0.1,"minerFees":{"baseAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}},"L-BTC/BTC":{"hash":"04df6e4b5a91d62a4e1a7ecb88ca462851d835c4bae955a6c5baad8e047b14e9","rate":1,"limits":{"maximal":25000000,"minimal":1000,"maximalZeroConf":{"baseAsset":100000,"quoteAsset":0}},"fees":{"percentage":0.25,"percentageSwapIn":0.1,"minerFees":{"baseAsset":{"normal":147,"reverse":{"claim":152,"lockup":276}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}},"RBTC/BTC":{"hash":"17acb1892ddaaaf60bf44a6e88a86405922d44f29265cc2ebe9f0f137277aa24","rate":1,"limits":{"maximal":4294967,"minimal":10000,"maximalZeroConf":{"baseAsset":0,"quoteAsset":0}},"fees":{"percentage":0.5,"percentageSwapIn":0.5,"minerFees":{"baseAsset":{"normal":162,"reverse":{"claim":162,"lockup":302}},"quoteAsset":{"normal":340,"reverse":{"claim":276,"lockup":306}}}}}}}
-{"id":"cUFgeM","invoice":"lntb505590n1pjhce75sp58jvctm5flwssredt3u77u8zsz5qtysz4us9ach02qx8ch3dqhlsqpp5j04mmaqv3p3yp9ptkdf2nhg86vgd85sm3qu7h3y9r9qprldhm8tsdql2djkuepqw3hjqsj5gvsxzerywfjhxucxqyp2xqcqzyl9qxpqysgq5hffhua6y33fnkcqrw2dssedyh0uze2yg0mztft0sd4zymdc36ejs7am9n8rjfa6ucde5vw6ummvncmss0pmlmfseg5pts7pzf0hnusp7pprfz","redeemScript":"8201208763a914721149994da9e510ba44f150434898acfb36ee6888210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750306ce26b175210355de825f6d2fbe18eb5edab40ea5b85aff847b130a07e3cd7245605ad0cf083f68ac","lockupAddress":"tb1qnvw3a9uzhaa2em84aekrdpurhkjhhaz3lt2r5r9nkg5kv8zhnnpqwqx8tw","timeoutBlockHeight":2543110}
-Preimage { preimage: "8f89ae106d56f9d56fcb75a98499c7f8386223ca5d6f0c9f866b08387c2ca624", sha256: "93ebbdf40c886240942bb352a9dd07d310d3d21b8839ebc485194011fdb7d9d7", hash160: "721149994da9e510ba44f150434898acfb36ee68", preimage_bytes: [143, 137, 174, 16, 109, 86, 249, 213, 111, 203, 117, 169, 132, 153, 199, 248, 56, 98, 35, 202, 93, 111, 12, 159, 134, 107, 8, 56, 124, 44, 166, 36], sha256_bytes: [147, 235, 189, 244, 12, 136, 98, 64, 148, 43, 179, 82, 169, 221, 7, 211, 16, 211, 210, 27, 136, 57, 235, 196, 133, 25, 64, 17, 253, 183, 217, 215], hash160_bytes: [114, 17, 73, 153, 77, 169, 229, 16, 186, 68, 241, 80, 67, 72, 152, 172, 251, 54, 238, 104] }
-8201208763a914721149994da9e510ba44f150434898acfb36ee6888210223a99c57bfbc2a4bfc9353d49d6fd7312afaec8e8eefb82273d26c34c545898667750306ce26b175210355de825f6d2fbe18eb5edab40ea5b85aff847b130a07e3cd7245605ad0cf083f68ac
-tb1qnvw3a9uzhaa2em84aekrdpurhkjhhaz3lt2r5r9nkg5kv8zhnnpqwqx8tw
-*******PAY********************
-*******LN*********************
-*******INVOICE****************
-lntb505590n1pjhce75sp58jvctm5flwssredt3u77u8zsz5qtysz4us9ach02qx8ch3dqhlsqpp5j04mmaqv3p3yp9ptkdf2nhg86vgd85sm3qu7h3y9r9qprldhm8tsdql2djkuepqw3hjqsj5gvsxzerywfjhxucxqyp2xqcqzyl9qxpqysgq5hffhua6y33fnkcqrw2dssedyh0uze2yg0mztft0sd4zymdc36ejs7am9n8rjfa6ucde5vw6ummvncmss0pmlmfseg5pts7pzf0hnusp7pprfz
-
-
-
-*/
