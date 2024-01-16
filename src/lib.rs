@@ -1,3 +1,6 @@
+/// A boltz client for submarine/reverse swaps between Bitcoin, Lightning & Liquid
+/// Refer to tests/ folder for usage
+
 pub mod network;
 pub mod swaps;
 pub mod util;

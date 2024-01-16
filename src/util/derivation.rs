@@ -18,12 +18,12 @@ const TESTNET_NETWORK_PATH: u32 = 1;
 
 /// Derived KeyPair for use in a script.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ChildKeys {
+pub struct SwapKey {
     pub fingerprint: Fingerprint,
     pub path: DerivationPath,
     pub keypair: KeyPair,
 }
-impl ChildKeys {
+impl SwapKey {
     /// Derives keys for a submarine swap at standardized path
     /// m/49'/<0;1777;1>/21'/0/*
     pub fn from_submarine_account(
@@ -31,7 +31,7 @@ impl ChildKeys {
         passphrase: &str,
         network: Chain,
         index: u64,
-    ) -> Result<ChildKeys, S5Error> {
+    ) -> Result<SwapKey, S5Error> {
         let secp = Secp256k1::new();
         let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
         let seed = mnemonic_struct.to_seed(passphrase);
@@ -75,7 +75,7 @@ impl ChildKeys {
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "BAD SECKEY STRING")),
         };
 
-        Ok(ChildKeys {
+        Ok(SwapKey {
             fingerprint: fingerprint,
             path: path,
             keypair: key_pair,
@@ -88,7 +88,7 @@ impl ChildKeys {
         passphrase: &str,
         network: Chain,
         index: u64,
-    ) -> Result<ChildKeys, S5Error> {
+    ) -> Result<SwapKey, S5Error> {
         let secp = Secp256k1::new();
         let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
         let seed = mnemonic_struct.to_seed(passphrase);
@@ -133,7 +133,7 @@ impl ChildKeys {
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "BAD SECKEY STRING")),
         };
 
-        Ok(ChildKeys {
+        Ok(SwapKey {
             fingerprint: fingerprint,
             path: path,
             keypair: key_pair,
@@ -166,7 +166,7 @@ mod tests {
     fn test_derivation() {
         let mnemonic: &str = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let index = 0 as u64; // 0
-        let derived = ChildKeys::from_submarine_account(mnemonic, "", Chain::Bitcoin, index);
+        let derived = SwapKey::from_submarine_account(mnemonic, "", Chain::Bitcoin, index);
         // println!("{:?}", derived.unwrap().keypair.display_secret());
         assert!(derived.is_ok());
         assert_eq!(

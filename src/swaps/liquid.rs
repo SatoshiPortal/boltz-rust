@@ -534,6 +534,11 @@ impl LBtcSwapTx {
         let mut rng = OsRng::default();
         let secp = Secp256k1::new();
 
+        let is_explicit_utxo = self.utxo_confidential_value.is_none() && self.txout_secrets.is_none();
+
+        if (is_explicit_utxo){
+            todo!()
+        }
         let asset_id = self.txout_secrets.unwrap().asset;
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);

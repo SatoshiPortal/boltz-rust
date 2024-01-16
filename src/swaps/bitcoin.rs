@@ -348,7 +348,6 @@ impl BtcSwapTx {
             kind: SwapTxKind::Claim,
             swap_script,
             output_address: address.assume_checked(),
-            
             utxo: None,
             utxo_value: None,
         })

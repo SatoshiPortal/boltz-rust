@@ -4,7 +4,7 @@ use boltz_client::{
         boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL},
         liquid::{LBtcSwapScript, LBtcSwapTx},
     },
-    util::{derivation::ChildKeys, preimage::Preimage},
+    util::{derivation::SwapKey, preimage::Preimage},
     Secp256k1, ZKKeyPair,
 };
 
@@ -22,7 +22,7 @@ fn test_liquid_ssi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = ChildKeys::from_submarine_account(&mnemonic, "", Chain::LiquidTestnet, 1)
+    let keypair = SwapKey::from_submarine_account(&mnemonic, "", Chain::LiquidTestnet, 1)
         .unwrap()
         .keypair;
     println!("{:?}", keypair);
@@ -89,7 +89,7 @@ fn test_liquid_rsi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = ChildKeys::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1)
+    let keypair = SwapKey::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1)
         .unwrap()
         .keypair;
     println!("SECRET-KEY: {:?}", keypair.display_secret());

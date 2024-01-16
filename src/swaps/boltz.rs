@@ -13,6 +13,8 @@ use crate::util::error::{ErrorKind, S5Error};
 
 use crate::swaps::bitcoin::BtcSwapScript;
 
+use super::liquid::LBtcSwapScript;
+
 pub const BOLTZ_TESTNET_URL: &str = "https://api.testnet.boltz.exchange";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
 
@@ -526,6 +528,55 @@ impl CreateSwapResponse {
         }
     }
 }
+
+// impl Into<BtcSwapScript> for CreateSwapResponse{
+//     fn into(self) -> Result<BtcSwapScript,S5Error> {
+//         if self.blinding_key.is_some() {
+//             return Err(S5Error::new(ErrorKind::Script, "Response is for a Liquid Swap, not Bitcoin."))
+//         }
+//         let from_rs = if self.invoice.is_some(){
+//             BtcSwapScript::reverse_from_str(self.redeem_script).unwrap()
+//         } else {
+//             BtcSwapScript::submarine_from_str(self.redeem_script).unwrap()
+//         };
+        
+//         let from_items = if self.invoice.is_some(){
+//             BtcSwapScript::new(SwapType::ReverseSubmarine, self.preimage, self.refund_public_key, self.timeout_block_height, self.claim_public_key);
+//         } else {
+//             BtcSwapScript::new(SwapType::Submarine, self.preimage, self.refund_public_key, self.timeout_block_height, self.claim_public_key);
+//         };
+
+//         if from_rs == from_items {
+//             Ok(from_items)
+//         } else {
+//             Err(S5Error::new(ErrorKind::BoltzApi, "Boltz redeem script does not match provided script items."))
+//         }
+// }
+// }
+// impl Into<LBtcSwapScript> for CreateSwapResponse{
+//     fn into(self) -> Result<LBtcSwapScript,S5Error> {
+//         if self.blinding_key.is_none() {
+//             return Err(S5Error::new(ErrorKind::Script, "Response is for a Bitcoin Swap, not Liquid."))
+//         }
+//         let from_rs = if self.invoice.is_some(){
+//             LBtcSwapScript::reverse_from_str(self.redeem_script).unwrap()
+//         } else {
+//             LBtcSwapScript::submarine_from_str(self.redeem_script).unwrap()
+//         };
+        
+//         let from_items = if self.invoice.is_some(){
+//             LBtcSwapScript::new(SwapType::ReverseSubmarine, self.preimage, self.refund_public_key, self.timeout_block_height, self.claim_public_key);
+//         } else {
+//             LBtcSwapScript::new(SwapType::Submarine, self.preimage, self.refund_public_key, self.timeout_block_height, self.claim_public_key);
+//         };
+
+//         if from_rs == from_items {
+//             Ok(from_items)
+//         } else {
+//             Err(S5Error::new(ErrorKind::BoltzApi, "Boltz redeem script does not match provided script items."))
+//         }
+// }
+// }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

@@ -6,7 +6,7 @@ use boltz_client::{
             BoltzApiClient, CreateSwapRequest, SwapStatusRequest, SwapType, BOLTZ_TESTNET_URL,
         },
     },
-    util::{derivation::ChildKeys, preimage::Preimage},
+    util::{derivation::SwapKey, preimage::Preimage},
     Bolt11Invoice, KeyPair, Secp256k1,
 };
 
@@ -35,7 +35,7 @@ fn test_bitcoin_ssi() {
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
 
     let keypair =
-        ChildKeys::from_submarine_account(&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
+        SwapKey::from_submarine_account(&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
             .unwrap()
             .keypair;
     println!(
@@ -133,7 +133,7 @@ fn test_bitcoin_rsi() {
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
 
     let keypair =
-        ChildKeys::from_reverse_account(&&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
+        SwapKey::from_reverse_account(&&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
             .unwrap()
             .keypair;
     println!(

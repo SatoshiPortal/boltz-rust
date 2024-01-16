@@ -6,5 +6,4 @@ pub enum Chain {
     BitcoinTestnet,
     Liquid,
     LiquidTestnet,
-    ElementsRegtest,
 }
