@@ -29,7 +29,7 @@ impl ElectrumUrl {
     }
 }
 
-/// Electrum client configuration. 
+/// Electrum client configuration.
 #[derive(Debug, Clone)]
 pub struct ElectrumConfig {
     network: Chain,

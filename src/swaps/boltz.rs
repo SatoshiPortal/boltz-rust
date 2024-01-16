@@ -1,19 +1,13 @@
 use bitcoin::hashes::{hash160, sha256};
 use lightning_invoice::Bolt11Invoice;
 // use reqwest;
+use crate::swaps::bitcoin::BtcSwapScript;
+use crate::util::error::{ErrorKind, S5Error};
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::str::FromStr;
 use ureq::Error;
-// use std::time::Duration;
-// use ureq::{Agent, AgentBuilder, Error};
-
-use crate::util::error::{ErrorKind, S5Error};
-
-use crate::swaps::bitcoin::BtcSwapScript;
-
-use super::liquid::LBtcSwapScript;
 
 pub const BOLTZ_TESTNET_URL: &str = "https://api.testnet.boltz.exchange";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
@@ -539,7 +533,7 @@ impl CreateSwapResponse {
 //         } else {
 //             BtcSwapScript::submarine_from_str(self.redeem_script).unwrap()
 //         };
-        
+
 //         let from_items = if self.invoice.is_some(){
 //             BtcSwapScript::new(SwapType::ReverseSubmarine, self.preimage, self.refund_public_key, self.timeout_block_height, self.claim_public_key);
 //         } else {
@@ -563,7 +557,7 @@ impl CreateSwapResponse {
 //         } else {
 //             LBtcSwapScript::submarine_from_str(self.redeem_script).unwrap()
 //         };
-        
+
 //         let from_items = if self.invoice.is_some(){
 //             LBtcSwapScript::new(SwapType::ReverseSubmarine, self.preimage, self.refund_public_key, self.timeout_block_height, self.claim_public_key);
 //         } else {

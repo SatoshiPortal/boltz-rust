@@ -158,15 +158,10 @@ fn test_liquid_rsi() {
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();
 
-    let mut rev_swap_tx = LBtcSwapTx::new_claim(
-        constructed_script_elements,
-        RETURN_ADDRESS.to_string(),
-    )
-    .unwrap();
+    let mut rev_swap_tx =
+        LBtcSwapTx::new_claim(constructed_script_elements, RETURN_ADDRESS.to_string()).unwrap();
     let _ = rev_swap_tx.fetch_utxo(network_config.clone());
-    let signed_tx = rev_swap_tx
-        .drain(keypair, preimage, absolute_fees)
-        .unwrap();
+    let signed_tx = rev_swap_tx.drain(keypair, preimage, absolute_fees).unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
 }

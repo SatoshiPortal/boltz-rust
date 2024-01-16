@@ -49,7 +49,7 @@ impl BtcSwapScript {
             sender_pubkey,
         }
     }
-    /// Create the struct from a submarine swap redeem_script string. 
+    /// Create the struct from a submarine swap redeem_script string.
     ///Usually created from the string provided by boltz api response.
     pub fn submarine_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
         let script_bytes = match hex::decode(redeem_script_str) {
@@ -112,7 +112,7 @@ impl BtcSwapScript {
         }
     }
 
-    /// Create the struct from a reverse swap redeem_script string. 
+    /// Create the struct from a reverse swap redeem_script string.
     /// Usually created from the string provided by boltz api response.
     pub fn reverse_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
         let script_bytes = match hex::decode(redeem_script_str) {
@@ -312,7 +312,6 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
     result
 }
 
-
 /// Bitcoin swap transaction helper.
 pub struct BtcSwapTx {
     kind: SwapTxKind,
@@ -330,7 +329,10 @@ impl BtcSwapTx {
         network: Chain,
     ) -> Result<BtcSwapTx, S5Error> {
         if swap_script.swap_type == SwapType::Submarine {
-            return Err(S5Error::new(ErrorKind::Script, "Claim transactions can only be constructed for Reverse swaps."))
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Claim transactions can only be constructed for Reverse swaps.",
+            ));
         }
         let network = if network == Chain::Bitcoin {
             Network::Bitcoin
@@ -359,7 +361,10 @@ impl BtcSwapTx {
         network: Chain,
     ) -> Result<BtcSwapTx, S5Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
-            return Err(S5Error::new(ErrorKind::Script, "Refund transactions can only be constructed for Submarine swaps."))
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Refund transactions can only be constructed for Submarine swaps.",
+            ));
         }
         let network = if network == Chain::Bitcoin {
             Network::Bitcoin
@@ -392,7 +397,7 @@ impl BtcSwapTx {
             return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
         }
         match self.kind {
-            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage,absolute_fees),
+            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
             SwapTxKind::Refund => {
                 // self.sign_refund_tx(keys);
                 Err(S5Error::new(
@@ -446,9 +451,17 @@ impl BtcSwapTx {
     }
 
     /// Sign a reverse swap transaction
-    fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage, absolute_fees: u64) -> Result<Transaction, S5Error> {
+    fn sign_claim_tx(
+        &self,
+        keys: KeyPair,
+        preimage: Preimage,
+        absolute_fees: u64,
+    ) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::Submarine {
-            return Err(S5Error::new(ErrorKind::Script, "Claim transactions can only be constructed for Reverse swaps."))
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Claim transactions can only be constructed for Reverse swaps.",
+            ));
         }
 
         let preimage_bytes = if preimage.bytes.is_some() {
@@ -516,19 +529,22 @@ impl BtcSwapTx {
         };
         Ok(signed_tx)
     }
-    fn _sign_refund_tx(&self, _keys: KeyPair) -> Result<(),S5Error> {
+    fn _sign_refund_tx(&self, _keys: KeyPair) -> Result<(), S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
-            return Err(S5Error::new(ErrorKind::Script, "Refund transactions can only be constructed for Submarine swaps."))
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Refund transactions can only be constructed for Submarine swaps.",
+            ));
         }
         Ok(())
     }
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
-    pub fn size(&self, keys: KeyPair, preimage: Preimage)->Result<usize, S5Error>{
+    pub fn size(&self, keys: KeyPair, preimage: Preimage) -> Result<usize, S5Error> {
         let dummy_abs_fee = 5_000;
-        let tx = match self.kind{
-            _=>self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
+        let tx = match self.kind {
+            _ => self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
         };
         Ok(tx.size())
     }

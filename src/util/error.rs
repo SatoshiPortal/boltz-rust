@@ -49,7 +49,8 @@ pub enum Error {
     Input(String),
     Script(String),
     Transaction(String),
-}impl Display for Error {
+}
+impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Error::Input(s) => write!(f, "Input: {s}"),

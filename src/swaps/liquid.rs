@@ -68,7 +68,7 @@ impl LBtcSwapScript {
             blinding_key,
         }
     }
-    /// Create the struct from a submarine swap redeem_script string. 
+    /// Create the struct from a submarine swap redeem_script string.
     ///Usually created from the string provided by boltz api response.
     pub fn submarine_from_str(
         redeem_script_str: &str,
@@ -139,7 +139,7 @@ impl LBtcSwapScript {
         }
     }
 
-    /// Create the struct from a reverse swap redeem_script string. 
+    /// Create the struct from a reverse swap redeem_script string.
     /// Usually created from the string provided by boltz api response.
     pub fn reverse_from_str(
         redeem_script_str: &str,
@@ -374,7 +374,10 @@ impl LBtcSwapTx {
         output_address: String,
     ) -> Result<LBtcSwapTx, S5Error> {
         if swap_script.swap_type == SwapType::Submarine {
-            return Err(S5Error::new(ErrorKind::Script, "Claim transactions can only be constructed for Reverse swaps."))
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Claim transactions can only be constructed for Reverse swaps.",
+            ));
         }
         let address = match Address::from_str(&output_address) {
             Ok(result) => result,
@@ -396,7 +399,10 @@ impl LBtcSwapTx {
         output_address: String,
     ) -> Result<LBtcSwapTx, S5Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
-            return Err(S5Error::new(ErrorKind::Script, "Refund transactions can only be constructed for Submarine swaps."))
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Refund transactions can only be constructed for Submarine swaps.",
+            ));
         }
         let address = match Address::from_str(&output_address) {
             Ok(result) => result,
@@ -472,13 +478,13 @@ impl LBtcSwapTx {
                     self.utxo_value = output.value.explicit();
                     self.utxo_confidential_value = None;
                     self.txout_secrets = None;
-                    break;                    
+                    break;
                 } else {
                     let unblinded =
-                    match output.unblind(&zksecp, self.swap_script.blinding_key.secret_key()) {
-                        Ok(result) => result,
-                        Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-                    };
+                        match output.unblind(&zksecp, self.swap_script.blinding_key.secret_key()) {
+                            Ok(result) => result,
+                            Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
+                        };
                     let el_txid = tx.clone().txid();
                     let outpoint_0 = OutPoint::new(el_txid, vout);
                     let utxo_value = unblinded.value;
@@ -509,9 +515,17 @@ impl LBtcSwapTx {
     }
 
     /// Sign a reverse swap transaction
-    fn sign_claim_tx(&self, keys: KeyPair, preimage: Preimage, absolute_fees: u64) -> Result<Transaction, S5Error> {
+    fn sign_claim_tx(
+        &self,
+        keys: KeyPair,
+        preimage: Preimage,
+        absolute_fees: u64,
+    ) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::Submarine {
-            return Err(S5Error::new(ErrorKind::Script, "Claim transactions can only be constructed for Reverse swaps."))
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Claim transactions can only be constructed for Reverse swaps.",
+            ));
         }
         let preimage_bytes = if preimage.bytes.is_some() {
             preimage.bytes.unwrap()
@@ -534,9 +548,10 @@ impl LBtcSwapTx {
         let mut rng = OsRng::default();
         let secp = Secp256k1::new();
 
-        let is_explicit_utxo = self.utxo_confidential_value.is_none() && self.txout_secrets.is_none();
+        let is_explicit_utxo =
+            self.utxo_confidential_value.is_none() && self.txout_secrets.is_none();
 
-        if (is_explicit_utxo){
+        if is_explicit_utxo {
             todo!()
         }
         let asset_id = self.txout_secrets.unwrap().asset;
@@ -653,19 +668,22 @@ impl LBtcSwapTx {
         };
         Ok(signed_tx)
     }
-    fn _sign_refund_tx(&self, _keys: KeyPair) -> Result<(),S5Error> {
+    fn _sign_refund_tx(&self, _keys: KeyPair) -> Result<(), S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
-            return Err(S5Error::new(ErrorKind::Script, "Refund transactions can only be constructed for Submarine swaps."))
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Refund transactions can only be constructed for Submarine swaps.",
+            ));
         }
         Ok(())
     }
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
-    pub fn size(&self, keys: KeyPair, preimage: Preimage)->Result<usize, S5Error>{
+    pub fn size(&self, keys: KeyPair, preimage: Preimage) -> Result<usize, S5Error> {
         let dummy_abs_fee = 5_000;
-        let tx = match self.kind{
-            _=>self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
+        let tx = match self.kind {
+            _ => self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
         };
         Ok(tx.size())
     }
@@ -742,10 +760,8 @@ mod tests {
 
         let mut liquid_swap_tx =
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
-        let _  = liquid_swap_tx.fetch_utxo(network_config.clone());
-        let final_tx = liquid_swap_tx
-            .drain(my_key_pair, preimage, 5_000)
-            .unwrap();
+        let _ = liquid_swap_tx.fetch_utxo(network_config.clone());
+        let final_tx = liquid_swap_tx.drain(my_key_pair, preimage, 5_000).unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
 
