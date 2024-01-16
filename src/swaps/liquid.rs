@@ -3,13 +3,12 @@ use std::str::FromStr;
 
 use bitcoin::{
     script::Script as BitcoinScript,
-    secp256k1::{KeyPair, SecretKey},
     Witness,
 };
 use elements::{
     confidential::{self, AssetBlindingFactor, ValueBlindingFactor},
     hashes::hash160,
-    secp256k1_zkp::{self, Secp256k1},
+    secp256k1_zkp::{self, Secp256k1, SecretKey},
     sighash::SighashCache,
     Address, AssetIssuance, OutPoint, Script, Sequence, Transaction, TxIn, TxInWitness, TxOut,
     TxOutSecrets, TxOutWitness,
@@ -27,8 +26,8 @@ use crate::{
     },
 };
 
-use bitcoin::PublicKey;
-use elements::secp256k1_zkp::KeyPair as ZKKeyPair;
+use elements::bitcoin::PublicKey;
+use elements::secp256k1_zkp::Keypair as ZKKeyPair;
 use elements::{
     address::Address as EAddress,
     opcodes::all::*,
@@ -517,7 +516,7 @@ impl LBtcSwapTx {
     /// Sign a reverse swap transaction
     fn sign_claim_tx(
         &self,
-        keys: KeyPair,
+        keys: ZKKeyPair,
         preimage: Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
@@ -623,7 +622,7 @@ impl LBtcSwapTx {
 
         // SIGN TRANSACTION
         let hash_type = elements::EcdsaSighashType::All;
-        let sighash = match Message::from_slice(
+        let sighash = match Message::from_digest_slice(
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
                 &redeem_script,
@@ -668,7 +667,7 @@ impl LBtcSwapTx {
         };
         Ok(signed_tx)
     }
-    fn _sign_refund_tx(&self, _keys: KeyPair) -> Result<(), S5Error> {
+    fn _sign_refund_tx(&self, _keys: ZKKeyPair) -> Result<(), S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
                 ErrorKind::Script,
@@ -680,7 +679,7 @@ impl LBtcSwapTx {
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
-    pub fn size(&self, keys: KeyPair, preimage: Preimage) -> Result<usize, S5Error> {
+    pub fn size(&self, keys: ZKKeyPair, preimage: Preimage) -> Result<usize, S5Error> {
         let dummy_abs_fee = 5_000;
         let tx = match self.kind {
             _ => self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
@@ -723,7 +722,7 @@ mod tests {
         let preimage_str = "6ef7d91c721ea06b3b65d824ae1d69777cd3892d41090234aef13a572ff0e64f";
         let preimage = Preimage::from_str(preimage_str).unwrap();
         let _id = "axtHXB";
-        let my_key_pair = KeyPair::from_seckey_str(
+        let my_key_pair = ZKKeyPair::from_seckey_str(
             &secp,
             "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6",
         )

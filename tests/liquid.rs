@@ -5,7 +5,7 @@ use boltz_client::{
         liquid::{LBtcSwapScript, LBtcSwapTx},
     },
     util::{derivation::SwapKey, preimage::Preimage},
-    Secp256k1, ZKKeyPair,
+    ZKKeyPair, ZKSecp256k1,
 };
 
 /// submarine swap integration
@@ -144,7 +144,7 @@ fn test_liquid_rsi() {
 
     let boltz_script_elements =
         LBtcSwapScript::reverse_from_str(&redeem_script_string, blinding_string.clone()).unwrap();
-    let secp = Secp256k1::new();
+    let secp = ZKSecp256k1::new();
     let constructed_script_elements = LBtcSwapScript::new(
         boltz_client::swaps::boltz::SwapType::ReverseSubmarine,
         preimage.hash160.to_string(),
@@ -161,7 +161,7 @@ fn test_liquid_rsi() {
     let mut rev_swap_tx =
         LBtcSwapTx::new_claim(constructed_script_elements, RETURN_ADDRESS.to_string()).unwrap();
     let _ = rev_swap_tx.fetch_utxo(network_config.clone());
-    let signed_tx = rev_swap_tx.drain(keypair, preimage, absolute_fees).unwrap();
+    let signed_tx = rev_swap_tx.drain(ZKKeyPair::from_seckey_str(&secp, &keypair.display_secret().to_string()).unwrap(), preimage, absolute_fees).unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
 }
