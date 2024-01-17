@@ -452,7 +452,7 @@ impl LBtcSwapTx {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
         };
-        let bitcoin_txid = match history.first() {
+        let bitcoin_txid = match history.last() {
             Some(result) => result,
             None => return Err(S5Error::new(ErrorKind::Input, "No Trasnaction History")),
         }
@@ -500,7 +500,19 @@ impl LBtcSwapTx {
         }
         Ok(())
     }
-
+    
+    // pub fn fetch_utxos(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
+    //     let electrum_client = network_config.clone().build_client()?;
+    //     // let address = self.swap_script.to_address(network_config.network())?;
+    //     let utxos = match electrum_client.script_get_history(BitcoinScript::from_bytes(
+    //         self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
+    //     )) {
+    //         Ok(result) => result,
+    //         Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+    //     };
+    //     println!("UTXOS: {:?}",utxos);
+    //     Ok(())
+    // }
     /// Internally used to check if utxos are present in the struct to build the transaction.
     fn has_utxo(&self) -> bool {
         // this will always return false if the utxo is Explicit
@@ -760,15 +772,16 @@ mod tests {
 
         let mut liquid_swap_tx =
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
-        let _ = liquid_swap_tx.fetch_utxo(network_config.clone());
+        let _ = liquid_swap_tx.fetch_utxo(network_config.clone()).unwrap();
+        println!("{:#?}", liquid_swap_tx);
         let final_tx = liquid_swap_tx.drain(my_key_pair, preimage, 5_000).unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        // let manifest_dir = env!("CARGO_MANIFEST_DIR");
 
-        let file_path = Path::new(manifest_dir).join("tx.constructed");
-        let mut file = File::create(file_path).unwrap();
-        use std::io::Write;
-        writeln!(file, "{:#?}", final_tx).unwrap();
+        // let file_path = Path::new(manifest_dir).join("tx.constructed");
+        // let mut file = File::create(file_path).unwrap();
+        // use std::io::Write;
+        // writeln!(file, "{:#?}", final_tx).unwrap();
         // println!("CHECK FILE tx.hex!");
 
         let txid = liquid_swap_tx

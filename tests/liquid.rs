@@ -191,6 +191,12 @@ fn test_liquid_rsi() {
     let mut rev_swap_tx =
         LBtcSwapTx::new_claim(constructed_script_elements, RETURN_ADDRESS.to_string()).unwrap();
     let _ = rev_swap_tx.fetch_utxo(network_config.clone()).unwrap();
+    println!("{:?}", rev_swap_tx);
+    test_utils::pause_and_wait("Waiting....");
+    let _ = rev_swap_tx.fetch_utxo(network_config.clone()).unwrap();
+    println!("{:?}", rev_swap_tx);
+    test_utils::pause_and_wait("Waiting....");
+
     let signed_tx = rev_swap_tx.drain(ZKKeyPair::from_seckey_str(&secp, &keypair.display_secret().to_string()).unwrap(), preimage, absolute_fees).unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
