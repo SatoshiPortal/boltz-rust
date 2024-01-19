@@ -1,8 +1,8 @@
 use crate::network::Chain;
 use crate::util::error::{ErrorKind, S5Error};
 use bip39::Mnemonic;
-use bitcoin::bip32::{DerivationPath, ExtendedPrivKey, Fingerprint};
-use bitcoin::secp256k1::{KeyPair, Secp256k1};
+use bitcoin::bip32::{DerivationPath, Xpriv, Fingerprint};
+use bitcoin::secp256k1::{Keypair, Secp256k1};
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -16,12 +16,12 @@ const BITCOIN_NETWORK_PATH: u32 = 0;
 const LIQUID_NETWORK_PATH: u32 = 1776;
 const TESTNET_NETWORK_PATH: u32 = 1;
 
-/// Derived KeyPair for use in a script.
+/// Derived Keypair for use in a script.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapKey {
     pub fingerprint: Fingerprint,
     pub path: DerivationPath,
-    pub keypair: KeyPair,
+    pub keypair: Keypair,
 }
 impl SwapKey {
     /// Derives keys for a submarine swap at standardized path
@@ -35,7 +35,7 @@ impl SwapKey {
         let secp = Secp256k1::new();
         let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
         let seed = mnemonic_struct.to_seed(passphrase);
-        let root = match ExtendedPrivKey::new_master(bitcoin::Network::Testnet, &seed) {
+        let root = match Xpriv::new_master(bitcoin::Network::Testnet, &seed) {
             Ok(xprv) => xprv,
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
         };
@@ -67,7 +67,7 @@ impl SwapKey {
             Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
         };
 
-        let key_pair = match KeyPair::from_seckey_str(
+        let key_pair = match Keypair::from_seckey_str(
             &secp,
             &hex::encode(child_xprv.private_key.secret_bytes()),
         ) {
@@ -92,7 +92,7 @@ impl SwapKey {
         let secp = Secp256k1::new();
         let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
         let seed = mnemonic_struct.to_seed(passphrase);
-        let root = match ExtendedPrivKey::new_master(bitcoin::Network::Testnet, &seed) {
+        let root = match Xpriv::new_master(bitcoin::Network::Testnet, &seed) {
             Ok(xprv) => xprv,
             Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
         };
@@ -125,7 +125,7 @@ impl SwapKey {
             Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
         };
 
-        let key_pair = match KeyPair::from_seckey_str(
+        let key_pair = match Keypair::from_seckey_str(
             &secp,
             &hex::encode(child_xprv.private_key.secret_bytes()),
         ) {
@@ -167,7 +167,7 @@ mod tests {
         let mnemonic: &str = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let index = 0 as u64; // 0
         let derived = SwapKey::from_submarine_account(mnemonic, "", Chain::Bitcoin, index);
-        // println!("{:?}", derived.unwrap().keypair.display_secret());
+        // println!("{:?}", derived.unwrap().Keypair.display_secret());
         assert!(derived.is_ok());
         assert_eq!(
             &derived.as_ref().unwrap().fingerprint.to_string(),

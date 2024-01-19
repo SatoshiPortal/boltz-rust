@@ -631,7 +631,7 @@ pub struct GetFeeEstimationResponse {
 
 #[cfg(test)]
 mod tests {
-    use bitcoin::secp256k1::{KeyPair, Secp256k1};
+    use bitcoin::secp256k1::{Keypair, Secp256k1};
 
     use super::*;
     use crate::util::preimage::Preimage;
@@ -679,7 +679,7 @@ mod tests {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let invoice = "lntb501u1pjh67z3pp539hhfy9vk70yde3m0lkp838l2y0xqskmf5cwm8ng25rqp8asncmsdq8w3jhxaqxqyjw5qcqp2sp59dsnqt4ecde2frjn5zrnw6cunryadzv3p386glz8l7uj37pnwnvsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq4esj2vvneu5y4e8qtheyxmepjgg5turmxccgmuks78l08m9wguvhvw2yvrftfjh6tzaxy57mty3zsvg3jveazfxs60e6acn989pzdlspafd52g".to_string();
 
-        let refund_key_pair = KeyPair::from_seckey_str(
+        let refund_key_pair = Keypair::from_seckey_str(
             &secp,
             "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
         )
@@ -716,7 +716,7 @@ mod tests {
         let secp = Secp256k1::new();
 
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let claim_key_pair = KeyPair::from_seckey_str(
+        let claim_key_pair = Keypair::from_seckey_str(
             &secp,
             "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
         )
@@ -752,7 +752,7 @@ mod tests {
         let secp = Secp256k1::new();
 
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let claim_key_pair = KeyPair::from_seckey_str(
+        let claim_key_pair = Keypair::from_seckey_str(
             &secp,
             "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
         )

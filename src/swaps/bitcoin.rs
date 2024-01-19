@@ -1,6 +1,8 @@
 use std::str::FromStr;
 
-use bitcoin::secp256k1::{KeyPair, Message, Secp256k1};
+use bitcoin::Amount;
+use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
+use bitcoin::transaction::Version;
 use bitcoin::{
     blockdata::script::{Builder, Instruction, Script, ScriptBuf},
     opcodes::{all::*, OP_0},
@@ -296,7 +298,7 @@ impl BtcSwapScript {
     pub fn get_balance(&self, network_config: ElectrumConfig) -> Result<(u64, i64), S5Error> {
         let electrum_client = network_config.build_client()?;
 
-        let script_balance = match electrum_client.script_get_balance(&self.to_script().unwrap()) {
+        let script_balance = match electrum_client.script_get_balance(electrum_client::bitcoin::Script::from_bytes(&self.to_script().unwrap().as_bytes())) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Script, &e.to_string())),
         };
@@ -389,7 +391,7 @@ impl BtcSwapTx {
     /// Sweep the script utxo.
     pub fn drain(
         &mut self,
-        keys: KeyPair,
+        keys: Keypair,
         preimage: Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
@@ -416,7 +418,7 @@ impl BtcSwapTx {
         let electrum_client = network_config.build_client()?;
 
         let utxos = match electrum_client
-            .script_list_unspent(&self.swap_script.to_script()?.to_v0_p2wsh())
+            .script_list_unspent(electrum_client::bitcoin::Script::from_bytes(&self.swap_script.to_script()?.to_p2wsh().as_bytes()))
         {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
@@ -427,7 +429,7 @@ impl BtcSwapTx {
                 &format!("0 utxos found for this script",),
             ));
         } else {
-            let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
+            let outpoint_0 = OutPoint::new(bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap(), utxos[0].tx_pos as u32);
             let utxo_value = utxos[0].value;
             if utxo_value >= expected_value {
                 self.utxo = Some(outpoint_0);
@@ -453,7 +455,7 @@ impl BtcSwapTx {
     /// Sign a reverse swap transaction
     fn sign_claim_tx(
         &self,
-        keys: KeyPair,
+        keys: Keypair,
         preimage: Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
@@ -476,60 +478,57 @@ impl BtcSwapTx {
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo.unwrap(),
-            script_sig: Script::empty().into(),
+            script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
 
-        let output_amount = self.utxo_value.unwrap() - absolute_fees;
+        let output_amount: Amount = Amount::from_sat(self.utxo_value.unwrap() - absolute_fees);
         let output: TxOut = TxOut {
-            script_pubkey: self.output_address.payload.script_pubkey(),
+            script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
         };
 
         let unsigned_tx = Transaction {
-            version: 1,
+            version: Version(1),
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
         let hash_type = bitcoin::sighash::EcdsaSighashType::All;
         let secp = Secp256k1::new();
-        let sighash = match SighashCache::new(unsigned_tx.clone()).segwit_signature_hash(
+        let sighash = match SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
             0,
             &redeem_script,
-            self.utxo_value.unwrap(),
+            Amount::from_sat(self.utxo_value.unwrap()),
             hash_type,
         ) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
-        let sighash_message = match Message::from_slice(&sighash[..]) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-        let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
+        let sighash_message = Message::from_digest_slice(&sighash[..]).unwrap();
+        let signature = bitcoin::ecdsa::Signature::from_str(&secp.sign_ecdsa(&sighash_message, &keys.secret_key()).to_string()).unwrap();
 
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
-        witness.push_bitcoin_signature(&signature.serialize_der(), hash_type);
+        witness.push_ecdsa_signature(&signature);
         witness.push(preimage_bytes);
         witness.push(redeem_script.as_bytes());
 
         let signed_txin = TxIn {
             previous_output: self.utxo.unwrap(),
-            script_sig: Script::empty().into(),
+            script_sig: ScriptBuf::new(),
             sequence: sequence,
             witness: witness,
         };
         let signed_tx = Transaction {
-            version: 1,
+            version: Version(1),
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![signed_txin],
             output: vec![output.clone()],
         };
         Ok(signed_tx)
     }
-    fn _sign_refund_tx(&self, _keys: KeyPair) -> Result<(), S5Error> {
+    fn _sign_refund_tx(&self, _keys: Keypair) -> Result<(), S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
                 ErrorKind::Script,
@@ -541,12 +540,12 @@ impl BtcSwapTx {
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
-    pub fn size(&self, keys: KeyPair, preimage: Preimage) -> Result<usize, S5Error> {
+    pub fn size(&self, keys: Keypair, preimage: Preimage) -> Result<usize, S5Error> {
         let dummy_abs_fee = 5_000;
         let tx = match self.kind {
             _ => self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
         };
-        Ok(tx.size())
+        Ok(tx.vsize())
     }
     /// Broadcast transaction to the network
     pub fn broadcast(
@@ -609,9 +608,9 @@ mod tests {
         let electrum_client = ElectrumConfig::default_bitcoin().build_client().unwrap();
 
         let utxos = electrum_client
-            .script_list_unspent(&script.to_v0_p2wsh())
+            .script_list_unspent(electrum_client::bitcoin::Script::from_bytes(&script.to_p2wsh().as_bytes()))
             .unwrap();
-        let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
+        let outpoint_0 = OutPoint::new(bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap(), utxos[0].tx_pos as u32);
         let utxo_value = utxos[0].value;
 
         assert_eq!(utxo_value, 1_000);
@@ -625,7 +624,7 @@ mod tests {
         // println!("{:?}",script.to_v0_p2wsh());
         let input: TxIn = TxIn {
             previous_output: outpoint_0,
-            script_sig: Script::empty().into(),
+            script_sig: ScriptBuf::new(),
             sequence: Sequence::from_consensus(0xFFFFFFFF),
             witness: witness,
         };
@@ -634,12 +633,12 @@ mod tests {
         let output_value = 700;
 
         let output: TxOut = TxOut {
-            script_pubkey: return_address.payload.script_pubkey(),
-            value: output_value,
+            script_pubkey: return_address.payload().script_pubkey(),
+            value: Amount::from_sat(output_value),
         };
 
         let tx = Transaction {
-            version: 1,
+            version: Version(1),
             lock_time: LockTime::from_consensus(0),
             input: vec![input],
             output: vec![output.clone()],
@@ -676,7 +675,7 @@ mod tests {
         let redeem_script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
         let expected_address = "2MxkD9NtLhU4iRAUw8G6B83SiHxDESGfDac";
         let expected_timeout = 2542048;
-        let sender_key_pair = KeyPair::from_seckey_str(
+        let sender_key_pair = Keypair::from_seckey_str(
             &secp,
             "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
         )

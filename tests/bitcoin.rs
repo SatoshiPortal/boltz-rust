@@ -7,7 +7,7 @@ use boltz_client::{
         },
     },
     util::{derivation::SwapKey, preimage::Preimage},
-    Bolt11Invoice, KeyPair, Secp256k1,
+    Bolt11Invoice, Keypair, Secp256k1,
 };
 
 use std::{ str::FromStr};
@@ -259,7 +259,7 @@ fn test_recover_bitcoin_rsi() {
     let secp = Secp256k1::new();
     const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
     let out_amount = 50_000;
-    let keypair = KeyPair::from_seckey_str(
+    let keypair = Keypair::from_seckey_str(
         &secp,
         "5f9f8cb71d8193cb031b1a8b9b1ec08057a130dd8ac9f69cea2e3d8e6675f3a1",
     )
