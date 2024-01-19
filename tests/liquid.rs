@@ -31,15 +31,13 @@ fn test_liquid_ssi() {
     let _electrum_client = network_config.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let pair_hash = boltz_pairs
-        .pairs
-        .pairs
-        .get("L-BTC/BTC")
-        .map(|pair_info| pair_info.hash.clone())
-        .unwrap();
+    let boltz_lbtc_pair = boltz_pairs
+        .get_lbtc_pair();
+    let fees = boltz_lbtc_pair.submarine_fees(_out_amount).unwrap();
+    println!("FEES:{}", fees);
 
     let request = CreateSwapRequest::new_lbtc_submarine(
-        pair_hash,
+        boltz_lbtc_pair.hash,
         invoice_str.to_string(),
         keypair.public_key().to_string().clone(),
     );
@@ -99,15 +97,13 @@ fn test_liquid_rsi() {
     let _electrum_client = network_config.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let pair_hash = boltz_pairs
-        .pairs
-        .pairs
-        .get("L-BTC/BTC")
-        .map(|pair_info| pair_info.hash.clone())
-        .unwrap();
-
+    let boltz_lbtc_pair = boltz_pairs
+        .get_lbtc_pair();
+    let fees = boltz_lbtc_pair.reverse_fees(out_amount).unwrap();
+    println!("FEES: {}", fees);
+    
     let request = CreateSwapRequest::new_lbtc_reverse(
-        pair_hash,
+        boltz_lbtc_pair.hash,
         preimage.clone().sha256.to_string(),
         keypair.public_key().to_string().clone(),
         out_amount,

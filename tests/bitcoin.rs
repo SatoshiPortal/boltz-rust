@@ -21,6 +21,8 @@ pub mod test_utils;
 #[ignore]
 fn test_bitcoin_ssi() {
     let invoice_str = "lntb500u1pjeqvw7pp5gzea37hweufaa2y7clud9rk9tvvzwkh0lpnn9vqp0wd955hfaupsdq8w3ehx6gxqyjw5qcqp2sp5qnxwk5ntp6a9vua4e0e3nwccuzxk2sp4kn76w3z7xrf0ve7p5jfsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqlx2zzmaep37rrm9qg2xuqnm3teasy3p29jk3459ne9ts3uctc4syps2zqt94vlkqpdqn43y2z4w7rqdupz8mfdrw0qfrkvn34tt4m4gpq5g9c6";
+    let invoice = Bolt11Invoice::from_str(invoice_str).unwrap();
+    let out_amount = invoice.amount_milli_satoshis().unwrap() / 1000;
     // ensure the payment hash is the one boltz uses in their swap script
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
@@ -43,7 +45,8 @@ fn test_bitcoin_ssi() {
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_btc_pair = boltz_pairs
         .get_btc_pair();
-
+    let fees = boltz_btc_pair.submarine_fees(out_amount).unwrap();
+    println!("FEES: {}", fees);
     let request = CreateSwapRequest::new_btc_submarine(
         boltz_btc_pair.hash,
         invoice_str.to_string(),
@@ -136,14 +139,12 @@ fn test_bitcoin_rsi() {
     // SECRETS
 
     let network_config = ElectrumConfig::default_bitcoin();
-
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_btc_pair = boltz_pairs
         .get_btc_pair();
-
-    println!("{:#?}", boltz_btc_pair.reverse_fees(out_amount));
+    println!("FEES: {:#?}", boltz_btc_pair.reverse_fees(out_amount).unwrap());
     let request = CreateSwapRequest::new_btc_reverse(
         boltz_btc_pair.hash,
         preimage.clone().sha256.to_string(),
