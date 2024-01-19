@@ -179,28 +179,6 @@ pub struct Pair {
     pub fees: Fees,
 }
 
-impl Pair {
-    pub fn submarine_fees(&self, output_amount: u64)->Result<u64, S5Error>{
-        if output_amount < self.limits.minimal as u64 {
-            return Err(S5Error::new(ErrorKind::Input, &format!("Ouput amount is below minimum {}", self.limits.minimal)))
-        }
-        if output_amount > self.limits.maximal as u64 {
-            return Err(S5Error::new(ErrorKind::Input, &format!("Ouput amount is above maximum {}", self.limits.maximal)))
-        }
-        let fees: i64  = ((self.fees.percentage/100.0) * output_amount as f64).round() as i64 + (self.fees.miner_fees.base_asset.normal + self.fees.miner_fees.quote_asset.normal);
-        Ok(fees as u64)
-    }
-    pub fn reverse_fees(&self, output_amount: u64)->Result<u64, S5Error>{
-        if output_amount < self.limits.minimal as u64 {
-            return Err(S5Error::new(ErrorKind::Input, &format!("Ouput amount is below minimum {}", self.limits.minimal)))
-        }
-        if output_amount > self.limits.maximal as u64 {
-            return Err(S5Error::new(ErrorKind::Input, &format!("Ouput amount is above maximum {}", self.limits.maximal)))
-        }
-        let fees: i64  = ((self.fees.percentage/100.0) * output_amount as f64).round() as i64 + (self.fees.miner_fees.base_asset.reverse.claim + self.fees.miner_fees.base_asset.reverse.lockup + self.fees.miner_fees.quote_asset.reverse.claim + self.fees.miner_fees.quote_asset.reverse.lockup);
-        Ok(fees as u64)
-    }
-}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Limits {
@@ -208,7 +186,17 @@ pub struct Limits {
     minimal: i64,
     maximal_zero_conf: MaximalZeroConf,
 }
-
+impl Limits {
+    pub fn within(&self, output_amount: u64)->Result<(), S5Error>{
+        if output_amount < self.minimal as u64 {
+            return Err(S5Error::new(ErrorKind::Input, &format!("Ouput amount is below minimum {}", self.minimal)))
+        }
+        if output_amount > self.maximal as u64 {
+            return Err(S5Error::new(ErrorKind::Input, &format!("Ouput amount is above maximum {}", self.maximal)))
+        }
+      Ok(())
+    }
+}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MaximalZeroConf {
@@ -224,6 +212,16 @@ pub struct Fees {
     miner_fees: MinerFees,
 }
 
+impl Fees {
+    pub fn submarine_total(&self, output_amount: u64)->Result<u64, S5Error>{
+        let fees: i64  = ((self.percentage/100.0) * output_amount as f64).round() as i64 + (self.miner_fees.base_asset.normal + self.miner_fees.quote_asset.normal);
+        Ok(fees as u64)
+    }
+    pub fn reverse_total(&self, output_amount: u64)->Result<u64, S5Error>{
+        let fees: i64  = ((self.percentage/100.0) * output_amount as f64).round() as i64 + (self.miner_fees.base_asset.reverse.claim + self.miner_fees.base_asset.reverse.lockup + self.miner_fees.quote_asset.reverse.claim + self.miner_fees.quote_asset.reverse.lockup);
+        Ok(fees as u64)
+    }
+}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MinerFees {
@@ -792,5 +790,13 @@ mod tests {
         let request = SwapStatusRequest { id: id };
         let response = client.swap_status(request);
         assert!(response.is_ok());
+    }
+
+    #[test]
+    fn test_invoice_decode(){
+        let invoice_str = "lntb505590n1pj643ausp5tcn7dy6ax4rglfm6zxscla4dcuwte5jxzc5amgg08t6v2v0m2qnspp5xj7e3y722n7sel292wcrnsnfjl5j02jzf2m3r0pvh548su0ruf9sdql2djkuepqw3hjqsj5gvsxzerywfjhxucxqyp2xqcqzyl9qxpqysgqf8ydv0wst50g7yn04lavjfvzku4k693jawzsk563qv55z5752crs763lv2533xlhh0jdhcafaugw46a724cjr6cufnl7da8j3e3nl3cpy7zz8e";
+        let invoice = Bolt11Invoice::from_str(invoice_str).unwrap();
+        let amount_sats = invoice.amount_milli_satoshis().unwrap() / 1000;
+        println!("amount: {} sats", amount_sats);
     }
 }

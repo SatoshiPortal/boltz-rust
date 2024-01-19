@@ -33,8 +33,8 @@ fn test_liquid_ssi() {
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_lbtc_pair = boltz_pairs
         .get_lbtc_pair();
-    let fees = boltz_lbtc_pair.submarine_fees(_out_amount).unwrap();
-    println!("FEES:{}", fees);
+    let fees = boltz_lbtc_pair.fees.submarine_total(_out_amount).unwrap();
+    println!("TOTAL FEES:{}", fees);
 
     let request = CreateSwapRequest::new_lbtc_submarine(
         boltz_lbtc_pair.hash,
@@ -99,9 +99,9 @@ fn test_liquid_rsi() {
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_lbtc_pair = boltz_pairs
         .get_lbtc_pair();
-    let fees = boltz_lbtc_pair.reverse_fees(out_amount).unwrap();
-    println!("FEES: {}", fees);
-    
+    let fees = boltz_lbtc_pair.fees.reverse_total(out_amount).unwrap();
+    println!("TOTAL FEES: {}", fees);
+
     let request = CreateSwapRequest::new_lbtc_reverse(
         boltz_lbtc_pair.hash,
         preimage.clone().sha256.to_string(),

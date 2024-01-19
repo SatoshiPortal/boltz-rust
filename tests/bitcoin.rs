@@ -45,8 +45,8 @@ fn test_bitcoin_ssi() {
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_btc_pair = boltz_pairs
         .get_btc_pair();
-    let fees = boltz_btc_pair.submarine_fees(out_amount).unwrap();
-    println!("FEES: {}", fees);
+    let fees = boltz_btc_pair.fees.submarine_total(out_amount).unwrap();
+    println!("TOTAL FEES: {}", fees);
     let request = CreateSwapRequest::new_btc_submarine(
         boltz_btc_pair.hash,
         invoice_str.to_string(),
@@ -144,7 +144,7 @@ fn test_bitcoin_rsi() {
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_btc_pair = boltz_pairs
         .get_btc_pair();
-    println!("FEES: {:#?}", boltz_btc_pair.reverse_fees(out_amount).unwrap());
+    println!("TOTAL FEES: {:#?}", boltz_btc_pair.fees.reverse_total(out_amount).unwrap());
     let request = CreateSwapRequest::new_btc_reverse(
         boltz_btc_pair.hash,
         preimage.clone().sha256.to_string(),
