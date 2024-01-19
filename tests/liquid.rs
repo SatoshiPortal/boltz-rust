@@ -86,7 +86,6 @@ fn test_liquid_rsi() {
     const RETURN_ADDRESS: &str =
         "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
     let out_amount = 50_000;
-
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
     let keypair = SwapKey::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1)

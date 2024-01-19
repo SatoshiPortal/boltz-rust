@@ -41,15 +41,11 @@ fn test_bitcoin_ssi() {
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let pair_hash = boltz_pairs
-        .pairs
-        .pairs
-        .get("BTC/BTC")
-        .map(|pair_info| pair_info.hash.clone())
-        .unwrap();
+    let boltz_btc_pair = boltz_pairs
+        .get_btc_pair();
 
     let request = CreateSwapRequest::new_btc_submarine(
-        pair_hash,
+        boltz_btc_pair.hash,
         invoice_str.to_string(),
         keypair.public_key().to_string().clone(),
     );
@@ -144,15 +140,12 @@ fn test_bitcoin_rsi() {
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let pair_hash = boltz_pairs
-        .pairs
-        .pairs
-        .get("BTC/BTC")
-        .map(|pair_info| pair_info.hash.clone())
-        .unwrap();
+    let boltz_btc_pair = boltz_pairs
+        .get_btc_pair();
 
+    println!("{:#?}", boltz_btc_pair.reverse_fees(out_amount));
     let request = CreateSwapRequest::new_btc_reverse(
-        pair_hash,
+        boltz_btc_pair.hash,
         preimage.clone().sha256.to_string(),
         keypair.public_key().to_string().clone(),
         // timeout as u64,
