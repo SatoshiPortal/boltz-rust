@@ -1,10 +1,10 @@
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
-        boltz::{BoltzApiClient, CreateSwapRequest, BOLTZ_TESTNET_URL, SwapStatusRequest},
+        boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
         liquid::{LBtcSwapScript, LBtcSwapTx},
     },
-    util::{derivation::SwapKey, preimage::Preimage},
+    util::{derivation::{SwapKey, LiquidSwapKey}, preimage::Preimage},
     ZKKeyPair, ZKSecp256k1,
 };
 pub mod test_utils;
@@ -31,8 +31,7 @@ fn test_liquid_ssi() {
     let _electrum_client = network_config.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let boltz_lbtc_pair = boltz_pairs
-        .get_lbtc_pair();
+    let boltz_lbtc_pair = boltz_pairs.get_lbtc_pair();
     let fees = boltz_lbtc_pair.fees.submarine_total(_out_amount).unwrap();
     println!("TOTAL FEES:{}", fees);
 
@@ -41,26 +40,17 @@ fn test_liquid_ssi() {
         invoice_str.to_string(),
         keypair.public_key().to_string().clone(),
     );
-    let response = boltz_client.create_swap(request);
+    let response = boltz_client.create_swap(request).unwrap();
+    let _id = response.get_id();
+
     println!("{:?}", response);
-    assert!(response.is_ok());
-    assert!(response
-        .as_ref()
-        .unwrap()
-        .validate_submarine(preimage.hash160));
+    assert!(response.validate_submarine(preimage.hash160));
 
-    let _id = response.as_ref().unwrap().id.as_str();
-    let funding_address = response.as_ref().unwrap().address.clone().unwrap();
-    let expected_amount = response.as_ref().unwrap().expected_amount.clone().unwrap();
-    let blinding_string = response.as_ref().unwrap().blinding_key.clone().unwrap();
+    let funding_address = response.address.clone().unwrap();
+    let expected_amount = response.expected_amount.clone().unwrap();
+    let blinding_string = response.get_blinding_key();
 
-    let redeem_script_string = response
-        .as_ref()
-        .unwrap()
-        .redeem_script
-        .as_ref()
-        .unwrap()
-        .clone();
+    let redeem_script_string = response.redeem_script.unwrap().clone();
 
     let boltz_script_elements =
         LBtcSwapScript::submarine_from_str(&redeem_script_string, blinding_string).unwrap();
@@ -86,9 +76,11 @@ fn test_liquid_rsi() {
     let out_amount = 50_000;
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = SwapKey::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1)
-        .unwrap()
-        .keypair;
+    let swap_key = SwapKey::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1)
+        .unwrap();
+    let lsk: LiquidSwapKey = swap_key.into();
+    let keypair = lsk.keypair;
+    
     println!("SECRET-KEY: {:?}", keypair.display_secret());
     let preimage = Preimage::new();
     println!("PREIMAGE: {}", hex::encode(preimage.bytes.unwrap()));
@@ -97,8 +89,7 @@ fn test_liquid_rsi() {
     let _electrum_client = network_config.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let boltz_lbtc_pair = boltz_pairs
-        .get_lbtc_pair();
+    let boltz_lbtc_pair = boltz_pairs.get_lbtc_pair();
     let fees = boltz_lbtc_pair.fees.reverse_total(out_amount).unwrap();
     println!("TOTAL FEES: {}", fees);
 
@@ -108,47 +99,21 @@ fn test_liquid_rsi() {
         keypair.public_key().to_string().clone(),
         out_amount,
     );
-    let response = boltz_client.create_swap(request);
+    let response = boltz_client.create_swap(request).unwrap();
+    assert!(response.validate_reverse(preimage.clone(), keypair.clone(), Chain::LiquidTestnet,));
+    let id = response.get_id();
 
-    assert!(response.is_ok());
-    assert!(response
-        .as_ref()
-        .unwrap()
-        .validate_reverse(preimage.clone(), keypair.clone(), Chain::LiquidTestnet,));
-
-    let timeout = response
-        .as_ref()
-        .unwrap()
-        .timeout_block_height
-        .unwrap()
-        .clone();
-    let id = response.as_ref().unwrap().id.as_str();
-    let invoice = response.as_ref().unwrap().invoice.clone().unwrap();
-    let _lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
-    let blinding_string = response.as_ref().unwrap().blinding_key.clone().unwrap();
+    let _timeout = response.timeout_block_height.unwrap().clone();
+    let invoice = response.invoice.clone().unwrap();
+    let _lockup_address = response.lockup_address.clone().unwrap();
+    let blinding_string = response.get_blinding_key();
     println!("BOLTZ-BLINDING-KEY: {}", blinding_string);
 
-    let redeem_script_string = response
-        .as_ref()
-        .unwrap()
-        .redeem_script
-        .as_ref()
-        .unwrap()
-        .clone();
+    let redeem_script_string = response.redeem_script.unwrap().clone();
     println!("REDEEM_SCRIPT: {}", redeem_script_string);
 
     let boltz_script_elements =
         LBtcSwapScript::reverse_from_str(&redeem_script_string, blinding_string.clone()).unwrap();
-    let secp = ZKSecp256k1::new();
-    let constructed_script_elements = LBtcSwapScript::new(
-        boltz_client::swaps::boltz::SwapType::ReverseSubmarine,
-        preimage.hash160.to_string(),
-        keypair.public_key().to_string().clone(),
-        timeout as u32,
-        boltz_script_elements.sender_pubkey.clone(),
-        ZKKeyPair::from_seckey_str(&secp, &blinding_string).unwrap(),
-    );
-    assert_eq!(constructed_script_elements, boltz_script_elements);
 
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();
@@ -184,7 +149,7 @@ fn test_liquid_rsi() {
     }
 
     let mut rev_swap_tx =
-        LBtcSwapTx::new_claim(constructed_script_elements, RETURN_ADDRESS.to_string()).unwrap();
+        LBtcSwapTx::new_claim(boltz_script_elements, RETURN_ADDRESS.to_string()).unwrap();
     let _ = rev_swap_tx.fetch_utxo(network_config.clone()).unwrap();
     println!("{:?}", rev_swap_tx);
     test_utils::pause_and_wait("Waiting....");
@@ -192,7 +157,13 @@ fn test_liquid_rsi() {
     println!("{:?}", rev_swap_tx);
     test_utils::pause_and_wait("Waiting....");
 
-    let signed_tx = rev_swap_tx.drain(ZKKeyPair::from_seckey_str(&secp, &keypair.display_secret().to_string()).unwrap(), preimage, absolute_fees).unwrap();
+    let signed_tx = rev_swap_tx
+        .drain(
+            keypair,
+            preimage,
+            absolute_fees,
+        )
+        .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
     println!("{}", txid);
 }

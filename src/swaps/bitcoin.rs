@@ -27,7 +27,7 @@ use super::boltz::SwapType;
 /// Bitcoin swap script helper.
 #[derive(Debug, PartialEq, Clone)]
 pub struct BtcSwapScript {
-    swap_type: SwapType,
+    pub swap_type: SwapType,
     pub hashlock: String,
     pub reciever_pubkey: String,
     pub timelock: u32,
@@ -52,7 +52,7 @@ impl BtcSwapScript {
         }
     }
     /// Create the struct from a submarine swap redeem_script string.
-    ///Usually created from the string provided by boltz api response.
+    /// Usually created from the string provided by boltz api response.
     pub fn submarine_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
         let script_bytes = match hex::decode(redeem_script_str) {
             Ok(result) => result.to_owned(),
@@ -528,6 +528,8 @@ impl BtcSwapTx {
         };
         Ok(signed_tx)
     }
+    
+    /// PENDING: Sign a refund transaction for a submarine swap
     fn _sign_refund_tx(&self, _keys: Keypair) -> Result<(), S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(

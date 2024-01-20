@@ -62,6 +62,7 @@ impl Preimage {
     }
 
     /// Creates a Preimage struct without a value and only a hash
+    /// Used only in submarine swaps where we do not know the preimage, only the hash
     pub fn from_sha256_str(preimage_sha256: &str) -> Result<Preimage, S5Error> {
         let sha256 = match sha256::Hash::from_str(preimage_sha256) {
             Ok(result) => result,
@@ -80,6 +81,7 @@ impl Preimage {
     }
 
     /// Extracts the preimage sha256 hash from a lightning invoice
+    /// Creates a Preimage struct without a value and only a hash
     pub fn from_invoice_str(invoice_str: &str) -> Result<Preimage, S5Error> {
         let invoice = match Bolt11Invoice::from_str(&invoice_str) {
             Ok(invoice) => invoice,
@@ -96,7 +98,7 @@ impl Preimage {
         )?)
     }
 
-    /// Converts the preimage bytes to String
+    /// Converts the preimage value bytes to String
     pub fn to_string(&self) -> Option<String> {
         match &self.bytes {
             Some(result) => Some(hex::encode(result)),

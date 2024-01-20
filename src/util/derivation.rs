@@ -3,6 +3,7 @@ use crate::util::error::{ErrorKind, S5Error};
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Xpriv, Fingerprint};
 use bitcoin::secp256k1::{Keypair, Secp256k1};
+use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -17,7 +18,9 @@ const LIQUID_NETWORK_PATH: u32 = 1776;
 const TESTNET_NETWORK_PATH: u32 = 1;
 
 /// Derived Keypair for use in a script.
-#[derive(Serialize, Deserialize, Debug)]
+/// Can be used directly with Bitcoin structures
+/// Can be converted .into() LiquidSwapKey
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SwapKey {
     pub fingerprint: Fingerprint,
     pub path: DerivationPath,
@@ -141,19 +144,42 @@ impl SwapKey {
     }
 }
 #[derive(Clone)]
-pub enum DerivationPurpose {
-    Legacy,
+
+/// For Liquid keys, first create a SwapKey and then call .into() to get the equaivalent ZKKeypair
+/// let sk = SwapKey::from_reverse_account(&mnemonic.to_string(), "", Chain::LiquidTestnet, 1).unwrap()
+/// let lsk: LiquidSwapKey = swap_key.into();
+/// let zkkp = lsk.keypair;
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LiquidSwapKey {
+    pub fingerprint: Fingerprint,
+    pub path: DerivationPath,
+    pub keypair: ZKKeyPair,
+}
+impl From<SwapKey> for LiquidSwapKey {
+    fn from(swapkey: SwapKey) -> Self {
+        let secp = ZKSecp256k1::new();
+        let liquid_keypair = ZKKeyPair::from_seckey_str(&secp, &swapkey.keypair.display_secret().to_string()).unwrap();
+
+        LiquidSwapKey {
+            fingerprint: swapkey.fingerprint,
+            path: swapkey.path,
+            keypair: liquid_keypair,
+        }
+    }
+}
+enum DerivationPurpose {
+    _Legacy,
     Compatible,
     Native,
-    Taproot,
+    _Taproot,
 }
 impl Display for DerivationPurpose {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            DerivationPurpose::Legacy => write!(f, "44"),
+            DerivationPurpose::_Legacy => write!(f, "44"),
             DerivationPurpose::Compatible => write!(f, "49"),
             DerivationPurpose::Native => write!(f, "84"),
-            DerivationPurpose::Taproot => write!(f, "86"),
+            DerivationPurpose::_Taproot => write!(f, "86"),
         }
     }
 }
@@ -166,17 +192,16 @@ mod tests {
     fn test_derivation() {
         let mnemonic: &str = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let index = 0 as u64; // 0
-        let derived = SwapKey::from_submarine_account(mnemonic, "", Chain::Bitcoin, index);
+        let sk = SwapKey::from_submarine_account(mnemonic, "", Chain::Bitcoin, index).unwrap();
+        let lks: LiquidSwapKey = sk.clone().into();
+        assert!(sk.fingerprint == lks.fingerprint);
         // println!("{:?}", derived.unwrap().Keypair.display_secret());
-        assert!(derived.is_ok());
         assert_eq!(
-            &derived.as_ref().unwrap().fingerprint.to_string(),
+            &sk.fingerprint.to_string().clone(),
             "9a6a2580"
         );
         assert_eq!(
-            &derived
-                .as_ref()
-                .unwrap()
+            &sk
                 .keypair
                 .display_secret()
                 .to_string(),

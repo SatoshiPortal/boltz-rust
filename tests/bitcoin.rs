@@ -10,7 +10,7 @@ use boltz_client::{
     Bolt11Invoice, Keypair, Secp256k1,
 };
 
-use std::{ str::FromStr};
+use std::str::FromStr;
 pub mod test_utils;
 
 /// submarine swap integration
@@ -43,8 +43,7 @@ fn test_bitcoin_ssi() {
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let boltz_btc_pair = boltz_pairs
-        .get_btc_pair();
+    let boltz_btc_pair = boltz_pairs.get_btc_pair();
     let fees = boltz_btc_pair.fees.submarine_total(out_amount).unwrap();
     println!("TOTAL FEES: {}", fees);
     let request = CreateSwapRequest::new_btc_submarine(
@@ -52,39 +51,18 @@ fn test_bitcoin_ssi() {
         invoice_str.to_string(),
         keypair.public_key().to_string().clone(),
     );
-    let response = boltz_client.create_swap(request);
+    let response = boltz_client.create_swap(request).unwrap();
     let preimage_states = Preimage::from_invoice_str(invoice_str).unwrap();
 
-    assert!(response
-        .as_ref()
-        .unwrap()
-        .validate_submarine(preimage_states.clone().hash160));
+    assert!(response.validate_submarine(preimage_states.clone().hash160));
 
     println!("{:?}", response);
-    assert!(response.is_ok());
 
-    let timeout = response
-        .as_ref()
-        .unwrap()
-        .timeout_block_height
-        .unwrap()
-        .clone();
-    let _id = response.as_ref().unwrap().id.as_str();
-    let funding_address = response.as_ref().unwrap().address.clone().unwrap();
-    let redeem_script_string = response
-        .as_ref()
-        .unwrap()
-        .redeem_script
-        .as_ref()
-        .unwrap()
-        .clone();
-    let funding_amount = response
-        .as_ref()
-        .unwrap()
-        .expected_amount
-        .as_ref()
-        .unwrap()
-        .clone();
+    let timeout = response.timeout_block_height.unwrap().clone();
+    let _id = response.get_id();
+    let funding_address = response.address.clone().unwrap();
+    let redeem_script_string = response.redeem_script.unwrap().clone();
+    let funding_amount = response.expected_amount.as_ref().unwrap().clone();
 
     let boltz_script = BtcSwapScript::submarine_from_str(&redeem_script_string).unwrap();
 
@@ -142,9 +120,11 @@ fn test_bitcoin_rsi() {
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let boltz_btc_pair = boltz_pairs
-        .get_btc_pair();
-    println!("TOTAL FEES: {:#?}", boltz_btc_pair.fees.reverse_total(out_amount).unwrap());
+    let boltz_btc_pair = boltz_pairs.get_btc_pair();
+    println!(
+        "TOTAL FEES: {:#?}",
+        boltz_btc_pair.fees.reverse_total(out_amount).unwrap()
+    );
     let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
         boltz_btc_pair.hash,
         preimage.clone().sha256.to_string(),
@@ -152,50 +132,25 @@ fn test_bitcoin_rsi() {
         // timeout as u64,
         out_amount,
     );
-    let response = boltz_client.create_swap(request);
+    let response = boltz_client.create_swap(request).unwrap();
     println!("{:?}", response);
-    assert!(response.is_ok());
-    assert!(response
-        .as_ref()
-        .unwrap()
-        .validate_reverse(preimage.clone(), keypair.clone(), Chain::BitcoinTestnet,));
+    assert!(response.validate_reverse(preimage.clone(), keypair.clone(), Chain::BitcoinTestnet));
 
-    let timeout = response
-        .as_ref()
-        .unwrap()
-        .timeout_block_height
-        .unwrap()
-        .clone();
-    let id = response.as_ref().unwrap().id.as_str();
-    let invoice = response.as_ref().unwrap().invoice.clone().unwrap();
-    let lockup_address = response.as_ref().unwrap().lockup_address.clone().unwrap();
-    let redeem_script_string = response
-        .as_ref()
-        .unwrap()
-        .redeem_script
-        .as_ref()
-        .unwrap()
-        .clone();
+    let _timeout = response.timeout_block_height.unwrap().clone();
+    let id = response.get_id();
+    let invoice = response.invoice.clone().unwrap();
+    let lockup_address = response.lockup_address.clone().unwrap();
+    let redeem_script_string = response.redeem_script.as_ref().unwrap().clone();
 
     let boltz_rev_script = BtcSwapScript::reverse_from_str(&redeem_script_string).unwrap();
 
-    let constructed_rev_script = BtcSwapScript::new(
-        SwapType::ReverseSubmarine,
-        preimage.hash160.to_string(),
-        keypair.public_key().to_string().clone(),
-        timeout as u32,
-        boltz_rev_script.sender_pubkey.clone(),
-    );
-
-    assert_eq!(constructed_rev_script, boltz_rev_script);
-
-    let constructed_address = constructed_rev_script
+    let constructed_address = boltz_rev_script
         .to_address(network_config.network())
         .unwrap();
     println!("{}", constructed_address.to_string());
     assert_eq!(constructed_address.to_string(), lockup_address);
 
-    let script_balance = constructed_rev_script
+    let script_balance = boltz_rev_script
         .get_balance(network_config.clone())
         .unwrap();
     assert_eq!(script_balance.0, 0);
@@ -223,7 +178,7 @@ fn test_bitcoin_rsi() {
             println!("*******BOLTZ******************");
             println!("*******ONCHAIN-TX*************");
             println!("*******DETECTED***************");
-            let script_balance = constructed_rev_script
+            let script_balance = boltz_rev_script
                 .get_balance(network_config.clone())
                 .unwrap();
             println!(
@@ -239,7 +194,7 @@ fn test_bitcoin_rsi() {
 
     let absolute_fees = 300;
     let mut rv_claim_tx = BtcSwapTx::new_claim(
-        constructed_rev_script,
+        boltz_rev_script,
         RETURN_ADDRESS.to_string(),
         network_config.network(),
     )

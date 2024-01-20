@@ -680,6 +680,8 @@ impl LBtcSwapTx {
         };
         Ok(signed_tx)
     }
+    
+    /// PENDING: Sign a refund transaction for a submarine swap
     fn _sign_refund_tx(&self, _keys: ZKKeyPair) -> Result<(), S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(

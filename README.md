@@ -183,6 +183,16 @@ An improvement on this is to make the utxos field in SwapTx use a Vec and make s
 - Liquid reverse swap utxo is always confidential
 If boltz funds the swap script with Explicit values, the library will error. It currently only handles Confidential transactions.
 
+## Urgent Issues
+
+### LBtcSwapTx::fetch_utxos
+Liquid currently doesnt use listunspent from electrum and instead relies on listtransactions to find our spendable utxo.
+This is due to an issue with the electrum_client which does not work out of the box for listunspent with Liquid. 
+
+### LBtcSwapTx::get_balance
+For similar reasons, we are unbale to directly use getbalance from electrum, so we currently rely on finding balance with listtransactions.
+
+
 ## Acknowledgement
 
 Special thanks to:

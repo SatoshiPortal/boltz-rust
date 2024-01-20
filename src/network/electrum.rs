@@ -1,3 +1,7 @@
+use std::f64::consts::E;
+
+use electrum_client::ElectrumApi;
+
 use crate::util::error::{ErrorKind, S5Error};
 
 use super::Chain;
@@ -47,7 +51,7 @@ impl ElectrumConfig {
             DEFAULT_LIQUID_TESTNET_NODE,
             true,
             true,
-            10,
+            21,
         )
     }
     pub fn new(
@@ -92,5 +96,6 @@ mod tests {
         let network_config = ElectrumConfig::default_liquid();
         let electrum_client = network_config.build_client().unwrap();
         assert!(electrum_client.ping().is_ok());
+
     }
 }
