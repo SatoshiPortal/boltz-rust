@@ -43,7 +43,7 @@ use lightning_invoice::Bolt11Invoice;
 use crate::swaps::bitcoin::BtcSwapScript;
 use crate::swaps::liquid::LBtcSwapScript;
 use crate::util::error::{ErrorKind, S5Error};
-use crate::util::preimage::Preimage;
+use crate::util::secrets::Preimage;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -967,7 +967,7 @@ mod tests {
     use bitcoin::secp256k1::{Keypair, Secp256k1};
 
     use super::*;
-    use crate::util::{derivation::SwapKey, preimage::Preimage};
+    use crate::util::{secrets::{SwapKey,Preimage}};
 
     #[test]
     fn test_get_pairs() {

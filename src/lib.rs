@@ -1,7 +1,7 @@
 //! A boltz client for submarine/reverse swaps between Bitcoin, Lightning & Liquid
 //! Refer to tests/ folder for usage
+//! THIS LIBRARY IS IN EARLY ALPHA. DO NOT USE ON MAINNET.
 
-/// electrum client and chain options
 pub mod network;
 /// core swap logic
 pub mod swaps;

@@ -192,7 +192,6 @@ This is due to an issue with the electrum_client which does not work out of the 
 ### LBtcSwapTx::get_balance
 For similar reasons, we are unbale to directly use getbalance from electrum, so we currently rely on finding balance with listtransactions.
 
-
 ## Acknowledgement
 
 Special thanks to:

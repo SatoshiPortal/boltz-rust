@@ -4,7 +4,7 @@ use boltz_client::{
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
         liquid::{LBtcSwapTx},
     },
-    util::{derivation::{SwapKey, LiquidSwapKey}, preimage::Preimage},
+    util::{secrets::{SwapKey, LiquidSwapKey,Preimage}},
 };
 pub mod test_utils;
 /// submarine swap integration

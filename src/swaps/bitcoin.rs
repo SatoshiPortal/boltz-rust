@@ -16,7 +16,7 @@ use crate::{
     swaps::boltz::SwapTxKind,
     util::{
         error::{ErrorKind, S5Error},
-        preimage::Preimage,
+        secrets::Preimage,
     },
 };
 
