@@ -148,20 +148,22 @@ pub struct GetPairsResponse {
     pub pairs: Pairs,
 }
 
-impl GetPairsResponse{
-    pub fn get_btc_pair(&self)->Pair{
+impl GetPairsResponse {
+    pub fn get_btc_pair(&self) -> Pair {
         self.pairs
-        .pairs
-        .get(&PairId::BtcBtc.to_string())
-        .map(|pair_info| pair_info)
-        .unwrap().clone()
+            .pairs
+            .get(&PairId::BtcBtc.to_string())
+            .map(|pair_info| pair_info)
+            .unwrap()
+            .clone()
     }
-    pub fn get_lbtc_pair(&self)->Pair{
+    pub fn get_lbtc_pair(&self) -> Pair {
         self.pairs
-        .pairs
-        .get(&PairId::LBtcBtc.to_string())
-        .map(|pair_info| pair_info)
-        .unwrap().clone()
+            .pairs
+            .get(&PairId::LBtcBtc.to_string())
+            .map(|pair_info| pair_info)
+            .unwrap()
+            .clone()
     }
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -170,7 +172,7 @@ pub struct Pairs {
     pub pairs: std::collections::HashMap<String, Pair>,
 }
 
-#[derive(Serialize, Deserialize, Debug,Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Pair {
     pub hash: String,
@@ -187,14 +189,20 @@ pub struct Limits {
     maximal_zero_conf: MaximalZeroConf,
 }
 impl Limits {
-    pub fn within(&self, output_amount: u64)->Result<(), S5Error>{
+    pub fn within(&self, output_amount: u64) -> Result<(), S5Error> {
         if output_amount < self.minimal as u64 {
-            return Err(S5Error::new(ErrorKind::Input, &format!("Ouput amount is below minimum {}", self.minimal)))
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                &format!("Ouput amount is below minimum {}", self.minimal),
+            ));
         }
         if output_amount > self.maximal as u64 {
-            return Err(S5Error::new(ErrorKind::Input, &format!("Ouput amount is above maximum {}", self.maximal)))
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                &format!("Ouput amount is above maximum {}", self.maximal),
+            ));
         }
-      Ok(())
+        Ok(())
     }
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -206,6 +214,22 @@ pub struct MaximalZeroConf {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct MinerFees {
+    base_asset: AssetMinerFee,
+    quote_asset: AssetMinerFee,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AssetMinerFee {
+    normal: i64,
+    reverse: ReverseMinerFee,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ReverseMinerFee {
+    claim: i64,
+    lockup: i64,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Fees {
     percentage: f64,
     percentage_swap_in: f64,
@@ -213,32 +237,21 @@ pub struct Fees {
 }
 
 impl Fees {
-    pub fn submarine_total(&self, output_amount: u64)->Result<u64, S5Error>{
-        let fees: i64  = ((self.percentage/100.0) * output_amount as f64).round() as i64 + (self.miner_fees.base_asset.normal + self.miner_fees.quote_asset.normal);
-        Ok(fees as u64)
+    pub fn submarine_total(&self, output_amount: u64) -> Result<u64, S5Error> {
+        let boltz_fee = ((self.percentage_swap_in / 100.0) * output_amount as f64).round() as u64;
+        let miner_fee = ((self.miner_fees.base_asset.normal + self.miner_fees.quote_asset.normal))
+            as u64;
+        Ok(boltz_fee + miner_fee)
     }
-    pub fn reverse_total(&self, output_amount: u64)->Result<u64, S5Error>{
-        let fees: i64  = ((self.percentage/100.0) * output_amount as f64).round() as i64 + (self.miner_fees.base_asset.reverse.claim + self.miner_fees.base_asset.reverse.lockup + self.miner_fees.quote_asset.reverse.claim + self.miner_fees.quote_asset.reverse.lockup);
-        Ok(fees as u64)
+    pub fn reverse_total(&self, output_amount: u64) -> Result<u64, S5Error> {
+        let boltz_fee = ((self.percentage / 100.0) * output_amount as f64).round() as u64;
+        let miner_fee =
+            ((self.miner_fees.base_asset.reverse.claim
+                + self.miner_fees.base_asset.reverse.lockup
+                + self.miner_fees.quote_asset.reverse.claim
+                + self.miner_fees.quote_asset.reverse.lockup)) as u64;
+        Ok(boltz_fee + miner_fee)
     }
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct MinerFees {
-    base_asset: MinerFee,
-    quote_asset: MinerFee,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct MinerFee {
-    normal: i64,
-    reverse: ReverseMinerFee,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ReverseMinerFee {
-    claim: i64,
-    lockup: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -821,7 +834,7 @@ mod tests {
     }
 
     #[test]
-    fn test_invoice_decode(){
+    fn test_invoice_decode() {
         let invoice_str = "lntb505590n1pj643ausp5tcn7dy6ax4rglfm6zxscla4dcuwte5jxzc5amgg08t6v2v0m2qnspp5xj7e3y722n7sel292wcrnsnfjl5j02jzf2m3r0pvh548su0ruf9sdql2djkuepqw3hjqsj5gvsxzerywfjhxucxqyp2xqcqzyl9qxpqysgqf8ydv0wst50g7yn04lavjfvzku4k693jawzsk563qv55z5752crs763lv2533xlhh0jdhcafaugw46a724cjr6cufnl7da8j3e3nl3cpy7zz8e";
         let invoice = Bolt11Invoice::from_str(invoice_str).unwrap();
         let amount_sats = invoice.amount_milli_satoshis().unwrap() / 1000;
