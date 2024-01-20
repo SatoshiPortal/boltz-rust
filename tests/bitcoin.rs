@@ -145,7 +145,7 @@ fn test_bitcoin_rsi() {
     let boltz_btc_pair = boltz_pairs
         .get_btc_pair();
     println!("TOTAL FEES: {:#?}", boltz_btc_pair.fees.reverse_total(out_amount).unwrap());
-    let request = CreateSwapRequest::new_btc_reverse(
+    let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
         boltz_btc_pair.hash,
         preimage.clone().sha256.to_string(),
         keypair.public_key().to_string().clone(),

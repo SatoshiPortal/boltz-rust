@@ -703,3 +703,10 @@ mod tests {
         assert!(address.to_string() == expected_address);
     }
 }
+
+
+/*
+
+lightning-cli --lightning-dir=/.lightning 
+
+*/

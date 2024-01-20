@@ -392,6 +392,8 @@ pub struct CreateSwapRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     onchain_amount: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    invoice_amount: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     channel: Option<ChannelDetails>,
 }
 
@@ -412,10 +414,33 @@ impl CreateSwapRequest {
             claim_public_key: None,
             timeout_block_height: None,
             onchain_amount: None,
+            invoice_amount: None,
             channel: None,
         }
     }
-    pub fn new_btc_reverse(
+    /// Creates a BTC Reverse swap request, setting invoice_amount
+    pub fn new_btc_reverse_invoice_amt(
+        pair_hash: String,
+        preimage_hash: String,
+        claim_public_key: String,
+        invoice_amount: u64,
+    ) -> CreateSwapRequest {
+        CreateSwapRequest {
+            swap_type: SwapType::ReverseSubmarine,
+            pair_id: PairId::BtcBtc,
+            order_side: OrderSide::Buy,
+            pair_hash,
+            invoice: None,
+            refund_public_key: None,
+            preimage_hash: Some(preimage_hash),
+            claim_public_key: Some(claim_public_key),
+            timeout_block_height: None,
+            invoice_amount: Some(invoice_amount),
+            onchain_amount: None,
+            channel: None,
+        }
+    }
+    pub fn new_btc_reverse_onchain_amt(
         pair_hash: String,
         preimage_hash: String,
         claim_public_key: String,
@@ -432,6 +457,7 @@ impl CreateSwapRequest {
             claim_public_key: Some(claim_public_key),
             timeout_block_height: None,
             onchain_amount: Some(onchain_amount),
+            invoice_amount: None,
             channel: None,
         }
     }
@@ -451,6 +477,7 @@ impl CreateSwapRequest {
             claim_public_key: None,
             timeout_block_height: None,
             onchain_amount: None,
+            invoice_amount: None,
             channel: None,
         }
     }
@@ -472,6 +499,7 @@ impl CreateSwapRequest {
             claim_public_key: Some(claim_public_key),
             timeout_block_height: None,
             onchain_amount: Some(onchain_amount),
+            invoice_amount: None,
             channel: None,
         }
     }
@@ -727,7 +755,7 @@ mod tests {
         let pair_hash =
             "d3479af57b3a55e7a4d8e70e2b7ce1a79196446b4708713061d3f6efe587c601".to_string();
 
-        let request = CreateSwapRequest::new_btc_reverse(
+        let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
             pair_hash,
             preimage.sha256.to_string(),
             claim_key_pair.public_key().to_string(),
@@ -764,7 +792,7 @@ mod tests {
         let pair_hash =
             "bfe685df32af97d89e4ca9faa0f133003bf7637e719fdef0d665f34cc66d3f76".to_string();
 
-        let request = CreateSwapRequest::new_btc_reverse(
+        let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
             pair_hash,
             preimage.sha256.clone().to_string(),
             claim_key_pair.public_key().to_string(),
