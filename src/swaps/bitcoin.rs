@@ -571,7 +571,7 @@ mod tests {
     use bitcoin::script::Builder;
     use bitcoin::secp256k1::hashes::{hash160, Hash};
     use bitcoin::{
-        absolute::LockTime, Address, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxOut,
+        absolute::LockTime, Address, Network, OutPoint, Sequence, Transaction, TxIn, TxOut,
         Witness,
     };
     use electrum_client::ElectrumApi;

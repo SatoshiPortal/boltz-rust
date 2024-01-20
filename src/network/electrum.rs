@@ -1,6 +1,3 @@
-use std::f64::consts::E;
-
-use electrum_client::ElectrumApi;
 
 use crate::util::error::{ErrorKind, S5Error};
 

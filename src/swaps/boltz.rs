@@ -1,9 +1,44 @@
-use bitcoin::hashes::{hash160, sha256};
-use bitcoin::secp256k1::Keypair;
-use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;
-use elements::secp256k1_zkp::Keypair as ZKKeyPair;
-use lightning_invoice::Bolt11Invoice;
+//!
+//! ## Estimate fees
+//!
+//! ### Example
+//! ```
+//! let client = BoltzApiClient::new(BOLTZ_MAINNET_URL);
+//! let pairs = client.get_pairs().unwrap();
+//! let btc_pair = pairs.get_btc_pair();
+//! let output_amount = 75_000;
+//! let base_fees = btc_pair.fees.reverse_base(output_amount).unwrap();
+//! let claim_fee = btc_pair.fees.reverse_claim_estimate();
+//! println!("CALCULATED FEES: {}", base_fees);
+//! println!("ONCHAIN LOCKUP: {}", output_amount - base_fees);
+//! println!(
+//!     "ONCHAIN RECIEVABLE: {}",
+//!     output_amount - base_fees - claim_fee
+//! );
+//! let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
+//! let claim_key_pair = SwapKey::from_reverse_account(mnemonic, "", Chain::Bitcoin, 0)
+//!     .unwrap()
+//!     .keypair;
+
+//! let preimage = Preimage::new();
+//! let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
+//!     btc_pair.hash,
+//!     preimage.sha256.clone().to_string(),
+//!     claim_key_pair.public_key().to_string(),
+//!     output_amount,
+//! );
+//! let response = client.create_swap(request).unwrap();
+//! assert!(response.validate_reverse(preimage, claim_key_pair, Chain::Bitcoin));
+//! println!("Onchain Amount: {}", response.onchain_amount.unwrap());
+//! assert!((output_amount - base_fees) == response.onchain_amount.unwrap());
+
+//! ```
 use crate::network::Chain;
+use bitcoin::hashes::hash160;
+use bitcoin::secp256k1::Keypair;
+use elements::secp256k1_zkp::Keypair as ZKKeyPair;
+use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;
+use lightning_invoice::Bolt11Invoice;
 // use reqwest;
 use crate::swaps::bitcoin::BtcSwapScript;
 use crate::swaps::liquid::LBtcSwapScript;
@@ -23,9 +58,7 @@ pub enum SwapTxKind {
     Claim,
     Refund,
 }
-
-// use reqwest::blocking::Client;
-
+/// Reference Documnetation: https://docs.boltz.exchange/v/api/
 pub struct BoltzApiClient {
     base_url: String,
 }
@@ -36,7 +69,7 @@ impl BoltzApiClient {
             base_url: base_url.to_string(),
         }
     }
-    /// In order to create a swap, one first has to know which pairs are supported and what kind of rates, limits and fees are applied when creating a new swap. 
+    /// In order to create a swap, one first has to know which pairs are supported and what kind of rates, limits and fees are applied when creating a new swap.
     /// The following call returns this information.
     pub fn get_pairs(&self) -> Result<GetPairsResponse, S5Error> {
         let url = format!("{}/getpairs", self.base_url);
@@ -199,7 +232,7 @@ pub struct Pair {
 pub struct Limits {
     maximal: i64,
     minimal: i64,
-    /// The maximal amounts that will be accepted without chain confirmations by Boltz. 0 indicates that Boltz will not accept 0-conf. 
+    /// The maximal amounts that will be accepted without chain confirmations by Boltz. 0 indicates that Boltz will not accept 0-conf.
     maximal_zero_conf: MaximalZeroConf,
 }
 impl Limits {
@@ -256,25 +289,28 @@ pub struct Fees {
 }
 
 impl Fees {
-    /// Calculate total fees (boltz + miner fee) for a submarine swap, given an output amount
-    pub fn submarine_total(&self, output_amount: u64) -> Result<u64, S5Error> {
+    /// Calculate base fees (boltz + ln fee) for a submarine swap, given an output amount
+    pub fn submarine_base(&self, output_amount: u64) -> Result<u64, S5Error> {
         let boltz_fee = ((self.percentage_swap_in / 100.0) * output_amount as f64).round() as u64;
-        let ln_fee = ( self.miner_fees.quote_asset.normal)
-            as u64;
-        let miner_fee = self.miner_fees.base_asset.normal as u64;
-        println!("Miner Fee: {}\nLN Fee: {}", miner_fee , ln_fee);
+        let ln_fee = (self.miner_fees.quote_asset.normal) as u64;
         Ok(boltz_fee + ln_fee)
     }
-    /// Calculate total fees (boltz + miner fee) for a reverse swap, given an output amount
-    pub fn reverse_total(&self, output_amount: u64) -> Result<u64, S5Error> {
+    /// Calculate onchain lockup tx fees (miner fee) for a submarine swap, given an output amount
+    pub fn submarine_lockup_estimate(&self) -> u64 {
+        self.miner_fees.base_asset.normal as u64
+    }
+    /// Calculate base fees (boltz + lockup miner fee) for a reverse swap, given an output amount
+    pub fn reverse_base(&self, output_amount: u64) -> Result<u64, S5Error> {
         let boltz_fee = ((self.percentage / 100.0) * output_amount as f64).round() as u64;
         println!("Boltz Fee: {}", boltz_fee);
-        let lockup_fee =
-            (self.miner_fees.base_asset.reverse.lockup) as u64;
-        let claim_fee = 
-            self.miner_fees.base_asset.reverse.claim as u64;
-        println!("Claim Fee: {}\nLockup Fee: {}", claim_fee , lockup_fee);
+        let lockup_fee = (self.miner_fees.base_asset.reverse.lockup) as u64;
+        let claim_fee = self.miner_fees.base_asset.reverse.claim as u64;
+        println!("Claim Fee: {}\nLockup Fee: {}", claim_fee, lockup_fee);
         Ok(boltz_fee + lockup_fee)
+    }
+    /// Estimate claim tx miner fee (claim miner fee) for a reverse swap
+    pub fn reverse_claim_estimate(&self) -> u64 {
+        self.miner_fees.base_asset.reverse.claim as u64
     }
 }
 
@@ -407,7 +443,6 @@ impl FromStr for OrderSide {
         }
     }
 }
-
 
 /// Structure to create a swap request with boltz
 #[derive(Serialize, Deserialize, Debug)]
@@ -556,7 +591,7 @@ impl CreateSwapRequest {
             channel: None,
         }
     }
-    
+
     /// Creates a LN->BTC Reverse Swap
     /// This method sets the amount of the onchain swap script
     /// Eg. Swap for amount 50,000 sats will create an invoice for (50,000 + fees) sats
@@ -614,18 +649,17 @@ pub struct CreateSwapResponse {
     pub expected_amount: Option<u64>,
 }
 
-
 impl CreateSwapResponse {
     /// Get a copy of the id of the swap
-    pub fn get_id(&self)->String{
+    pub fn get_id(&self) -> String {
         self.id.clone()
     }
     /// Get a copy of the blinding key
-    pub fn get_blinding_key(&self)->String{
+    pub fn get_blinding_key(&self) -> String {
         self.blinding_key.clone().unwrap()
     }
     /// Get a copy of the Timelock value
-    pub fn get_timeout(&self)->u64{
+    pub fn get_timeout(&self) -> u64 {
         self.timeout_block_height.clone().unwrap()
     }
     /// Ensure submarine swap redeem script uses the preimage hash used in the invoice
@@ -654,11 +688,11 @@ impl CreateSwapResponse {
             None => false,
         }
     }
-    
+
     /// Validate reverse swap response
     /// Ensure reverse swap invoice uses the provided preimage
     /// Ensure reverse swap redeem script matches locally constructured SwapScript
-    pub fn validate_reverse(&self, preimage: Preimage, keypair: Keypair, chain: Chain)->bool{
+    pub fn validate_reverse(&self, preimage: Preimage, keypair: Keypair, chain: Chain) -> bool {
         match &self.invoice {
             Some(invoice_str) => {
                 let invoice = match Bolt11Invoice::from_str(&invoice_str) {
@@ -676,14 +710,15 @@ impl CreateSwapResponse {
                         invoice.payment_hash().to_string(),
                         preimage.sha256.to_string()
                     );
-                    return false
+                    return false;
                 }
             }
             None => return false,
         }
         match chain {
-            Chain::Bitcoin | Chain::BitcoinTestnet=>{
-                let boltz_rev_script = BtcSwapScript::reverse_from_str(&self.redeem_script.as_ref().unwrap()).unwrap();
+            Chain::Bitcoin | Chain::BitcoinTestnet => {
+                let boltz_rev_script =
+                    BtcSwapScript::reverse_from_str(&self.redeem_script.as_ref().unwrap()).unwrap();
 
                 let constructed_rev_script = BtcSwapScript::new(
                     SwapType::ReverseSubmarine,
@@ -692,18 +727,22 @@ impl CreateSwapResponse {
                     self.timeout_block_height.unwrap() as u32,
                     boltz_rev_script.sender_pubkey.clone(),
                 );
-                let address  = constructed_rev_script.to_address(chain).unwrap();
-                if constructed_rev_script ==  boltz_rev_script && address.to_string() == self.lockup_address.as_ref().unwrap().to_string() {
+                let address = constructed_rev_script.to_address(chain).unwrap();
+                if constructed_rev_script == boltz_rev_script
+                    && address.to_string() == self.lockup_address.as_ref().unwrap().to_string()
+                {
                     true
-                }
-                else{
+                } else {
                     false
                 }
-            },
-            Chain::Liquid | Chain::LiquidTestnet=>{
-                let blinding_key  = self.blinding_key.as_ref().unwrap().clone().to_string();
-                let boltz_rev_script =
-                LBtcSwapScript::reverse_from_str(&self.redeem_script.as_ref().clone().unwrap(), blinding_key.clone()).unwrap();
+            }
+            Chain::Liquid | Chain::LiquidTestnet => {
+                let blinding_key = self.blinding_key.as_ref().unwrap().clone().to_string();
+                let boltz_rev_script = LBtcSwapScript::reverse_from_str(
+                    &self.redeem_script.as_ref().clone().unwrap(),
+                    blinding_key.clone(),
+                )
+                .unwrap();
                 let secp = ZKSecp256k1::new();
                 let constructed_rev_script = LBtcSwapScript::new(
                     SwapType::ReverseSubmarine,
@@ -713,16 +752,16 @@ impl CreateSwapResponse {
                     boltz_rev_script.sender_pubkey.clone(),
                     ZKKeyPair::from_seckey_str(&secp, &blinding_key).unwrap(),
                 );
-                let address  = constructed_rev_script.to_address(chain).unwrap();
-                if constructed_rev_script ==  boltz_rev_script && address.to_string() == self.lockup_address.as_ref().unwrap().to_string() {
+                let address = constructed_rev_script.to_address(chain).unwrap();
+                if constructed_rev_script == boltz_rev_script
+                    && address.to_string() == self.lockup_address.as_ref().unwrap().to_string()
+                {
                     true
-                }
-                else{
+                } else {
                     false
                 }
             }
         }
-
     }
 }
 
@@ -798,10 +837,12 @@ pub struct GetFeeEstimationResponse {
 
 #[cfg(test)]
 mod tests {
-    use bitcoin::{secp256k1::{Keypair, Secp256k1}, absolute::LockTime};
+    use bitcoin::
+        secp256k1::{Keypair, Secp256k1}
+    ;
 
     use super::*;
-    use crate::util::{preimage::Preimage, derivation::SwapKey};
+    use crate::util::{derivation::SwapKey, preimage::Preimage};
 
     #[test]
     fn test_get_pairs() {
@@ -893,21 +934,22 @@ mod tests {
         let pairs = client.get_pairs().unwrap();
         let btc_pair = pairs.get_btc_pair();
         let output_amount = 75_000;
-        let sub_total_fees = btc_pair.fees.reverse_total(output_amount).unwrap();
-        let phash = btc_pair.hash;
-        let claim_fee = 
-            btc_pair.fees.miner_fees.base_asset.reverse.claim as u64;
-        println!("CALCULATED FEES: {}", sub_total_fees);
-        println!("ONCHAIN LOCKUP: {}", output_amount - sub_total_fees);
-        println!("ONCHAIN RECIEVABLE: {}", output_amount - sub_total_fees - claim_fee);
-
+        let base_fees = btc_pair.fees.reverse_base(output_amount).unwrap();
+        let claim_fee = btc_pair.fees.reverse_claim_estimate();
+        println!("CALCULATED FEES: {}", base_fees);
+        println!("ONCHAIN LOCKUP: {}", output_amount - base_fees);
+        println!(
+            "ONCHAIN RECIEVABLE: {}",
+            output_amount - base_fees - claim_fee
+        );
         let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let claim_key_pair = SwapKey::from_reverse_account(mnemonic, "", Chain::Bitcoin, 0)
-        .unwrap().keypair;
+            .unwrap()
+            .keypair;
 
         let preimage = Preimage::new();
         let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
-            phash,
+            btc_pair.hash,
             preimage.sha256.clone().to_string(),
             claim_key_pair.public_key().to_string(),
             output_amount,
@@ -915,8 +957,9 @@ mod tests {
         let response = client.create_swap(request).unwrap();
         assert!(response.validate_reverse(preimage, claim_key_pair, Chain::Bitcoin));
         println!("Onchain Amount: {}", response.onchain_amount.unwrap());
-        let timeout = response.get_timeout();
-        let timeout = LockTime::from_height(timeout as u32).unwrap();
+        assert!((output_amount - base_fees) == response.onchain_amount.unwrap());
 
+        // let timeout = response.get_timeout();
+        // let timeout = LockTime::from_height(timeout as u32).unwrap();
     }
 }
