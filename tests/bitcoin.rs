@@ -58,7 +58,7 @@ fn test_bitcoin_ssi() {
     assert!(response
         .as_ref()
         .unwrap()
-        .validate_script_preimage160(preimage_states.clone().hash160));
+        .validate_submarine(preimage_states.clone().hash160));
 
     println!("{:?}", response);
     assert!(response.is_ok());
@@ -158,7 +158,7 @@ fn test_bitcoin_rsi() {
     assert!(response
         .as_ref()
         .unwrap()
-        .validate_invoice_preimage256(preimage.clone().sha256));
+        .validate_reverse(preimage.clone(), keypair.clone(), Chain::BitcoinTestnet,));
 
     let timeout = response
         .as_ref()

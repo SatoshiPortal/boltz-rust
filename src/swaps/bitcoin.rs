@@ -25,7 +25,7 @@ use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160::Hash};
 use super::boltz::SwapType;
 
 /// Bitcoin swap script helper.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BtcSwapScript {
     swap_type: SwapType,
     pub hashlock: String,

@@ -182,9 +182,15 @@ pub struct Pairs {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Pair {
+    /// Required to create swaps.
+    /// Represents a hash of rates, fees and limits.
+    /// Using a pair hash to create a swap represents accepting these values
     pub hash: String,
+    /// The exchange rate of the pair
     pub rate: f64,
+    /// The minimum/maximum order size
     pub limits: Limits,
+    /// Boltz + Miner fees
     pub fees: Fees,
 }
 
@@ -193,6 +199,7 @@ pub struct Pair {
 pub struct Limits {
     maximal: i64,
     minimal: i64,
+    /// The maximal amounts that will be accepted without chain confirmations by Boltz. 0 indicates that Boltz will not accept 0-conf. 
     maximal_zero_conf: MaximalZeroConf,
 }
 impl Limits {
@@ -213,6 +220,7 @@ impl Limits {
         Ok(())
     }
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MaximalZeroConf {
@@ -239,8 +247,11 @@ pub struct ReverseMinerFee {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Fees {
+    /// The percentage of the "send amount" that is charged by Boltz as "Boltz Fee" for swaps from quote to base asset (e.g. Lightning -> Bitcoin).
     percentage: f64,
+    /// The percentage of the "send amount" that is charged by Boltz as "Boltz Fee" for swaps from base to quote asset (e.g. Bitcoin -> Lightning).
     percentage_swap_in: f64,
+    /// The network fees charged for locking up and claiming funds onchain. These values are absolute, denominated in 10 ** -8 of the quote asset.
     miner_fees: MinerFees,
 }
 
@@ -602,31 +613,10 @@ pub struct CreateSwapResponse {
 
 
 impl CreateSwapResponse {
-    pub fn validate_invoice_preimage256(&self, preimage_sha256: sha256::Hash) -> bool {
-        match &self.invoice {
-            Some(invoice_str) => {
-                let invoice = match Bolt11Invoice::from_str(&invoice_str) {
-                    Ok(invoice) => invoice,
-                    Err(e) => {
-                        println!("{:?}", e);
-                        return false;
-                    }
-                };
-                if &invoice.payment_hash().to_string() == &preimage_sha256.to_string() {
-                    true
-                } else {
-                    println!(
-                        "{},{}",
-                        invoice.payment_hash().to_string(),
-                        preimage_sha256.to_string()
-                    );
-                    false
-                }
-            }
-            None => false,
-        }
-    }
-    pub fn validate_script_preimage160(&self, preimage_hash160: hash160::Hash) -> bool {
+    /// Validate submarine swap response
+
+    /// Ensure submarine swap redeem script uses the preimage hash used in the invoice
+    pub fn validate_submarine(&self, preimage_hash160: hash160::Hash) -> bool {
         match &self.redeem_script {
             Some(rs) => {
                 let script_elements = match BtcSwapScript::submarine_from_str(&rs) {
@@ -637,7 +627,6 @@ impl CreateSwapResponse {
                         return false;
                     }
                 };
-                // println!("{}-m----m-{}", script_elements.hashlock, preimage_hash160);
                 if &script_elements.hashlock == &preimage_hash160.to_string() {
                     true
                 } else {
@@ -652,8 +641,33 @@ impl CreateSwapResponse {
             None => false,
         }
     }
+    
+    /// Validate reverse swap response
+    /// Ensure reverse swap invoice uses the provided preimage
+    /// Ensure reverse swap redeem script matches locally constructured SwapScript
     pub fn validate_reverse(&self, preimage: Preimage, keypair: Keypair, chain: Chain)->bool{
-
+        match &self.invoice {
+            Some(invoice_str) => {
+                let invoice = match Bolt11Invoice::from_str(&invoice_str) {
+                    Ok(invoice) => invoice,
+                    Err(e) => {
+                        println!("{:?}", e);
+                        return false;
+                    }
+                };
+                if &invoice.payment_hash().to_string() == &preimage.sha256.to_string() {
+                    ()
+                } else {
+                    println!(
+                        "{},{}",
+                        invoice.payment_hash().to_string(),
+                        preimage.sha256.to_string()
+                    );
+                    return false
+                }
+            }
+            None => return false,
+        }
         match chain {
             Chain::Bitcoin | Chain::BitcoinTestnet=>{
                 let boltz_rev_script = BtcSwapScript::reverse_from_str(&self.redeem_script.as_ref().unwrap()).unwrap();
@@ -663,7 +677,7 @@ impl CreateSwapResponse {
                     preimage.hash160.to_string(),
                     keypair.public_key().to_string().clone(),
                     self.timeout_block_height.unwrap() as u32,
-                    self.refund_public_key.as_ref().unwrap().to_string(),
+                    boltz_rev_script.sender_pubkey.clone(),
                 );
                 let address  = constructed_rev_script.to_address(chain).unwrap();
                 if constructed_rev_script ==  boltz_rev_script && address.to_string() == self.lockup_address.as_ref().unwrap().to_string() {
@@ -683,7 +697,7 @@ impl CreateSwapResponse {
                     preimage.hash160.to_string(),
                     keypair.public_key().to_string().clone(),
                     self.timeout_block_height.unwrap() as u32,
-                    self.refund_public_key.as_ref().unwrap().to_string(),
+                    boltz_rev_script.sender_pubkey.clone(),
                     ZKKeyPair::from_seckey_str(&secp, &blinding_key).unwrap(),
                 );
                 let address  = constructed_rev_script.to_address(chain).unwrap();
@@ -878,7 +892,7 @@ mod tests {
         assert!(response
             .as_ref()
             .unwrap()
-            .validate_invoice_preimage256(preimage.sha256));
+            .validate_reverse(preimage, claim_key_pair, Chain::BitcoinTestnet));
         let id = response.unwrap().id;
         let request = SwapStatusRequest { id: id };
         let response = client.swap_status(request);
@@ -915,7 +929,7 @@ mod tests {
         assert!(response
             .as_ref()
             .unwrap()
-            .validate_invoice_preimage256(preimage.sha256));
+            .validate_reverse(preimage, claim_key_pair, Chain::BitcoinTestnet));
         let id = response.unwrap().id;
         let request = SwapStatusRequest { id: id };
         let response = client.swap_status(request);
