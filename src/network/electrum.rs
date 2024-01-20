@@ -1,3 +1,4 @@
+use electrum_client::raw_client::RawClient;
 
 use crate::util::error::{ErrorKind, S5Error};
 
@@ -28,6 +29,7 @@ impl ElectrumUrl {
             Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
         }
     }
+    
 }
 
 /// Electrum client configuration.
@@ -40,7 +42,7 @@ pub struct ElectrumConfig {
 
 impl ElectrumConfig {
     pub fn default_bitcoin() -> Self {
-        ElectrumConfig::new(Chain::BitcoinTestnet, DEFAULT_TESTNET_NODE, true, true, 10)
+        ElectrumConfig::new(Chain::BitcoinTestnet, DEFAULT_TESTNET_NODE, true, true, 12)
     }
     pub fn default_liquid() -> Self {
         ElectrumConfig::new(
@@ -48,7 +50,7 @@ impl ElectrumConfig {
             DEFAULT_LIQUID_TESTNET_NODE,
             true,
             true,
-            21,
+            12,
         )
     }
     pub fn new(
@@ -76,13 +78,17 @@ impl ElectrumConfig {
     pub fn build_client(&self) -> Result<electrum_client::Client, S5Error> {
         self.url.clone().build_client(self.timeout)
     }
+    // /// Builds an electrum_client::RawClient which can be used to make calls to electrum api
+    // pub fn build_raw_client(&self) -> Result<RawClient, S5Error> {
+    //     self.url.clone().build_client(self.timeout)
+    // }
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use electrum_client::ElectrumApi;
+    use electrum_client::{ElectrumApi, Param};
 
     #[test]
     fn test_electrum_default_clients() {
@@ -94,5 +100,20 @@ mod tests {
         let electrum_client = network_config.build_client().unwrap();
         assert!(electrum_client.ping().is_ok());
 
+        // let utxo = electrum_client.script_subscribe(script);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_raw_electrum_calls() {
+        let network_config = ElectrumConfig::default_bitcoin();
+        let electrum_client = network_config.build_client().unwrap();
+        // let address = "bc1qag82jekmed9n0ufe8h9q5ruzmtsycpjwcl5rre";
+        // let listunspent = "blockchain.address.listunspent";
+        // let utxos =  electrum_client.raw_call(listunspent, [Param::String(address.to_string())]).unwrap();
+        let numblocks = "blockchain.numblocks.subscribe";
+        let blockheight = electrum_client.raw_call(numblocks, []).unwrap();
+
+        println!("UTXOS: {}", blockheight);
     }
 }
