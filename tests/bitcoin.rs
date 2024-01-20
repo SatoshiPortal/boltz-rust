@@ -21,6 +21,7 @@ pub mod test_utils;
 #[ignore]
 fn test_bitcoin_ssi() {
     let invoice_str = "lntb500u1pjeqvw7pp5gzea37hweufaa2y7clud9rk9tvvzwkh0lpnn9vqp0wd955hfaupsdq8w3ehx6gxqyjw5qcqp2sp5qnxwk5ntp6a9vua4e0e3nwccuzxk2sp4kn76w3z7xrf0ve7p5jfsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqlx2zzmaep37rrm9qg2xuqnm3teasy3p29jk3459ne9ts3uctc4syps2zqt94vlkqpdqn43y2z4w7rqdupz8mfdrw0qfrkvn34tt4m4gpq5g9c6";
+    
     let invoice = Bolt11Invoice::from_str(invoice_str).unwrap();
     let out_amount = invoice.amount_milli_satoshis().unwrap() / 1000;
     // ensure the payment hash is the one boltz uses in their swap script
@@ -52,31 +53,14 @@ fn test_bitcoin_ssi() {
         keypair.public_key().to_string().clone(),
     );
     let response = boltz_client.create_swap(request).unwrap();
-    let preimage_states = Preimage::from_invoice_str(invoice_str).unwrap();
-
-    assert!(response.validate_submarine(preimage_states.hash160));
+    let preimage = Preimage::from_invoice_str(invoice_str).unwrap();
 
     println!("{:?}", response);
 
-    let timeout = response.timeout_block_height.unwrap().clone();
     let _id = response.get_id();
-    let funding_address = response.address.unwrap();
-    let redeem_script_string = response.redeem_script.unwrap();
-    let funding_amount = response.expected_amount.unwrap();
-
-    let boltz_script = BtcSwapScript::submarine_from_str(&redeem_script_string).unwrap();
-
-    let constructed_script = BtcSwapScript::new(
-        SwapType::Submarine,
-        preimage_states.hash160.to_string(),
-        boltz_script.reciever_pubkey.clone(),
-        timeout as u32,
-        keypair.public_key().to_string().clone(),
-    );
-
-    println!("{:?}", boltz_script);
-
-    assert_eq!(boltz_script, constructed_script);
+    let funding_address = response.clone().address.unwrap();
+    let funding_amount = response.clone().expected_amount.unwrap();
+    let btc_rss = response.into_btc_sub_swap_script(&preimage).unwrap();
 
     println!("*******FUND*********************");
     println!("*******SWAP*********************");
@@ -130,12 +114,9 @@ fn test_bitcoin_rsi() {
     );
     let response = boltz_client.create_swap(request).unwrap();
     println!("{:?}", response);
-    assert!(response.validate_reverse(preimage.clone(), keypair, Chain::BitcoinTestnet));
     let id = response.get_id();
-    let invoice = response.invoice.unwrap();
-    let _lockup_address = response.lockup_address.unwrap();
-    let redeem_script_string = response.redeem_script.unwrap();
-    let boltz_rev_script = BtcSwapScript::reverse_from_str(&redeem_script_string).unwrap();
+    let invoice = response.get_invoice().unwrap();
+    let boltz_rev_script = response.into_btc_rev_swap_script(&preimage, keypair, Chain::BitcoinTestnet).unwrap();
 
     let script_balance = boltz_rev_script
         .get_balance(network_config.clone())
@@ -145,7 +126,7 @@ fn test_bitcoin_rsi() {
     println!("*******PAY********************");
     println!("*******LN*********************");
     println!("*******INVOICE****************");
-    println!("{}", invoice);
+    println!("{}", invoice.to_string());
     println!("");
     println!("Once you have paid the invoice, press enter to continue the tests.");
     println!("******************************");

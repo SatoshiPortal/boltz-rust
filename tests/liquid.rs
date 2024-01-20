@@ -2,7 +2,7 @@ use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
-        liquid::{LBtcSwapScript, LBtcSwapTx},
+        liquid::{LBtcSwapTx},
     },
     util::{derivation::{SwapKey, LiquidSwapKey}, preimage::Preimage},
 };
@@ -43,16 +43,10 @@ fn test_liquid_ssi() {
     let _id = response.get_id();
 
     println!("{:?}", response);
-    assert!(response.validate_submarine(preimage.hash160));
 
     let funding_address = response.address.clone().unwrap();
     let expected_amount = response.expected_amount.clone().unwrap();
-    let blinding_string = response.get_blinding_key();
-
-    let redeem_script_string = response.redeem_script.unwrap().clone();
-
-    let boltz_script_elements =
-        LBtcSwapScript::submarine_from_str(&redeem_script_string, blinding_string).unwrap();
+    let boltz_script_elements = response.into_lbtc_sub_swap_script(&preimage);
 
     println!("{:?}", boltz_script_elements);
 
@@ -99,20 +93,10 @@ fn test_liquid_rsi() {
         out_amount,
     );
     let response = boltz_client.create_swap(request).unwrap();
-    assert!(response.validate_reverse(preimage.clone(), keypair.clone(), Chain::LiquidTestnet,));
     let id = response.get_id();
 
-    let _timeout = response.timeout_block_height.unwrap().clone();
-    let invoice = response.invoice.clone().unwrap();
-    let _lockup_address = response.lockup_address.clone().unwrap();
-    let blinding_string = response.get_blinding_key();
-    println!("BOLTZ-BLINDING-KEY: {}", blinding_string);
-
-    let redeem_script_string = response.redeem_script.unwrap().clone();
-    println!("REDEEM_SCRIPT: {}", redeem_script_string);
-
-    let boltz_script_elements =
-        LBtcSwapScript::reverse_from_str(&redeem_script_string, blinding_string.clone()).unwrap();
+    let invoice = response.get_invoice().unwrap();
+    let boltz_script_elements = response.into_lbtc_rev_swap_script(&preimage, &keypair.clone(), Chain::LiquidTestnet,).unwrap();
 
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();
@@ -120,7 +104,7 @@ fn test_liquid_rsi() {
     println!("*******PAY********************");
     println!("*******LN*********************");
     println!("*******INVOICE****************");
-    println!("{}", invoice);
+    println!("{}", invoice.to_string());
     println!("");
     println!("Once you have paid the invoice, press enter to continue the tests.");
     println!("******************************");
