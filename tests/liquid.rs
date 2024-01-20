@@ -102,7 +102,7 @@ fn test_liquid_rsi() {
     let fees = boltz_lbtc_pair.fees.reverse_total(out_amount).unwrap();
     println!("TOTAL FEES: {}", fees);
 
-    let request = CreateSwapRequest::new_lbtc_reverse(
+    let request = CreateSwapRequest::new_lbtc_reverse_onchain_amt(
         boltz_lbtc_pair.hash,
         preimage.clone().sha256.to_string(),
         keypair.public_key().to_string().clone(),
