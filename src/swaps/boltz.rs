@@ -183,8 +183,8 @@ impl FromStr for PairId {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetPairsResponse {
-    info: Vec<String>,
-    warnings: Vec<String>,
+    pub info: Vec<String>,
+    pub warnings: Vec<String>,
     pub pairs: Pairs,
 }
 
@@ -230,10 +230,10 @@ pub struct Pair {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Limits {
-    maximal: i64,
-    minimal: i64,
+    pub maximal: i64,
+    pub minimal: i64,
     /// The maximal amounts that will be accepted without chain confirmations by Boltz. 0 indicates that Boltz will not accept 0-conf.
-    maximal_zero_conf: MaximalZeroConf,
+    pub maximal_zero_conf: MaximalZeroConf,
 }
 impl Limits {
     /// Check whether the output amount intended is within the Limits
@@ -257,25 +257,25 @@ impl Limits {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MaximalZeroConf {
-    base_asset: i64,
-    quote_asset: i64,
+    pub base_asset: i64,
+    pub quote_asset: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MinerFees {
-    base_asset: AssetMinerFee,
-    quote_asset: AssetMinerFee,
+    pub base_asset: AssetMinerFee,
+    pub quote_asset: AssetMinerFee,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AssetMinerFee {
-    normal: i64,
-    reverse: ReverseMinerFee,
+    pub normal: i64,
+    pub reverse: ReverseMinerFee,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReverseMinerFee {
-    claim: i64,
-    lockup: i64,
+    pub claim: i64,
+    pub lockup: i64,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
