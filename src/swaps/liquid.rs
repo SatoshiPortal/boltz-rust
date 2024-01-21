@@ -1,4 +1,4 @@
-use electrum_client::{ElectrumApi, Param};
+use electrum_client::ElectrumApi;
 use std::str::FromStr;
 
 use bitcoin::{script::Script as BitcoinScript, Witness};
@@ -324,6 +324,39 @@ impl LBtcSwapScript {
             .to_confidential(self.blinding_key.public_key())),
         }
     }
+
+    /// Get balance for the swap script
+    pub fn get_balance(&self, network_config: ElectrumConfig) -> Result<(u64, i64), S5Error> {
+        let electrum_client = network_config.clone().build_client()?;
+        let _ = electrum_client
+            .script_subscribe(BitcoinScript::from_bytes(
+                &self
+                    .to_address(network_config.network())
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        let balance = electrum_client
+            .script_get_balance(BitcoinScript::from_bytes(
+                &self
+                    .to_address(network_config.network())
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        let _ = electrum_client
+            .script_unsubscribe(BitcoinScript::from_bytes(
+                &self
+                    .to_address(network_config.network())
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        Ok((balance.confirmed, balance.unconfirmed))
+    }
 }
 
 fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
@@ -444,7 +477,10 @@ impl LBtcSwapTx {
         let electrum_client = network_config.clone().build_client()?;
         let address = self.swap_script.to_address(network_config.network())?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
-            self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
+            self.swap_script
+                .to_address(network_config.network())?
+                .script_pubkey()
+                .as_bytes(),
         )) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
@@ -499,17 +535,39 @@ impl LBtcSwapTx {
     }
 
     /// Fetch utxo for the script
-    pub fn fetch_utxo_raw(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
+    pub fn fetch_utxo_fix(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
         let electrum_client = network_config.clone().build_client()?;
-        let address = self.swap_script.to_address(network_config.network())?;
-        let method = "blockchain.address.listunspent";
-        let method = "blockchain.address.get_balance";
-        let utxos = match electrum_client.raw_call(method, [Param::String(address.to_string())],
-        ) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-        };
-        println!("UTXOS: {}", utxos);
+        let _ = electrum_client
+            .script_subscribe(BitcoinScript::from_bytes(
+                &self
+                    .swap_script
+                    .to_address(network_config.network())
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        let utxo = electrum_client
+            .script_list_unspent(BitcoinScript::from_bytes(
+                &self
+                    .swap_script
+                    .to_address(network_config.network())
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        println!("UTXO: {:#?}", utxo);
+        let _ = electrum_client
+            .script_unsubscribe(BitcoinScript::from_bytes(
+                &self
+                    .swap_script
+                    .to_address(network_config.network())
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
         Ok(())
     }
 
@@ -733,30 +791,77 @@ impl LBtcSwapTx {
 mod tests {
     use super::*;
     #[test]
-    fn test_fetch_utxo_fix(){
-        const RETURN_ADDRESS: &str =
+    fn test_fetch_utxo_fix() {
+        const _RETURN_ADDRESS: &str =
         "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
         let redeem_script_str = "8201208763a9142bdd03d431251598f46a625f1d3abfcd7f491535882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c677503715912b1752103fced00385bd14b174a571d88b4b6aced2cb1d532237c29c4ec61338fbb7eff4068ac".to_string();
         let blinding_str = "02702ae71ec11a895f6255e26395983585a0d791ea1eb83d1aa54a66056469da";
-        let script = LBtcSwapScript::reverse_from_str(
-            &redeem_script_str.clone(),
-            blinding_str.to_string(),
-        )
-        .unwrap();
-
+        let script =
+            LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), blinding_str.to_string())
+                .unwrap();
         let network_config = ElectrumConfig::default_liquid();
+        let address = script.to_address(network_config.network()).unwrap();
+        println!("{:?}", address.to_string());
+        // let balance = script.get_balance(network_config.clone()).unwrap();
+        // println!("BALANCE: {:?}", balance);
 
-        // let utxo = network_config.build_client().unwrap().script_get_balance(BitcoinScript::from_bytes(&script.to_address(Chain::LiquidTestnet).unwrap().script_pubkey().as_bytes())).unwrap();
-        
-        // println!("{:?}", utxo);
+        let _status = network_config
+            .build_client()
+            .unwrap()
+            .script_subscribe(BitcoinScript::from_bytes(
+                &script
+                    .to_address(Chain::LiquidTestnet)
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        // println!("Sub status: {:#?}",_status);
 
-        let blockheight = network_config.build_client().unwrap().block_headers_subscribe().unwrap();
-        println!("{:?}", blockheight);
+        // let utxo_from_raw = network_config
+        // .build_client()
+        // .unwrap()
+        // .raw_call("blockchain.address.listunspent", [Param::String(script
+        //         .to_address(Chain::LiquidTestnet)
+        //         .unwrap()
+        //         .to_string())]
+        // )
+        // .unwrap();
+        // println!("{:#?}",utxo_from_raw);
+        let utxo = network_config
+            .build_client()
+            .unwrap()
+            .script_list_unspent(BitcoinScript::from_bytes(
+                &script
+                    .to_address(Chain::LiquidTestnet)
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        println!("{:#?}", utxo);
 
-        let mut liquid_swap_tx =
-            LBtcSwapTx::new_claim(script, RETURN_ADDRESS.to_string()).unwrap();
-        // let _ = liquid_swap_tx.fetch_utxo(network_config.clone()).unwrap();
-        let _ = liquid_swap_tx.fetch_utxo_raw(network_config.clone()).unwrap();
+        let _ =
+            network_config
+                .build_client()
+                .unwrap()
+                .script_unsubscribe(BitcoinScript::from_bytes(
+                    &script
+                        .to_address(Chain::LiquidTestnet)
+                        .unwrap()
+                        .script_pubkey()
+                        .as_bytes(),
+                ));
+
+        // println!("ATTEMPTING TO GET BLOCKHEIGHT FROM ELECTRUM CLIENT");
+
+        // let blockheight = network_config.build_client().unwrap().block_headers_subscribe().unwrap();
+        // println!("{:?}", blockheight);
+
+        // let mut liquid_swap_tx =
+        //     LBtcSwapTx::new_claim(script, RETURN_ADDRESS.to_string()).unwrap();
+        // // let _ = liquid_swap_tx.fetch_utxo(network_config.clone()).unwrap();
+        // let _ = liquid_swap_tx.fetch_utxo_raw(network_config.clone()).unwrap();
     }
 
     #[test]

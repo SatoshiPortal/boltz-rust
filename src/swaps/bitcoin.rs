@@ -298,7 +298,7 @@ impl BtcSwapScript {
     pub fn get_balance(&self, network_config: ElectrumConfig) -> Result<(u64, i64), S5Error> {
         let electrum_client = network_config.build_client()?;
 
-        let script_balance = match electrum_client.script_get_balance(electrum_client::bitcoin::Script::from_bytes(&self.to_script().unwrap().as_bytes())) {
+        let script_balance = match electrum_client.script_get_balance(electrum_client::bitcoin::Script::from_bytes(&self.to_address(network_config.network()).unwrap().script_pubkey().as_bytes())) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Script, &e.to_string())),
         };
@@ -418,7 +418,7 @@ impl BtcSwapTx {
         let electrum_client = network_config.build_client()?;
 
         let utxos = match electrum_client
-            .script_list_unspent(electrum_client::bitcoin::Script::from_bytes(&self.swap_script.to_script()?.to_p2wsh().as_bytes()))
+            .script_list_unspent(electrum_client::bitcoin::Script::from_bytes(self.swap_script.to_address(network_config.network())?.script_pubkey().as_bytes()))
         {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),

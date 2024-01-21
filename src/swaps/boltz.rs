@@ -289,24 +289,30 @@ pub struct Fees {
 }
 
 impl Fees {
-    /// Calculate base fees (boltz + ln fee) for a submarine swap, given an output amount
-    pub fn submarine_base(&self, output_amount: u64) -> Result<u64, S5Error> {
+    /// Calculate boltz fees for a submarine swap, given an output amount
+    pub fn submarine_boltz(&self, output_amount: u64) -> Result<u64, S5Error> {
         let boltz_fee = ((self.percentage_swap_in / 100.0) * output_amount as f64).round() as u64;
-        let ln_fee = (self.miner_fees.quote_asset.normal) as u64;
-        Ok(boltz_fee + ln_fee)
+        Ok(boltz_fee)
     }
-    /// Calculate onchain lockup tx fees (miner fee) for a submarine swap, given an output amount
+    /// Get claim miner fees for a submarine swap
+    pub fn submarine_claim(&self) -> Result<u64, S5Error> {
+        let ln_fee = (self.miner_fees.quote_asset.normal) as u64;
+        let claim_miner_fees = (self.miner_fees.base_asset.normal) as u64;
+        Ok(claim_miner_fees + ln_fee)
+    }
+    /// Get onchain lockup miner fees for a submarine swap
     pub fn submarine_lockup_estimate(&self) -> u64 {
         self.miner_fees.base_asset.normal as u64
     }
-    /// Calculate base fees (boltz + lockup miner fee) for a reverse swap, given an output amount
-    pub fn reverse_base(&self, output_amount: u64) -> Result<u64, S5Error> {
+    /// Calculate boltz fees for a reverse swap, given an output amount
+    pub fn reverse_boltz(&self, output_amount: u64) -> Result<u64, S5Error> {
         let boltz_fee = ((self.percentage / 100.0) * output_amount as f64).round() as u64;
-        println!("Boltz Fee: {}", boltz_fee);
+        Ok(boltz_fee)
+    }
+    /// Get lockup miner fees for a reverse swap
+    pub fn reverse_lockup(&self) -> Result<u64, S5Error> {
         let lockup_fee = (self.miner_fees.base_asset.reverse.lockup) as u64;
-        let claim_fee = self.miner_fees.base_asset.reverse.claim as u64;
-        println!("Claim Fee: {}\nLockup Fee: {}", claim_fee, lockup_fee);
-        Ok(boltz_fee + lockup_fee)
+        Ok(lockup_fee)
     }
     /// Estimate claim tx miner fee (claim miner fee) for a reverse swap
     pub fn reverse_claim_estimate(&self) -> u64 {
@@ -809,7 +815,7 @@ impl CreateSwapResponse {
             Some(invoice_str) => {
                 let invoice = match Bolt11Invoice::from_str(&invoice_str) {
                     Ok(invoice) => invoice,
-                    Err(e) => {
+                    Err(_) => {
                         return Err(S5Error::new(
                             ErrorKind::BoltzApi,
                             "Error parsing invoice from boltz.",
@@ -967,7 +973,7 @@ mod tests {
     use bitcoin::secp256k1::{Keypair, Secp256k1};
 
     use super::*;
-    use crate::util::{secrets::{SwapKey,Preimage}};
+    use crate::util::secrets::{Preimage, SwapKey};
 
     #[test]
     fn test_get_pairs() {
@@ -1059,7 +1065,7 @@ mod tests {
         let pairs = client.get_pairs().unwrap();
         let btc_pair = pairs.get_btc_pair();
         let output_amount = 75_000;
-        let base_fees = btc_pair.fees.reverse_base(output_amount).unwrap();
+        let base_fees = btc_pair.fees.reverse_boltz(output_amount).unwrap() + btc_pair.fees.reverse_lockup().unwrap();
         let claim_fee = btc_pair.fees.reverse_claim_estimate();
         println!("CALCULATED FEES: {}", base_fees);
         println!("ONCHAIN LOCKUP: {}", output_amount - base_fees);
@@ -1083,7 +1089,7 @@ mod tests {
         println!("Onchain Amount: {}", response.onchain_amount.unwrap());
         assert!((output_amount - base_fees) == response.onchain_amount.unwrap());
 
-        let btc_rss = response.into_btc_rev_swap_script(&preimage, claim_key_pair, Chain::Bitcoin);
+        let _btc_rss = response.into_btc_rev_swap_script(&preimage, claim_key_pair, Chain::Bitcoin);
         // let timeout = response.get_timeout();
         // let timeout = LockTime::from_height(timeout as u32).unwrap();
     }

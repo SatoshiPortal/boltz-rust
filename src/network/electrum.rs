@@ -1,4 +1,4 @@
-use electrum_client::raw_client::RawClient;
+// use electrum_client::raw_client::RawClient;
 
 use crate::util::error::{ErrorKind, S5Error};
 
@@ -88,7 +88,7 @@ impl ElectrumConfig {
 mod tests {
 
     use super::*;
-    use electrum_client::{ElectrumApi, Param};
+    use electrum_client::ElectrumApi;
 
     #[test]
     fn test_electrum_default_clients() {

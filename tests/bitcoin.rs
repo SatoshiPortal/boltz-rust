@@ -6,7 +6,7 @@ use boltz_client::{
             BoltzApiClient, CreateSwapRequest, SwapStatusRequest, SwapType, BOLTZ_TESTNET_URL,
         },
     },
-    util::{secrets::{SwapKey,Preimage}},
+    util::secrets::{SwapKey,Preimage},
     Bolt11Invoice, Keypair, Secp256k1,
 };
 
@@ -45,7 +45,7 @@ fn test_bitcoin_ssi() {
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_btc_pair = boltz_pairs.get_btc_pair();
-    let fees = boltz_btc_pair.fees.submarine_base(out_amount).unwrap();
+    let fees = boltz_btc_pair.fees.submarine_boltz(out_amount).unwrap() + boltz_btc_pair.fees.submarine_claim().unwrap();
     println!("TOTAL FEES: {}", fees);
     let request = CreateSwapRequest::new_btc_submarine(
         boltz_btc_pair.hash,
