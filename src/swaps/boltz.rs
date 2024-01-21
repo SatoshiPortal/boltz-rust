@@ -661,7 +661,7 @@ impl CreateSwapResponse {
         self.id.clone()
     }
     /// Get a copy of the blinding key
-    fn get_blinding_key(&self) -> Result<String, S5Error> {
+    pub fn get_blinding_key(&self) -> Result<String, S5Error> {
         if self.blinding_key.is_none() {
             return Err(S5Error::new(
                 ErrorKind::Input,
