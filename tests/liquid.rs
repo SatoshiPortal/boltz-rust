@@ -35,9 +35,9 @@ fn test_liquid_ssi() {
     println!("TOTAL FEES:{}", fees);
 
     let request = CreateSwapRequest::new_lbtc_submarine(
-        boltz_lbtc_pair.hash,
-        invoice_str.to_string(),
-        keypair.public_key().to_string(),
+        &boltz_lbtc_pair.hash,
+        invoice_str,
+        &keypair.public_key().to_string(),
     );
     let response = boltz_client.create_swap(request).unwrap();
     let _id = response.get_id();

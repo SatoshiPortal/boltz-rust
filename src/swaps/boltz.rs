@@ -480,17 +480,17 @@ pub struct CreateSwapRequest {
 impl CreateSwapRequest {
     /// Create a BTC->LN Submarine Swap
     pub fn new_btc_submarine(
-        pair_hash: String,
-        invoice: String,
-        refund_pubkey: String,
+        pair_hash: &str,
+        invoice: &str,
+        refund_pubkey: &str,
     ) -> CreateSwapRequest {
         CreateSwapRequest {
             swap_type: SwapType::Submarine,
             pair_id: PairId::BtcBtc,
             order_side: OrderSide::Sell,
-            pair_hash,
-            invoice: Some(invoice),
-            refund_public_key: Some(refund_pubkey),
+            pair_hash: pair_hash.to_string(),
+            invoice: Some(invoice.to_string()),
+            refund_public_key: Some(refund_pubkey.to_string()),
             preimage_hash: None,
             claim_public_key: None,
             timeout_block_height: None,
@@ -504,20 +504,20 @@ impl CreateSwapRequest {
     /// Eg. Swap for amount 50,000 sats will create an invoice for 50,000 sats
     /// Fees will be deducted from the onchain swap script amount
     pub fn new_btc_reverse_invoice_amt(
-        pair_hash: String,
-        preimage_hash: String,
-        claim_public_key: String,
+        pair_hash: &str,
+        preimage_hash: &str,
+        claim_public_key: &str,
         invoice_amount: u64,
     ) -> CreateSwapRequest {
         CreateSwapRequest {
             swap_type: SwapType::ReverseSubmarine,
             pair_id: PairId::BtcBtc,
             order_side: OrderSide::Buy,
-            pair_hash,
+            pair_hash:pair_hash.to_string(),
             invoice: None,
             refund_public_key: None,
-            preimage_hash: Some(preimage_hash),
-            claim_public_key: Some(claim_public_key),
+            preimage_hash: Some(preimage_hash.to_string()),
+            claim_public_key: Some(claim_public_key.to_string()),
             timeout_block_height: None,
             invoice_amount: Some(invoice_amount),
             onchain_amount: None,
@@ -529,20 +529,20 @@ impl CreateSwapRequest {
     /// Eg. Swap for amount 50,000 sats will create an invoice for (50,000 + fees) sats
     /// The onchain amount to sweep will be exactly 50,000
     pub fn new_btc_reverse_onchain_amt(
-        pair_hash: String,
-        preimage_hash: String,
-        claim_public_key: String,
+        pair_hash: &str,
+        preimage_hash: &str,
+        claim_public_key: &str,
         onchain_amount: u64,
     ) -> CreateSwapRequest {
         CreateSwapRequest {
             swap_type: SwapType::ReverseSubmarine,
             pair_id: PairId::BtcBtc,
             order_side: OrderSide::Buy,
-            pair_hash,
+            pair_hash: pair_hash.to_string(),
             invoice: None,
             refund_public_key: None,
-            preimage_hash: Some(preimage_hash),
-            claim_public_key: Some(claim_public_key),
+            preimage_hash: Some(preimage_hash.to_string()),
+            claim_public_key: Some(claim_public_key.to_string()),
             timeout_block_height: None,
             onchain_amount: Some(onchain_amount),
             invoice_amount: None,
@@ -552,17 +552,17 @@ impl CreateSwapRequest {
 
     /// Create a BTC->LN Submarine Swap
     pub fn new_lbtc_submarine(
-        pair_hash: String,
-        invoice: String,
-        refund_public_key: String,
+        pair_hash: &str,
+        invoice: &str,
+        refund_public_key: &str,
     ) -> CreateSwapRequest {
         CreateSwapRequest {
             swap_type: SwapType::Submarine,
             pair_id: PairId::LBtcBtc,
             order_side: OrderSide::Sell,
-            pair_hash,
-            invoice: Some(invoice),
-            refund_public_key: Some(refund_public_key),
+            pair_hash:pair_hash.to_string(),
+            invoice: Some(invoice.to_string()),
+            refund_public_key: Some(refund_public_key.to_string()),
             preimage_hash: None,
             claim_public_key: None,
             timeout_block_height: None,
@@ -1016,7 +1016,7 @@ mod tests {
     fn test_create_bitcoin_submarine() {
         let secp = Secp256k1::new();
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let invoice = "lntb501u1pjh67z3pp539hhfy9vk70yde3m0lkp838l2y0xqskmf5cwm8ng25rqp8asncmsdq8w3jhxaqxqyjw5qcqp2sp59dsnqt4ecde2frjn5zrnw6cunryadzv3p386glz8l7uj37pnwnvsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq4esj2vvneu5y4e8qtheyxmepjgg5turmxccgmuks78l08m9wguvhvw2yvrftfjh6tzaxy57mty3zsvg3jveazfxs60e6acn989pzdlspafd52g".to_string();
+        let invoice = "lntb501u1pjh67z3pp539hhfy9vk70yde3m0lkp838l2y0xqskmf5cwm8ng25rqp8asncmsdq8w3jhxaqxqyjw5qcqp2sp59dsnqt4ecde2frjn5zrnw6cunryadzv3p386glz8l7uj37pnwnvsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssq4esj2vvneu5y4e8qtheyxmepjgg5turmxccgmuks78l08m9wguvhvw2yvrftfjh6tzaxy57mty3zsvg3jveazfxs60e6acn989pzdlspafd52g";
 
         let refund_key_pair = Keypair::from_seckey_str(
             &secp,
@@ -1024,11 +1024,11 @@ mod tests {
         )
         .unwrap();
         let pair_hash =
-            "a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5".to_string();
+            "a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5";
         let request = CreateSwapRequest::new_btc_submarine(
             pair_hash,
             invoice,
-            refund_key_pair.public_key().to_string(),
+            &refund_key_pair.public_key().to_string(),
         );
         println!("{:?}", serde_json::to_string(&request));
         let response = client.create_swap(request);
@@ -1081,9 +1081,9 @@ mod tests {
 
         let preimage = Preimage::new();
         let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
-            btc_pair.hash,
-            preimage.sha256.clone().to_string(),
-            claim_key_pair.public_key().to_string(),
+            &btc_pair.hash,
+            &preimage.sha256.clone().to_string(),
+            &claim_key_pair.public_key().to_string(),
             output_amount,
         );
         let response = client.create_swap(request).unwrap();
