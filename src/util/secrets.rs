@@ -38,7 +38,7 @@ impl SwapKey {
     pub fn from_submarine_account(
         mnemonic: &str,
         passphrase: &str,
-        network: Chain,
+        network: &Chain,
         index: u64,
     ) -> Result<SwapKey, S5Error> {
         let secp = Secp256k1::new();
@@ -371,7 +371,7 @@ mod tests {
     fn test_derivation() {
         let mnemonic: &str = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let index = 0 as u64; // 0
-        let sk = SwapKey::from_submarine_account(mnemonic, "", Chain::Bitcoin, index).unwrap();
+        let sk = SwapKey::from_submarine_account(mnemonic, "", &Chain::Bitcoin, index).unwrap();
         let lks: LiquidSwapKey = sk.clone().into();
         assert!(sk.fingerprint == lks.fingerprint);
         // println!("{:?}", derived.unwrap().Keypair.display_secret());

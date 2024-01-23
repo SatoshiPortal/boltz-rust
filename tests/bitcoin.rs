@@ -29,7 +29,7 @@ fn test_bitcoin_ssi() {
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
 
     let keypair =
-        SwapKey::from_submarine_account(&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
+        SwapKey::from_submarine_account(&mnemonic.to_string(), "", &Chain::BitcoinTestnet, 1)
             .unwrap()
             .keypair;
     println!(
@@ -50,7 +50,7 @@ fn test_bitcoin_ssi() {
     let request = CreateSwapRequest::new_btc_submarine(
         boltz_btc_pair.hash,
         invoice_str.to_string(),
-        keypair.public_key().to_string().clone(),
+        keypair.public_key().to_string(),
     );
     let response = boltz_client.create_swap(request).unwrap();
     let preimage = Preimage::from_invoice_str(invoice_str).unwrap();
@@ -58,9 +58,9 @@ fn test_bitcoin_ssi() {
     println!("{:?}", response);
 
     let _id = response.get_id();
-    let funding_address = response.clone().address.unwrap();
-    let funding_amount = response.clone().expected_amount.unwrap();
-    let btc_rss = response.into_btc_sub_swap_script(&preimage).unwrap();
+    let funding_address = response.address.as_ref().unwrap();
+    let funding_amount = response.expected_amount.as_ref().unwrap();
+    let _ = response.into_btc_sub_swap_script(&preimage).unwrap();
 
     println!("*******FUND*********************");
     println!("*******SWAP*********************");
@@ -96,7 +96,7 @@ fn test_bitcoin_rsi() {
     let preimage = Preimage::new();
     println!(
         "****SECRETS****:\n preimage: {:?}",
-        preimage.to_string().clone()
+        preimage.to_string()
     );
     // SECRETS
 
@@ -108,7 +108,7 @@ fn test_bitcoin_rsi() {
 
     let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
         boltz_btc_pair.hash,
-        preimage.clone().sha256.to_string(),
+        preimage.sha256.to_string(),
         keypair.public_key().to_string(),
         out_amount,
     );
@@ -119,7 +119,7 @@ fn test_bitcoin_rsi() {
     let boltz_rev_script = response.into_btc_rev_swap_script(&preimage, keypair, Chain::BitcoinTestnet).unwrap();
 
     let script_balance = boltz_rev_script
-        .get_balance(network_config.clone())
+        .get_balance(&network_config)
         .unwrap();
     assert_eq!(script_balance.0, 0);
     assert_eq!(script_balance.1, 0);
@@ -146,7 +146,7 @@ fn test_bitcoin_rsi() {
             println!("*******ONCHAIN-TX*************");
             println!("*******DETECTED***************");
             let script_balance = boltz_rev_script
-                .get_balance(network_config.clone())
+                .get_balance(&network_config)
                 .unwrap();
             println!(
                 "confirmed: {}, unconfirmed: {}",
@@ -163,12 +163,12 @@ fn test_bitcoin_rsi() {
     let mut rv_claim_tx = BtcSwapTx::new_claim(
         boltz_rev_script,
         RETURN_ADDRESS.to_string(),
-        network_config.network(),
+        &network_config.network(),
     )
     .unwrap();
-    let _ = rv_claim_tx.fetch_utxo(out_amount, network_config.clone());
-    let signed_tx = rv_claim_tx.drain(keypair, preimage, absolute_fees).unwrap();
-    let txid = rv_claim_tx.broadcast(signed_tx, network_config).unwrap();
+    let _ = rv_claim_tx.fetch_utxo(out_amount, &network_config);
+    let signed_tx = rv_claim_tx.drain(&keypair, &preimage, absolute_fees).unwrap();
+    let txid = rv_claim_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
 }
 
@@ -207,13 +207,13 @@ fn test_recover_bitcoin_rsi() {
     let mut rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(&redeem_script).unwrap(),
         RETURN_ADDRESS.to_string(),
-        network_config.network(),
+        &network_config.network(),
     )
     .unwrap();
 
-    let _ = rev_swap_tx.fetch_utxo(out_amount, network_config.clone());
-    let signed_tx = rev_swap_tx.drain(keypair, preimage, absolute_fees).unwrap();
-    let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
+    let _ = rev_swap_tx.fetch_utxo(out_amount, &network_config);
+    let signed_tx = rev_swap_tx.drain(&keypair, &preimage, absolute_fees).unwrap();
+    let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
 }
 

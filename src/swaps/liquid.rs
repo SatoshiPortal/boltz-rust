@@ -326,7 +326,7 @@ impl LBtcSwapScript {
     }
 
     /// Get balance for the swap script
-    pub fn get_balance(&self, network_config: ElectrumConfig) -> Result<(u64, i64), S5Error> {
+    pub fn get_balance(&self, network_config: &ElectrumConfig) -> Result<(u64, i64), S5Error> {
         let electrum_client = network_config.clone().build_client()?;
         let _ = electrum_client
             .script_subscribe(BitcoinScript::from_bytes(
@@ -467,7 +467,7 @@ impl LBtcSwapTx {
         }
     }
     /// Fetch utxo for the script
-    pub fn fetch_utxo(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
+    pub fn fetch_utxo(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
         let electrum_client = network_config.clone().build_client()?;
         let address = self.swap_script.to_address(network_config.network())?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
@@ -529,7 +529,7 @@ impl LBtcSwapTx {
     }
 
     /// Fetch utxo for the script
-    pub fn fetch_utxo_fix(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
+    pub fn fetch_utxo_fix(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
         let electrum_client = network_config.clone().build_client()?;
         let _ = electrum_client
             .script_subscribe(BitcoinScript::from_bytes(
@@ -565,7 +565,7 @@ impl LBtcSwapTx {
         Ok(())
     }
 
-    // pub fn fetch_utxos(&mut self, network_config: ElectrumConfig) -> Result<(), S5Error> {
+    // pub fn fetch_utxos(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
     //     let electrum_client = network_config.clone().build_client()?;
     //     // let address = self.swap_script.to_address(network_config.network())?;
     //     let utxos = match electrum_client.script_get_history(BitcoinScript::from_bytes(
@@ -910,7 +910,7 @@ impl LBtcSwapTx {
     pub fn broadcast(
         &mut self,
         signed_tx: Transaction,
-        network_config: ElectrumConfig,
+        network_config: &ElectrumConfig,
     ) -> Result<String, S5Error> {
         let electrum_client = network_config.build_client()?;
         let serialized = serialize(&signed_tx);
@@ -933,7 +933,7 @@ mod tests {
         let script =
             LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), blinding_str.to_string())
                 .unwrap();
-        let network_config = ElectrumConfig::default_liquid();
+        let network_config = &ElectrumConfig::default_liquid();
         let address = script.to_address(network_config.network()).unwrap();
         println!("{:?}", address.to_string());
         // let balance = script.get_balance(network_config.clone()).unwrap();
@@ -1018,7 +1018,7 @@ mod tests {
             "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6",
         )
         .unwrap();
-        let network_config = ElectrumConfig::default_liquid();
+        let network_config = &ElectrumConfig::default_liquid();
         let decoded = LBtcSwapScript::reverse_from_str(
             &redeem_script_str.clone(),
             boltz_blinding_str.to_string(),
@@ -1041,7 +1041,7 @@ mod tests {
         };
 
         let address = el_script
-            .to_address(network_config.clone().network())
+            .to_address(network_config.network())
             .unwrap();
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         println!("Blinding Pub: {:?}", address.blinding_pubkey);
@@ -1050,7 +1050,7 @@ mod tests {
 
         let mut liquid_swap_tx =
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
-        let _ = liquid_swap_tx.fetch_utxo(network_config.clone()).unwrap();
+        let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
         let final_tx = liquid_swap_tx.drain(my_key_pair, preimage, 5_000).unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
@@ -1063,7 +1063,7 @@ mod tests {
         // println!("CHECK FILE tx.hex!");
 
         let txid = liquid_swap_tx
-            .broadcast(final_tx, network_config.clone())
+            .broadcast(final_tx, &network_config)
             .unwrap();
         println!("TXID: {}", txid);
     }

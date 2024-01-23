@@ -848,11 +848,11 @@ impl CreateSwapResponse {
                     BtcSwapScript::reverse_from_str(&self.redeem_script.as_ref().unwrap()).unwrap();
 
                 let constructed_rev_script = BtcSwapScript::new(
-                    SwapType::ReverseSubmarine,
-                    preimage.hash160.to_string(),
-                    keypair.public_key().to_string().clone(),
-                    self.timeout_block_height.unwrap() as u32,
-                    boltz_rev_script.sender_pubkey.clone(),
+                    &SwapType::ReverseSubmarine,
+                    &preimage.hash160.to_string(),
+                    &keypair.public_key().to_string(),
+                    &(self.timeout_block_height.unwrap() as u32),
+                    &boltz_rev_script.sender_pubkey,
                 );
                 let address = constructed_rev_script.to_address(chain).unwrap();
                 if constructed_rev_script == boltz_rev_script
@@ -1065,7 +1065,8 @@ mod tests {
         let pairs = client.get_pairs().unwrap();
         let btc_pair = pairs.get_btc_pair();
         let output_amount = 75_000;
-        let base_fees = btc_pair.fees.reverse_boltz(output_amount).unwrap() + btc_pair.fees.reverse_lockup().unwrap();
+        let base_fees = btc_pair.fees.reverse_boltz(output_amount).unwrap()
+            + btc_pair.fees.reverse_lockup().unwrap();
         let claim_fee = btc_pair.fees.reverse_claim_estimate();
         println!("CALCULATED FEES: {}", base_fees);
         println!("ONCHAIN LOCKUP: {}", output_amount - base_fees);

@@ -21,7 +21,7 @@ fn test_liquid_ssi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = SwapKey::from_submarine_account(&mnemonic, "", Chain::LiquidTestnet, 1)
+    let keypair = SwapKey::from_submarine_account(&mnemonic, "", &Chain::LiquidTestnet, 1)
         .unwrap()
         .keypair;
     println!("{:?}", keypair);
@@ -37,15 +37,15 @@ fn test_liquid_ssi() {
     let request = CreateSwapRequest::new_lbtc_submarine(
         boltz_lbtc_pair.hash,
         invoice_str.to_string(),
-        keypair.public_key().to_string().clone(),
+        keypair.public_key().to_string(),
     );
     let response = boltz_client.create_swap(request).unwrap();
     let _id = response.get_id();
 
     println!("{:?}", response);
 
-    let funding_address = response.address.clone().unwrap();
-    let expected_amount = response.expected_amount.clone().unwrap();
+    let funding_address = response.address.as_ref().unwrap();
+    let expected_amount = response.expected_amount.unwrap();
     let boltz_script_elements = response.into_lbtc_sub_swap_script(&preimage);
 
     println!("{:?}", boltz_script_elements);
@@ -88,15 +88,15 @@ fn test_liquid_rsi() {
 
     let request = CreateSwapRequest::new_lbtc_reverse_onchain_amt(
         boltz_lbtc_pair.hash,
-        preimage.clone().sha256.to_string(),
-        keypair.public_key().to_string().clone(),
+        preimage.sha256.to_string(),
+        keypair.public_key().to_string(),
         out_amount,
     );
     let response = boltz_client.create_swap(request).unwrap();
     let id = response.get_id();
 
     let invoice = response.get_invoice().unwrap();
-    let boltz_script_elements = response.into_lbtc_rev_swap_script(&preimage, &keypair.clone(), Chain::LiquidTestnet,).unwrap();
+    let boltz_script_elements = response.into_lbtc_rev_swap_script(&preimage, &keypair, Chain::LiquidTestnet,).unwrap();
 
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();
@@ -133,10 +133,10 @@ fn test_liquid_rsi() {
 
     let mut rev_swap_tx =
         LBtcSwapTx::new_claim(boltz_script_elements, RETURN_ADDRESS.to_string()).unwrap();
-    let _ = rev_swap_tx.fetch_utxo(network_config.clone()).unwrap();
+    let _ = rev_swap_tx.fetch_utxo(&network_config).unwrap();
     println!("{:?}", rev_swap_tx);
     test_utils::pause_and_wait("Waiting....");
-    let _ = rev_swap_tx.fetch_utxo(network_config.clone()).unwrap();
+    let _ = rev_swap_tx.fetch_utxo(&network_config).unwrap();
     println!("{:?}", rev_swap_tx);
     test_utils::pause_and_wait("Waiting....");
 
@@ -147,6 +147,6 @@ fn test_liquid_rsi() {
             absolute_fees,
         )
         .unwrap();
-    let txid = rev_swap_tx.broadcast(signed_tx, network_config).unwrap();
+    let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
 }
