@@ -462,14 +462,8 @@ impl LBtcSwapTx {
             ));
         }
         match self.kind {
-            SwapTxKind::Claim => Ok(self.sign_claim_tx(keys, preimage, absolute_fees)?),
-            SwapTxKind::Refund => {
-                let _ = self._sign_refund_tx(keys);
-                Err(S5Error::new(
-                    ErrorKind::Transaction,
-                    "Refund transaction signing not supported yet",
-                ))
-            }
+            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
+            SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
         }
     }
     /// Fetch utxo for the script
@@ -596,7 +590,7 @@ impl LBtcSwapTx {
         self.has_utxo() && self.utxo_value.unwrap() == expected_value
     }
 
-    /// Sign a reverse swap transaction
+    /// Sign a claim transaction for a reverse swap
     fn sign_claim_tx(
         &self,
         keys: ZKKeyPair,
@@ -750,16 +744,156 @@ impl LBtcSwapTx {
         };
         Ok(signed_tx)
     }
-
-    /// PENDING: Sign a refund transaction for a submarine swap
-    fn _sign_refund_tx(&self, _keys: ZKKeyPair) -> Result<(), S5Error> {
+    /// Sign a refund transaction for a submarine swap
+    fn sign_refund_tx(&self, keys: ZKKeyPair, absolute_fees: u64) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
                 ErrorKind::Script,
                 "Refund transactions can only be constructed for Submarine swaps.",
             ));
         }
-        Ok(())
+        if self.swap_script.swap_type == SwapType::Submarine {
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Claim transactions can only be constructed for Reverse swaps.",
+            ));
+        }
+
+        let redeem_script = self.swap_script.to_script()?;
+
+        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+        let unsigned_input: TxIn = TxIn {
+            sequence: sequence,
+            previous_output: self.utxo.unwrap(),
+            script_sig: Script::new(),
+            witness: TxInWitness::default(),
+            is_pegin: false,
+            asset_issuance: AssetIssuance::default(),
+        };
+
+        use bitcoin::secp256k1::rand::rngs::OsRng;
+        let mut rng = OsRng::default();
+        let secp = Secp256k1::new();
+
+        let is_explicit_utxo =
+            self.utxo_confidential_value.is_none() && self.txout_secrets.is_none();
+
+        if is_explicit_utxo {
+            todo!()
+        }
+        let asset_id = self.txout_secrets.unwrap().asset;
+        let out_abf = AssetBlindingFactor::new(&mut rng);
+        let exp_asset = confidential::Asset::Explicit(asset_id);
+        let inp_txout_secrets = self.txout_secrets.unwrap();
+
+        let (blinded_asset, asset_surjection_proof) =
+            match exp_asset.blind(&mut rng, &secp, out_abf, &[inp_txout_secrets]) {
+                Ok(result) => result,
+                Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
+            };
+
+        let output_value = self.utxo_value.unwrap() - absolute_fees;
+
+        let final_vbf = ValueBlindingFactor::last(
+            &secp,
+            output_value,
+            out_abf,
+            &[(
+                self.txout_secrets.unwrap().value,
+                self.txout_secrets.unwrap().asset_bf,
+                self.txout_secrets.unwrap().value_bf,
+            )],
+            &[(
+                absolute_fees,
+                AssetBlindingFactor::zero(),
+                ValueBlindingFactor::zero(),
+            )],
+        );
+        let explicit_value = elements::confidential::Value::Explicit(output_value);
+        let msg = elements::RangeProofMessage {
+            asset: asset_id,
+            bf: out_abf,
+        };
+        let ephemeral_sk = SecretKey::new(&mut rng);
+        // assuming we always use a blinded address that has an extractable blinding pub
+        let (blinded_value, nonce, rangeproof) = match explicit_value.blind(
+            &secp,
+            final_vbf,
+            self.output_address.blinding_pubkey.unwrap(),
+            ephemeral_sk,
+            &self.output_address.script_pubkey(),
+            &msg,
+        ) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+
+        let tx_out_witness = TxOutWitness {
+            surjection_proof: Some(Box::new(asset_surjection_proof)), // from asset blinding
+            rangeproof: Some(Box::new(rangeproof)),                   // from value blinding
+        };
+        let payment_output: TxOut = TxOut {
+            script_pubkey: self.output_address.script_pubkey(),
+            value: blinded_value,
+            asset: blinded_asset,
+            nonce: nonce,
+            witness: tx_out_witness,
+        };
+        let fee_output: TxOut = TxOut::new_fee(absolute_fees, asset_id);
+
+        let unsigned_tx = Transaction {
+            version: 2,
+            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            input: vec![unsigned_input],
+            output: vec![payment_output.clone(), fee_output.clone()],
+        };
+
+        // SIGN TRANSACTION
+        let hash_type = elements::EcdsaSighashType::All;
+        let sighash = match Message::from_digest_slice(
+            &SighashCache::new(&unsigned_tx).segwitv0_sighash(
+                0,
+                &redeem_script,
+                self.utxo_confidential_value.unwrap(),
+                hash_type,
+            )[..],
+        ) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
+        };
+
+        let sig: secp256k1_zkp::ecdsa::Signature =
+            secp.sign_ecdsa_low_r(&sighash, &keys.secret_key());
+        let sig = elementssig_to_rawsig(&(sig, hash_type));
+
+        let mut script_witness = Witness::new();
+        script_witness.push(sig);
+        script_witness.push([0]);
+        script_witness.push(redeem_script.as_bytes());
+
+        let witness = TxInWitness {
+            amount_rangeproof: None,
+            inflation_keys_rangeproof: None,
+            script_witness: script_witness.to_vec(),
+            pegin_witness: vec![],
+        };
+
+        let signed_txin = TxIn {
+            previous_output: self.utxo.unwrap(),
+            script_sig: Script::default(),
+            sequence: sequence,
+            witness: witness,
+            is_pegin: false,
+            asset_issuance: AssetIssuance::default(),
+        };
+
+        let signed_tx = Transaction {
+            version: 2,
+            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            input: vec![signed_txin],
+            output: vec![payment_output, fee_output],
+        };
+        Ok(signed_tx)
     }
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.

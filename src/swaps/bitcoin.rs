@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
-use bitcoin::Amount;
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::transaction::Version;
+use bitcoin::Amount;
 use bitcoin::{
     blockdata::script::{Builder, Instruction, Script, ScriptBuf},
     opcodes::{all::*, OP_0},
@@ -298,10 +298,17 @@ impl BtcSwapScript {
     pub fn get_balance(&self, network_config: ElectrumConfig) -> Result<(u64, i64), S5Error> {
         let electrum_client = network_config.build_client()?;
 
-        let script_balance = match electrum_client.script_get_balance(electrum_client::bitcoin::Script::from_bytes(&self.to_address(network_config.network()).unwrap().script_pubkey().as_bytes())) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Script, &e.to_string())),
-        };
+        let script_balance =
+            match electrum_client.script_get_balance(electrum_client::bitcoin::Script::from_bytes(
+                &self
+                    .to_address(network_config.network())
+                    .unwrap()
+                    .script_pubkey()
+                    .as_bytes(),
+            )) {
+                Ok(result) => result,
+                Err(e) => return Err(S5Error::new(ErrorKind::Script, &e.to_string())),
+            };
         Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
 }
@@ -324,7 +331,7 @@ pub struct BtcSwapTx {
 }
 
 impl BtcSwapTx {
-    /// Required to claim reverse swaps only. This is never used for submarine swaps.
+    /// Required to claim reverse swaps only. Cannot be used for submarine swaps.
     pub fn new_claim(
         swap_script: BtcSwapScript,
         output_address: String,
@@ -356,7 +363,7 @@ impl BtcSwapTx {
             utxo_value: None,
         })
     }
-    /// Required to claim submarine swaps only. This is never used for reverse swaps.
+    /// Required to claim submarine swaps only. Cannot be used for reverse swaps.
     pub fn new_refund(
         swap_script: BtcSwapScript,
         output_address: String,
@@ -400,13 +407,7 @@ impl BtcSwapTx {
         }
         match self.kind {
             SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
-            SwapTxKind::Refund => {
-                // self.sign_refund_tx(keys);
-                Err(S5Error::new(
-                    ErrorKind::Transaction,
-                    "Refund transaction signing not supported yet",
-                ))
-            }
+            SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
         }
     }
     /// Fetch utxo for the script
@@ -417,19 +418,26 @@ impl BtcSwapTx {
     ) -> Result<(), S5Error> {
         let electrum_client = network_config.build_client()?;
 
-        let utxos = match electrum_client
-            .script_list_unspent(electrum_client::bitcoin::Script::from_bytes(self.swap_script.to_address(network_config.network())?.script_pubkey().as_bytes()))
-        {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-        };
+        let utxos =
+            match electrum_client.script_list_unspent(electrum_client::bitcoin::Script::from_bytes(
+                self.swap_script
+                    .to_address(network_config.network())?
+                    .script_pubkey()
+                    .as_bytes(),
+            )) {
+                Ok(result) => result,
+                Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+            };
         if utxos.len() == 0 {
             return Err(S5Error::new(
                 ErrorKind::Transaction,
                 &format!("0 utxos found for this script",),
             ));
         } else {
-            let outpoint_0 = OutPoint::new(bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap(), utxos[0].tx_pos as u32);
+            let outpoint_0 = OutPoint::new(
+                bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap(),
+                utxos[0].tx_pos as u32,
+            );
             let utxo_value = utxos[0].value;
             if utxo_value >= expected_value {
                 self.utxo = Some(outpoint_0);
@@ -452,7 +460,7 @@ impl BtcSwapTx {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
 
-    /// Sign a reverse swap transaction
+    /// Sign a reverse swap claim transaction
     fn sign_claim_tx(
         &self,
         keys: Keypair,
@@ -506,7 +514,12 @@ impl BtcSwapTx {
             Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
         let sighash_message = Message::from_digest_slice(&sighash[..]).unwrap();
-        let signature = bitcoin::ecdsa::Signature::from_str(&secp.sign_ecdsa(&sighash_message, &keys.secret_key()).to_string()).unwrap();
+        let signature = bitcoin::ecdsa::Signature::from_str(
+            &secp
+                .sign_ecdsa(&sighash_message, &keys.secret_key())
+                .to_string(),
+        )
+        .unwrap();
 
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
@@ -528,16 +541,77 @@ impl BtcSwapTx {
         };
         Ok(signed_tx)
     }
-    
-    /// PENDING: Sign a refund transaction for a submarine swap
-    fn _sign_refund_tx(&self, _keys: Keypair) -> Result<(), S5Error> {
+
+    /// Sign a submarine swap refund transaction
+    fn sign_refund_tx(&self, keys: Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
                 ErrorKind::Script,
                 "Refund transactions can only be constructed for Submarine swaps.",
             ));
         }
-        Ok(())
+
+        let redeem_script = self.swap_script.to_script()?;
+
+        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+
+        let unsigned_input: TxIn = TxIn {
+            sequence: sequence,
+            previous_output: self.utxo.unwrap(),
+            script_sig: ScriptBuf::new(),
+            witness: Witness::new(),
+        };
+
+        let output_amount: Amount = Amount::from_sat(self.utxo_value.unwrap() - absolute_fees);
+        let output: TxOut = TxOut {
+            script_pubkey: self.output_address.payload().script_pubkey(),
+            value: output_amount,
+        };
+
+        let unsigned_tx = Transaction {
+            version: Version(1),
+            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            input: vec![unsigned_input],
+            output: vec![output.clone()],
+        };
+        let hash_type = bitcoin::sighash::EcdsaSighashType::All;
+        let secp = Secp256k1::new();
+        let sighash = match SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
+            0,
+            &redeem_script,
+            Amount::from_sat(self.utxo_value.unwrap()),
+            hash_type,
+        ) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
+        };
+        let sighash_message = Message::from_digest_slice(&sighash[..]).unwrap();
+        let signature = bitcoin::ecdsa::Signature::from_str(
+            &secp
+                .sign_ecdsa(&sighash_message, &keys.secret_key())
+                .to_string(),
+        )
+        .unwrap();
+
+        // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
+        let mut witness = Witness::new();
+        witness.push_ecdsa_signature(&signature);
+        witness.push([0]);
+        witness.push(redeem_script.as_bytes());
+
+        let signed_txin = TxIn {
+            previous_output: self.utxo.unwrap(),
+            script_sig: ScriptBuf::new(),
+            sequence: sequence,
+            witness: witness,
+        };
+        let signed_tx = Transaction {
+            version: Version(1),
+            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            input: vec![signed_txin],
+            output: vec![output.clone()],
+        };
+        Ok(signed_tx)
     }
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
@@ -571,8 +645,7 @@ mod tests {
     use bitcoin::script::Builder;
     use bitcoin::secp256k1::hashes::{hash160, Hash};
     use bitcoin::{
-        absolute::LockTime, Address, Network, OutPoint, Sequence, Transaction, TxIn, TxOut,
-        Witness,
+        absolute::LockTime, Address, Network, OutPoint, Sequence, Transaction, TxIn, TxOut, Witness,
     };
     use electrum_client::ElectrumApi;
     use std::io;
@@ -610,9 +683,14 @@ mod tests {
         let electrum_client = ElectrumConfig::default_bitcoin().build_client().unwrap();
 
         let utxos = electrum_client
-            .script_list_unspent(electrum_client::bitcoin::Script::from_bytes(&script.to_p2wsh().as_bytes()))
+            .script_list_unspent(electrum_client::bitcoin::Script::from_bytes(
+                &script.to_p2wsh().as_bytes(),
+            ))
             .unwrap();
-        let outpoint_0 = OutPoint::new(bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap(), utxos[0].tx_pos as u32);
+        let outpoint_0 = OutPoint::new(
+            bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap(),
+            utxos[0].tx_pos as u32,
+        );
         let utxo_value = utxos[0].value;
 
         assert_eq!(utxo_value, 1_000);
@@ -706,9 +784,8 @@ mod tests {
     }
 }
 
-
 /*
 
-lightning-cli --lightning-dir=/.lightning 
+lightning-cli --lightning-dir=/.lightning
 
 */
