@@ -1,3 +1,5 @@
+use std::os::unix::net;
+
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
@@ -44,9 +46,9 @@ fn test_liquid_ssi() {
 
     println!("{:?}", response);
 
-    let funding_address = response.address.as_ref().unwrap();
-    let expected_amount = response.expected_amount.unwrap();
-    let boltz_script_elements = response.into_lbtc_sub_swap_script(&preimage);
+    let expected_amount = response.get_expected_amount().unwrap();
+    let boltz_script_elements = response.into_lbtc_sub_swap_script(&preimage).unwrap();
+    let funding_address = boltz_script_elements.to_address(network_config.network()).unwrap().to_string();
 
     println!("{:?}", boltz_script_elements);
 
@@ -96,7 +98,7 @@ fn test_liquid_rsi() {
     let id = response.get_id();
 
     let invoice = response.get_invoice().unwrap();
-    let boltz_script_elements = response.into_lbtc_rev_swap_script(&preimage, &keypair, Chain::LiquidTestnet,).unwrap();
+    let boltz_script_elements = response.into_lbtc_rev_swap_script(&preimage, &keypair, Chain::LiquidTestnet).unwrap();
 
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();

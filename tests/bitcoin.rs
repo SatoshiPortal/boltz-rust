@@ -58,9 +58,9 @@ fn test_bitcoin_ssi() {
     println!("{:?}", response);
 
     let _id = response.get_id();
-    let funding_address = response.address.as_ref().unwrap();
-    let funding_amount = response.expected_amount.as_ref().unwrap();
-    let _ = response.into_btc_sub_swap_script(&preimage).unwrap();
+    let funding_amount = response.get_expected_amount().unwrap();
+    let script = response.into_btc_sub_swap_script(&preimage).unwrap();
+    let funding_address = script.to_address(network_config.network()).unwrap();
 
     println!("*******FUND*********************");
     println!("*******SWAP*********************");
