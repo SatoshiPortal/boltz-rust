@@ -163,7 +163,7 @@ fn test_bitcoin_rsi() {
     let mut rv_claim_tx = BtcSwapTx::new_claim(
         boltz_rev_script,
         RETURN_ADDRESS.to_string(),
-        &network_config.network(),
+        network_config.network(),
     )
     .unwrap();
     let _ = rv_claim_tx.fetch_utxo(out_amount, &network_config);
@@ -207,7 +207,7 @@ fn test_recover_bitcoin_rsi() {
     let mut rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(&redeem_script).unwrap(),
         RETURN_ADDRESS.to_string(),
-        &network_config.network(),
+        network_config.network(),
     )
     .unwrap();
 

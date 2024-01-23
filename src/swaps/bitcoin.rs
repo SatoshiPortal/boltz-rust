@@ -336,7 +336,7 @@ impl BtcSwapTx {
     pub fn new_claim(
         swap_script: BtcSwapScript,
         output_address: String,
-        network: &Chain,
+        network: Chain,
     ) -> Result<BtcSwapTx, S5Error> {
         if swap_script.swap_type == SwapType::Submarine {
             return Err(S5Error::new(
@@ -344,7 +344,7 @@ impl BtcSwapTx {
                 "Claim transactions can only be constructed for Reverse swaps.",
             ));
         }
-        let network = if network == &Chain::Bitcoin {
+        let network = if network == Chain::Bitcoin {
             Network::Bitcoin
         } else {
             Network::Testnet

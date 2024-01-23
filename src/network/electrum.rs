@@ -72,7 +72,7 @@ impl ElectrumConfig {
     }
 
     pub fn network(&self) -> Chain {
-        self.network
+        self.network.clone()
     }
     /// Builds an electrum_client::Client which can be used to make calls to electrum api
     pub fn build_client(&self) -> Result<electrum_client::Client, S5Error> {
