@@ -513,7 +513,7 @@ impl CreateSwapRequest {
             swap_type: SwapType::ReverseSubmarine,
             pair_id: PairId::BtcBtc,
             order_side: OrderSide::Buy,
-            pair_hash:pair_hash.to_string(),
+            pair_hash: pair_hash.to_string(),
             invoice: None,
             refund_public_key: None,
             preimage_hash: Some(preimage_hash.to_string()),
@@ -560,7 +560,7 @@ impl CreateSwapRequest {
             swap_type: SwapType::Submarine,
             pair_id: PairId::LBtcBtc,
             order_side: OrderSide::Sell,
-            pair_hash:pair_hash.to_string(),
+            pair_hash: pair_hash.to_string(),
             invoice: Some(invoice.to_string()),
             refund_public_key: Some(refund_public_key.to_string()),
             preimage_hash: None,
@@ -660,6 +660,17 @@ impl CreateSwapResponse {
     pub fn get_id(&self) -> String {
         self.id.clone()
     }
+    /// Get a copy of the redeem script
+    pub fn get_redeem_script(&self) -> Result<String, S5Error> {
+        if self.redeem_script.is_none() {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "Boltz response does not contain a redeem script.",
+            ));
+        }
+        Ok(self.redeem_script.clone().unwrap())
+    }
+
     /// Get a copy of the blinding key
     pub fn get_blinding_key(&self) -> Result<String, S5Error> {
         if self.blinding_key.is_none() {
@@ -670,6 +681,17 @@ impl CreateSwapResponse {
         }
         Ok(self.blinding_key.clone().unwrap())
     }
+    /// Get a copy of the expected amount (utxo size of a reverse swap)
+    pub fn get_expected_amount(&self) -> Result<u64, S5Error> {
+        if self.expected_amount.is_none() {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "Boltz response does not contain an expected amount.",
+            ));
+        }
+        Ok(self.expected_amount.clone().unwrap())
+    }
+
     /// Get a copy of the Timelock value
     pub fn get_timeout(&self) -> Result<u64, S5Error> {
         if self.timeout_block_height.is_none() {
@@ -1023,8 +1045,7 @@ mod tests {
             "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
         )
         .unwrap();
-        let pair_hash =
-            "a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5";
+        let pair_hash = "a3a295202ab0b65cc9597b82663dbcdc77076e138f6d97285711ab7df086afd5";
         let request = CreateSwapRequest::new_btc_submarine(
             pair_hash,
             invoice,
@@ -1090,7 +1111,8 @@ mod tests {
         println!("Onchain Amount: {}", response.onchain_amount.unwrap());
         assert!((output_amount - base_fees) == response.onchain_amount.unwrap());
 
-        let _btc_rss = response.into_btc_rev_swap_script(&preimage, &claim_key_pair, Chain::Bitcoin);
+        let _btc_rss =
+            response.into_btc_rev_swap_script(&preimage, &claim_key_pair, Chain::Bitcoin);
         // let timeout = response.get_timeout();
         // let timeout = LockTime::from_height(timeout as u32).unwrap();
     }
