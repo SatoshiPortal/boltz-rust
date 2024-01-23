@@ -42,11 +42,11 @@ pub struct ElectrumConfig {
 
 impl ElectrumConfig {
     pub fn default_bitcoin() -> Self {
-        ElectrumConfig::new(&Chain::BitcoinTestnet, DEFAULT_TESTNET_NODE, true, true, 12)
+        ElectrumConfig::new(Chain::BitcoinTestnet, DEFAULT_TESTNET_NODE, true, true, 12)
     }
     pub fn default_liquid() -> Self {
         ElectrumConfig::new(
-            &Chain::LiquidTestnet,
+            Chain::LiquidTestnet,
             DEFAULT_LIQUID_TESTNET_NODE,
             true,
             true,
@@ -54,7 +54,7 @@ impl ElectrumConfig {
         )
     }
     pub fn new(
-        network: &Chain,
+        network: Chain,
         electrum_url: &str,
         tls: bool,
         validate_domain: bool,
