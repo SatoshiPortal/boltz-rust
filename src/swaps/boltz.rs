@@ -272,6 +272,7 @@ pub struct AssetMinerFee {
     pub normal: i64,
     pub reverse: ReverseMinerFee,
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReverseMinerFee {
     pub claim: i64,
@@ -289,6 +290,13 @@ pub struct Fees {
 }
 
 impl Fees {
+    /// Calculate total submarine fees (boltz + claim + lockup_estimate)
+    pub fn submarine_total(&self, output_amount: u64) -> Result<u64, S5Error> {
+        let boltz = self.submarine_boltz(output_amount)?;
+        let claim = self.submarine_claim()?;
+        let lockup = self.submarine_lockup_estimate();
+        Ok(boltz + claim + lockup)
+    }
     /// Calculate boltz fees for a submarine swap, given an output amount
     pub fn submarine_boltz(&self, output_amount: u64) -> Result<u64, S5Error> {
         let boltz_fee = ((self.percentage_swap_in / 100.0) * output_amount as f64).round() as u64;
@@ -303,6 +311,13 @@ impl Fees {
     /// Get onchain lockup miner fees for a submarine swap
     pub fn submarine_lockup_estimate(&self) -> u64 {
         self.miner_fees.base_asset.normal as u64
+    }
+    /// Calculate total reverse fees (boltz + claim + lockup_estimate)
+    pub fn reverse_total(&self, output_amount: u64) -> Result<u64, S5Error> {
+        let boltz = self.reverse_boltz(output_amount)?;
+        let lockup = self.reverse_lockup()?;
+        let claim = self.reverse_claim_estimate();
+        Ok(boltz + lockup + claim)
     }
     /// Calculate boltz fees for a reverse swap, given an output amount
     pub fn reverse_boltz(&self, output_amount: u64) -> Result<u64, S5Error> {
@@ -415,7 +430,7 @@ impl FromStr for RevSwapStates {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum SwapType {
     Submarine,
@@ -747,7 +762,7 @@ impl CreateSwapResponse {
                 }
                 LBtcSwapScript::submarine_from_str(
                     &self.redeem_script.clone().unwrap(),
-                    self.get_blinding_key()?,
+                    &self.get_blinding_key()?,
                 )
             }
             Err(e) => {
@@ -792,7 +807,7 @@ impl CreateSwapResponse {
                 }
                 LBtcSwapScript::reverse_from_str(
                     &self.redeem_script.clone().unwrap(),
-                    self.get_blinding_key()?,
+                    &self.get_blinding_key()?,
                 )
             }
 
@@ -870,7 +885,7 @@ impl CreateSwapResponse {
                     BtcSwapScript::reverse_from_str(&self.redeem_script.as_ref().unwrap()).unwrap();
 
                 let constructed_rev_script = BtcSwapScript::new(
-                    &SwapType::ReverseSubmarine,
+                    SwapType::ReverseSubmarine,
                     &preimage.hash160.to_string(),
                     &keypair.public_key().to_string(),
                     &(self.timeout_block_height.unwrap() as u32),
@@ -892,7 +907,7 @@ impl CreateSwapResponse {
                 let blinding_key = self.blinding_key.as_ref().unwrap().clone().to_string();
                 let boltz_rev_script = LBtcSwapScript::reverse_from_str(
                     &self.redeem_script.as_ref().clone().unwrap(),
-                    blinding_key.clone(),
+                    &blinding_key.clone(),
                 )
                 .unwrap();
                 let secp = ZKSecp256k1::new();
@@ -1000,28 +1015,14 @@ mod tests {
     #[test]
     fn test_get_pairs() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let response = client.get_pairs();
-        assert!(response.is_ok());
-        // println!("{:?}",response.unwrap().pairs);
-        let pair_hash = response
-            .unwrap()
-            .pairs
-            .pairs
-            .get("BTC/BTC")
-            .map(|pair_info| pair_info.hash.clone());
-
-        assert!(pair_hash.is_some());
-
-        let response = client.get_pairs();
-        assert!(response.is_ok());
-        let pair_hash = response
-            .unwrap()
-            .pairs
-            .pairs
-            .get("L-BTC/BTC")
-            .map(|pair_info| pair_info.hash.clone());
-
-        assert!(pair_hash.is_some());
+        let response = client.get_pairs().unwrap();
+        let output_amount = 100_000;
+        let _btc_pair_hash = response.get_btc_pair().hash;
+        let _rev_total_fee= response.get_btc_pair().fees.reverse_total(output_amount);
+        let _btc_limits = response.get_btc_pair().limits;
+        let _lbtc_pair_hash = response.get_lbtc_pair().hash;
+        let _sub_total_fee = response.get_lbtc_pair().fees.submarine_total(output_amount);
+        let _lbtc_limits = response.get_lbtc_pair().limits;
     }
 
     #[test]

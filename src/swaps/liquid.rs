@@ -68,7 +68,7 @@ impl LBtcSwapScript {
     ///Usually created from the string provided by boltz api response.
     pub fn submarine_from_str(
         redeem_script_str: &str,
-        blinding_str: String,
+        blinding_str: &str,
     ) -> Result<Self, S5Error> {
         let script = match EScript::from_str(&redeem_script_str) {
             Ok(result) => result,
@@ -139,7 +139,7 @@ impl LBtcSwapScript {
     /// Usually created from the string provided by boltz api response.
     pub fn reverse_from_str(
         redeem_script_str: &str,
-        blinding_str: String,
+        blinding_str: &str,
     ) -> Result<Self, S5Error> {
         let script = EScript::from_str(&redeem_script_str).unwrap();
 
@@ -451,8 +451,8 @@ impl LBtcSwapTx {
     /// Sweep the script utxo.
     pub fn drain(
         &mut self,
-        keys: ZKKeyPair,
-        preimage: Preimage,
+        keys: &ZKKeyPair,
+        preimage: &Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
         if !self.has_utxo() {
@@ -593,8 +593,8 @@ impl LBtcSwapTx {
     /// Sign a claim transaction for a reverse swap
     fn sign_claim_tx(
         &self,
-        keys: Keypair,
-        preimage: Preimage,
+        keys: &Keypair,
+        preimage: &Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::Submarine {
@@ -745,7 +745,7 @@ impl LBtcSwapTx {
         Ok(signed_tx)
     }
     /// Sign a refund transaction for a submarine swap
-    fn sign_refund_tx(&self, keys: Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
+    fn sign_refund_tx(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
                 ErrorKind::Script,
@@ -898,7 +898,7 @@ impl LBtcSwapTx {
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
-    pub fn size(&self, keys: Keypair, preimage: Preimage) -> Result<usize, S5Error> {
+    pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, S5Error> {
         let dummy_abs_fee = 5_000;
         let tx = match self.kind {
             _ => self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
@@ -931,7 +931,7 @@ mod tests {
         let redeem_script_str = "8201208763a9142bdd03d431251598f46a625f1d3abfcd7f491535882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c677503715912b1752103fced00385bd14b174a571d88b4b6aced2cb1d532237c29c4ec61338fbb7eff4068ac".to_string();
         let blinding_str = "02702ae71ec11a895f6255e26395983585a0d791ea1eb83d1aa54a66056469da";
         let script =
-            LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), blinding_str.to_string())
+            LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), blinding_str)
                 .unwrap();
         let network_config = &ElectrumConfig::default_liquid();
         let address = script.to_address(network_config.network()).unwrap();
@@ -1021,7 +1021,7 @@ mod tests {
         let network_config = &ElectrumConfig::default_liquid();
         let decoded = LBtcSwapScript::reverse_from_str(
             &redeem_script_str.clone(),
-            boltz_blinding_str.to_string(),
+            boltz_blinding_str,
         )
         .unwrap();
         // println!("{:?}", decoded);
@@ -1052,7 +1052,7 @@ mod tests {
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
         let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
-        let final_tx = liquid_swap_tx.drain(my_key_pair, preimage, 5_000).unwrap();
+        let final_tx = liquid_swap_tx.drain(&my_key_pair, &preimage, 5_000).unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         // let manifest_dir = env!("CARGO_MANIFEST_DIR");
 

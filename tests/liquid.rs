@@ -144,8 +144,8 @@ fn test_liquid_rsi() {
 
     let signed_tx = rev_swap_tx
         .drain(
-            keypair,
-            preimage,
+            &keypair,
+            &preimage,
             absolute_fees,
         )
         .unwrap();

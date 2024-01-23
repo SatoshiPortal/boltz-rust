@@ -38,7 +38,7 @@ pub struct BtcSwapScript {
 impl BtcSwapScript {
     /// Create the struct from raw elements
     pub fn new(
-        swap_type: &SwapType,
+        swap_type: SwapType,
         hashlock: &str,
         reciever_pubkey: &str,
         timelock: &u32,
