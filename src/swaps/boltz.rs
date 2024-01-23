@@ -738,7 +738,7 @@ impl CreateSwapResponse {
         &self,
         preimage: &Preimage,
         keypair: &Keypair,
-        chain: &Chain,
+        chain: Chain,
     ) -> Result<BtcSwapScript, S5Error> {
         match self.validate_reverse(preimage, keypair, chain) {
             Ok(()) => {
@@ -758,7 +758,7 @@ impl CreateSwapResponse {
         &self,
         preimage: &Preimage,
         keypair: &ZKKeyPair,
-        chain: &Chain,
+        chain: Chain,
     ) -> Result<LBtcSwapScript, S5Error> {
         match self.validate_reverse(preimage, keypair, chain) {
             Ok(()) => {
@@ -809,7 +809,7 @@ impl CreateSwapResponse {
         &self,
         preimage: &Preimage,
         keypair: &Keypair,
-        chain: &Chain,
+        chain: Chain,
     ) -> Result<(), S5Error> {
         match &self.invoice {
             Some(invoice_str) => {
@@ -1090,7 +1090,7 @@ mod tests {
         println!("Onchain Amount: {}", response.onchain_amount.unwrap());
         assert!((output_amount - base_fees) == response.onchain_amount.unwrap());
 
-        let _btc_rss = response.into_btc_rev_swap_script(&preimage, &claim_key_pair, &Chain::Bitcoin);
+        let _btc_rss = response.into_btc_rev_swap_script(&preimage, &claim_key_pair, Chain::Bitcoin);
         // let timeout = response.get_timeout();
         // let timeout = LockTime::from_height(timeout as u32).unwrap();
     }

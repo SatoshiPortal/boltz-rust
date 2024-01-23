@@ -302,7 +302,7 @@ impl LBtcSwapScript {
     /// Get address for the swap script.
     /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
     /// Always returns a confidential address
-    pub fn to_address(&self, network: &Chain) -> Result<EAddress, S5Error> {
+    pub fn to_address(&self, network: Chain) -> Result<EAddress, S5Error> {
         let script = self.to_script()?;
         let address_params = match network {
             Chain::Liquid => &AddressParams::LIQUID,
@@ -331,7 +331,7 @@ impl LBtcSwapScript {
         let _ = electrum_client
             .script_subscribe(BitcoinScript::from_bytes(
                 &self
-                    .to_address(&network_config.network())
+                    .to_address(network_config.network())
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -340,7 +340,7 @@ impl LBtcSwapScript {
         let balance = electrum_client
             .script_get_balance(BitcoinScript::from_bytes(
                 &self
-                    .to_address(&network_config.network())
+                    .to_address(network_config.network())
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -349,7 +349,7 @@ impl LBtcSwapScript {
         let _ = electrum_client
             .script_unsubscribe(BitcoinScript::from_bytes(
                 &self
-                    .to_address(&network_config.network())
+                    .to_address(network_config.network())
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -469,10 +469,10 @@ impl LBtcSwapTx {
     /// Fetch utxo for the script
     pub fn fetch_utxo(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
         let electrum_client = network_config.clone().build_client()?;
-        let address = self.swap_script.to_address(&network_config.network())?;
+        let address = self.swap_script.to_address(network_config.network())?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
             self.swap_script
-                .to_address(&network_config.network())?
+                .to_address(network_config.network())?
                 .script_pubkey()
                 .as_bytes(),
         )) {
@@ -535,7 +535,7 @@ impl LBtcSwapTx {
             .script_subscribe(BitcoinScript::from_bytes(
                 &self
                     .swap_script
-                    .to_address(&network_config.network())
+                    .to_address(network_config.network())
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -545,7 +545,7 @@ impl LBtcSwapTx {
             .script_list_unspent(BitcoinScript::from_bytes(
                 &self
                     .swap_script
-                    .to_address(&network_config.network())
+                    .to_address(network_config.network())
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -556,7 +556,7 @@ impl LBtcSwapTx {
             .script_unsubscribe(BitcoinScript::from_bytes(
                 &self
                     .swap_script
-                    .to_address(&network_config.network())
+                    .to_address(network_config.network())
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -934,7 +934,7 @@ mod tests {
             LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), blinding_str.to_string())
                 .unwrap();
         let network_config = &ElectrumConfig::default_liquid();
-        let address = script.to_address(&network_config.network()).unwrap();
+        let address = script.to_address(network_config.network()).unwrap();
         println!("{:?}", address.to_string());
         // let balance = script.get_balance(network_config.clone()).unwrap();
         // println!("BALANCE: {:?}", balance);
@@ -944,7 +944,7 @@ mod tests {
             .unwrap()
             .script_subscribe(BitcoinScript::from_bytes(
                 &script
-                    .to_address(&Chain::LiquidTestnet)
+                    .to_address(Chain::LiquidTestnet)
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -967,7 +967,7 @@ mod tests {
             .unwrap()
             .script_list_unspent(BitcoinScript::from_bytes(
                 &script
-                    .to_address(&Chain::LiquidTestnet)
+                    .to_address(Chain::LiquidTestnet)
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -981,7 +981,7 @@ mod tests {
                 .unwrap()
                 .script_unsubscribe(BitcoinScript::from_bytes(
                     &script
-                        .to_address(&Chain::LiquidTestnet)
+                        .to_address(Chain::LiquidTestnet)
                         .unwrap()
                         .script_pubkey()
                         .as_bytes(),
@@ -1041,7 +1041,7 @@ mod tests {
         };
 
         let address = el_script
-            .to_address(&network_config.network())
+            .to_address(network_config.network())
             .unwrap();
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         println!("Blinding Pub: {:?}", address.blinding_pubkey);

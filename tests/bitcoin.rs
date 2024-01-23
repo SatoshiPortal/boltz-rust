@@ -116,7 +116,7 @@ fn test_bitcoin_rsi() {
     println!("{:?}", response);
     let id = response.get_id();
     let invoice = response.get_invoice().unwrap();
-    let boltz_rev_script = response.into_btc_rev_swap_script(&preimage, &keypair, &Chain::BitcoinTestnet).unwrap();
+    let boltz_rev_script = response.into_btc_rev_swap_script(&preimage, &keypair, Chain::BitcoinTestnet).unwrap();
 
     let script_balance = boltz_rev_script
         .get_balance(&network_config)
