@@ -5,6 +5,7 @@ use bitcoin::{script::Script as BitcoinScript, secp256k1::Keypair, Witness};
 use elements::{
     confidential::{self, AssetBlindingFactor, ValueBlindingFactor},
     hashes::hash160,
+    hex::FromHex,
     secp256k1_zkp::{self, Secp256k1, SecretKey},
     sighash::SighashCache,
     Address, AssetIssuance, OutPoint, Script, Sequence, Transaction, TxIn, TxInWitness, TxOut,
@@ -137,11 +138,11 @@ impl LBtcSwapScript {
 
     /// Create the struct from a reverse swap redeem_script string.
     /// Usually created from the string provided by boltz api response.
-    pub fn reverse_from_str(
-        redeem_script_str: &str,
-        blinding_str: &str,
-    ) -> Result<Self, S5Error> {
-        let script = EScript::from_str(&redeem_script_str).unwrap();
+    pub fn reverse_from_str(redeem_script_str: &str, blinding_str: &str) -> Result<Self, S5Error> {
+        let script = match EScript::from_str(redeem_script_str) {
+            Ok(result) => result.to_owned(),
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
 
         let instructions = script.instructions();
         let mut last_op = OP_0NOTEQUAL;
@@ -267,13 +268,26 @@ impl LBtcSwapScript {
                     OP_ENDIF
                     OP_CHECKSIG
                 */
-                let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey).unwrap();
-                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey).unwrap();
+                let reciever_pubkey = match PublicKey::from_str(&self.reciever_pubkey) {
+                    Ok(result) => result,
+                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+                };
+                let sender_pubkey = match PublicKey::from_str(&self.sender_pubkey) {
+                    Ok(result) => result,
+                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+                };
                 let locktime = LockTime::from_consensus(self.timelock);
-                let hashvalue = hash160::Hash::from_str(&self.hashlock).unwrap();
+                let hashvalue = match hash160::Hash::from_str(&self.hashlock) {
+                    Ok(result) => result,
+                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+                };
                 let hashbytes_slice: &[u8] = hashvalue.as_ref();
-                let hashbytes: [u8; 20] =
-                    hashbytes_slice.try_into().expect("Hash must be 20 bytes");
+                let hashbytes: [u8; 20] = match hashbytes_slice.try_into() {
+                    Ok(result) => result,
+                    Err(_) => {
+                        return Err(S5Error::new(ErrorKind::Input, "Hash160 must be 20 bytes"))
+                    }
+                };
 
                 let script = EBuilder::new()
                     .push_opcode(OP_SIZE)
@@ -331,8 +345,7 @@ impl LBtcSwapScript {
         let _ = electrum_client
             .script_subscribe(BitcoinScript::from_bytes(
                 &self
-                    .to_address(network_config.network())
-                    .unwrap()
+                    .to_address(network_config.network())?
                     .script_pubkey()
                     .as_bytes(),
             ))
@@ -340,8 +353,7 @@ impl LBtcSwapScript {
         let balance = electrum_client
             .script_get_balance(BitcoinScript::from_bytes(
                 &self
-                    .to_address(network_config.network())
-                    .unwrap()
+                    .to_address(network_config.network())?
                     .script_pubkey()
                     .as_bytes(),
             ))
@@ -349,8 +361,7 @@ impl LBtcSwapScript {
         let _ = electrum_client
             .script_unsubscribe(BitcoinScript::from_bytes(
                 &self
-                    .to_address(network_config.network())
-                    .unwrap()
+                    .to_address(network_config.network())?
                     .script_pubkey()
                     .as_bytes(),
             ))
@@ -455,12 +466,6 @@ impl LBtcSwapTx {
         preimage: &Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
-        if !self.has_utxo() {
-            return Err(S5Error::new(
-                ErrorKind::Transaction,
-                "No utxos available yet",
-            ));
-        }
         match self.kind {
             SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
             SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
@@ -535,8 +540,7 @@ impl LBtcSwapTx {
             .script_subscribe(BitcoinScript::from_bytes(
                 &self
                     .swap_script
-                    .to_address(network_config.network())
-                    .unwrap()
+                    .to_address(network_config.network())?
                     .script_pubkey()
                     .as_bytes(),
             ))
@@ -545,8 +549,7 @@ impl LBtcSwapTx {
             .script_list_unspent(BitcoinScript::from_bytes(
                 &self
                     .swap_script
-                    .to_address(network_config.network())
-                    .unwrap()
+                    .to_address(network_config.network())?
                     .script_pubkey()
                     .as_bytes(),
             ))
@@ -752,15 +755,14 @@ impl LBtcSwapTx {
                 "Refund transactions can only be constructed for Submarine swaps.",
             ));
         }
-        if self.swap_script.swap_type == SwapType::Submarine {
+        if !self.has_utxo() {
             return Err(S5Error::new(
-                ErrorKind::Script,
-                "Claim transactions can only be constructed for Reverse swaps.",
+                ErrorKind::Transaction,
+                "No utxos available yet",
             ));
         }
 
         let redeem_script = self.swap_script.to_script()?;
-
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
@@ -925,14 +927,14 @@ impl LBtcSwapTx {
 mod tests {
     use super::*;
     #[test]
+    #[ignore]
     fn test_fetch_utxo_fix() {
         const _RETURN_ADDRESS: &str =
         "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
         let redeem_script_str = "8201208763a9142bdd03d431251598f46a625f1d3abfcd7f491535882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c677503715912b1752103fced00385bd14b174a571d88b4b6aced2cb1d532237c29c4ec61338fbb7eff4068ac".to_string();
         let blinding_str = "02702ae71ec11a895f6255e26395983585a0d791ea1eb83d1aa54a66056469da";
         let script =
-            LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), blinding_str)
-                .unwrap();
+            LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), blinding_str).unwrap();
         let network_config = &ElectrumConfig::default_liquid();
         let address = script.to_address(network_config.network()).unwrap();
         println!("{:?}", address.to_string());
@@ -1019,11 +1021,9 @@ mod tests {
         )
         .unwrap();
         let network_config = &ElectrumConfig::default_liquid();
-        let decoded = LBtcSwapScript::reverse_from_str(
-            &redeem_script_str.clone(),
-            boltz_blinding_str,
-        )
-        .unwrap();
+        let decoded =
+            LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), boltz_blinding_str)
+                .unwrap();
         // println!("{:?}", decoded);
         assert_eq!(
             decoded.reciever_pubkey,
@@ -1040,9 +1040,7 @@ mod tests {
             blinding_key: boltz_blinding_key,
         };
 
-        let address = el_script
-            .to_address(network_config.network())
-            .unwrap();
+        let address = el_script.to_address(network_config.network()).unwrap();
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         println!("Blinding Pub: {:?}", address.blinding_pubkey);
 
@@ -1052,7 +1050,9 @@ mod tests {
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
         let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
-        let final_tx = liquid_swap_tx.drain(&my_key_pair, &preimage, 5_000).unwrap();
+        let final_tx = liquid_swap_tx
+            .drain(&my_key_pair, &preimage, 5_000)
+            .unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         // let manifest_dir = env!("CARGO_MANIFEST_DIR");
 
@@ -1062,9 +1062,7 @@ mod tests {
         // writeln!(file, "{:#?}", final_tx).unwrap();
         // println!("CHECK FILE tx.hex!");
 
-        let txid = liquid_swap_tx
-            .broadcast(final_tx, &network_config)
-            .unwrap();
+        let txid = liquid_swap_tx.broadcast(final_tx, &network_config).unwrap();
         println!("TXID: {}", txid);
     }
 }

@@ -302,8 +302,7 @@ impl BtcSwapScript {
         let script_balance =
             match electrum_client.script_get_balance(electrum_client::bitcoin::Script::from_bytes(
                 &self
-                    .to_address(network_config.network())
-                    .unwrap()
+                    .to_address(network_config.network())?
                     .script_pubkey()
                     .as_bytes(),
             )) {
@@ -403,9 +402,6 @@ impl BtcSwapTx {
         preimage: &Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
-        if !self.has_utxo() {
-            return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
-        }
         match self.kind {
             SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
             SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
@@ -474,37 +470,37 @@ impl BtcSwapTx {
                 "Claim transactions can only be constructed for Reverse swaps.",
             ));
         }
-
+        if !self.has_utxo() {
+            return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
+        }
         let preimage_bytes = if preimage.bytes.is_some() {
             preimage.bytes.unwrap()
         } else {
             return Err(S5Error::new(ErrorKind::Input, "No preimage provided"));
         };
-        let redeem_script = self.swap_script.to_script()?;
-
+        
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
-
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo.unwrap(),
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-
         let output_amount: Amount = Amount::from_sat(self.utxo_value.unwrap() - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
         };
-
         let unsigned_tx = Transaction {
             version: Version(1),
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
-        let hash_type = bitcoin::sighash::EcdsaSighashType::All;
+
+        let redeem_script = self.swap_script.to_script()?;
         let secp = Secp256k1::new();
+        let hash_type = bitcoin::sighash::EcdsaSighashType::All;
         let sighash = match SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
             0,
             &redeem_script,
@@ -514,13 +510,18 @@ impl BtcSwapTx {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
-        let sighash_message = Message::from_digest_slice(&sighash[..]).unwrap();
-        let signature = bitcoin::ecdsa::Signature::from_str(
+        let sighash_message = match Message::from_digest_slice(&sighash[..]){
+            Ok(result)=>result,
+            Err(e)=>return Err(S5Error::new(ErrorKind::Transaction, &e.to_string()))
+        };
+        let signature = match bitcoin::ecdsa::Signature::from_str(
             &secp
                 .sign_ecdsa(&sighash_message, &keys.secret_key())
                 .to_string(),
-        )
-        .unwrap();
+        ){
+            Ok(result)=>result,
+            Err(e)=>return Err(S5Error::new(ErrorKind::Transaction, &e.to_string()))
+        };
 
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
@@ -551,32 +552,32 @@ impl BtcSwapTx {
                 "Refund transactions can only be constructed for Submarine swaps.",
             ));
         }
-
-        let redeem_script = self.swap_script.to_script()?;
+        if !self.has_utxo() {
+            return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
+        }
 
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
-
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo.unwrap(),
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-
         let output_amount: Amount = Amount::from_sat(self.utxo_value.unwrap() - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
         };
-
         let unsigned_tx = Transaction {
             version: Version(1),
             lock_time: LockTime::from_consensus(self.swap_script.timelock),
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
-        let hash_type = bitcoin::sighash::EcdsaSighashType::All;
+
+        let redeem_script = self.swap_script.to_script()?;
         let secp = Secp256k1::new();
+        let hash_type = bitcoin::sighash::EcdsaSighashType::All;
         let sighash = match SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
             0,
             &redeem_script,
@@ -586,14 +587,18 @@ impl BtcSwapTx {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
-        let sighash_message = Message::from_digest_slice(&sighash[..]).unwrap();
-        let signature = bitcoin::ecdsa::Signature::from_str(
+        let sighash_message = match Message::from_digest_slice(&sighash[..]){
+            Ok(result)=>result,
+            Err(e)=>return Err(S5Error::new(ErrorKind::Transaction, &e.to_string()))
+        };
+        let signature = match bitcoin::ecdsa::Signature::from_str(
             &secp
                 .sign_ecdsa(&sighash_message, &keys.secret_key())
                 .to_string(),
-        )
-        .unwrap();
-
+        ){
+            Ok(result)=>result,
+            Err(e)=>return Err(S5Error::new(ErrorKind::Transaction, &e.to_string()))
+        };
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
         witness.push_ecdsa_signature(&signature);
