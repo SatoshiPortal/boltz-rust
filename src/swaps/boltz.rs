@@ -695,7 +695,7 @@ impl CreateSwapResponse {
     }
     /// Get a BtcSwapScript of the a btc submarine swap response
     pub fn into_btc_sub_swap_script(&self, preimage: &Preimage) -> Result<BtcSwapScript, S5Error> {
-        match self.validate_submarine(preimage.hash160) {
+        match self.validate_submarine(&preimage.hash160) {
             Ok(()) => {
                 if self.redeem_script.is_none() {
                     return Err(S5Error::new(
@@ -715,7 +715,7 @@ impl CreateSwapResponse {
         &self,
         preimage: &Preimage,
     ) -> Result<LBtcSwapScript, S5Error> {
-        match self.validate_submarine(preimage.hash160) {
+        match self.validate_submarine(&preimage.hash160) {
             Ok(()) => {
                 if self.redeem_script.is_none() {
                     return Err(S5Error::new(
@@ -737,10 +737,10 @@ impl CreateSwapResponse {
     pub fn into_btc_rev_swap_script(
         &self,
         preimage: &Preimage,
-        keypair: Keypair,
-        chain: Chain,
+        keypair: &Keypair,
+        chain: &Chain,
     ) -> Result<BtcSwapScript, S5Error> {
-        match self.validate_reverse(preimage, keypair.clone(), chain) {
+        match self.validate_reverse(preimage, keypair, chain) {
             Ok(()) => {
                 if self.redeem_script.is_none() {
                     return Err(S5Error::new(
@@ -758,9 +758,9 @@ impl CreateSwapResponse {
         &self,
         preimage: &Preimage,
         keypair: &ZKKeyPair,
-        chain: Chain,
+        chain: &Chain,
     ) -> Result<LBtcSwapScript, S5Error> {
-        match self.validate_reverse(preimage, keypair.clone(), chain) {
+        match self.validate_reverse(preimage, keypair, chain) {
             Ok(()) => {
                 if self.redeem_script.is_none() {
                     return Err(S5Error::new(
@@ -778,7 +778,7 @@ impl CreateSwapResponse {
         }
     }
     /// Ensure submarine swap redeem script uses the preimage hash used in the invoice
-    fn validate_submarine(&self, preimage_hash160: hash160::Hash) -> Result<(), S5Error> {
+    fn validate_submarine(&self, preimage_hash160: &hash160::Hash) -> Result<(), S5Error> {
         match &self.redeem_script {
             Some(rs) => {
                 let script_elements = BtcSwapScript::submarine_from_str(&rs)?;
@@ -808,8 +808,8 @@ impl CreateSwapResponse {
     fn validate_reverse(
         &self,
         preimage: &Preimage,
-        keypair: Keypair,
-        chain: Chain,
+        keypair: &Keypair,
+        chain: &Chain,
     ) -> Result<(), S5Error> {
         match &self.invoice {
             Some(invoice_str) => {
@@ -1090,7 +1090,7 @@ mod tests {
         println!("Onchain Amount: {}", response.onchain_amount.unwrap());
         assert!((output_amount - base_fees) == response.onchain_amount.unwrap());
 
-        let _btc_rss = response.into_btc_rev_swap_script(&preimage, claim_key_pair, Chain::Bitcoin);
+        let _btc_rss = response.into_btc_rev_swap_script(&preimage, &claim_key_pair, &Chain::Bitcoin);
         // let timeout = response.get_timeout();
         // let timeout = LockTime::from_height(timeout as u32).unwrap();
     }

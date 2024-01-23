@@ -284,7 +284,7 @@ impl BtcSwapScript {
 
     /// Get address for the swap script.
     /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
-    pub fn to_address(&self, network: Chain) -> Result<Address, S5Error> {
+    pub fn to_address(&self, network: &Chain) -> Result<Address, S5Error> {
         let script = self.to_script()?;
         let network = match network {
             Chain::Bitcoin => Network::Bitcoin,
@@ -302,7 +302,7 @@ impl BtcSwapScript {
         let script_balance =
             match electrum_client.script_get_balance(electrum_client::bitcoin::Script::from_bytes(
                 &self
-                    .to_address(network_config.network())
+                    .to_address(&network_config.network())
                     .unwrap()
                     .script_pubkey()
                     .as_bytes(),
@@ -422,7 +422,7 @@ impl BtcSwapTx {
         let utxos =
             match electrum_client.script_list_unspent(electrum_client::bitcoin::Script::from_bytes(
                 self.swap_script
-                    .to_address(network_config.network())?
+                    .to_address(&network_config.network())?
                     .script_pubkey()
                     .as_bytes(),
             )) {
