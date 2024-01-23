@@ -315,12 +315,12 @@ pub struct BtcReverseRecovery{
     pub redeem_script: String
 }
 impl BtcReverseRecovery {
-    pub fn new(id: String, preimage: &Preimage, claim_key: &Keypair, redeem_script: String)->Self{
+    pub fn new(id: &str, preimage: &Preimage, claim_key: &Keypair, redeem_script: &str)->Self{
         BtcReverseRecovery{
-            id,
+            id: id.to_string(),
             claim_key: claim_key.display_secret().to_string(),
             preimage: preimage.to_string().unwrap(),
-            redeem_script,
+            redeem_script:redeem_script.to_string(),
         }
     }
 }
@@ -333,11 +333,11 @@ pub struct LBtcSubmarineRecovery{
     pub redeem_script: String
 }
 impl LBtcSubmarineRecovery {
-    pub fn new(id: String, refund_key: Keypair, blinding_key: ZKKeyPair, redeem_script: String)->Self{
+    pub fn new(id: &str, refund_key: &Keypair, blinding_key: &ZKKeyPair, redeem_script: &str)->Self{
         LBtcSubmarineRecovery{
-            id,
+            id: id.to_string(),
             refund_key: refund_key.display_secret().to_string(),
-            redeem_script,
+            redeem_script:redeem_script.to_string(),
             blinding_key: blinding_key.display_secret().to_string(),
         }
     }
@@ -352,13 +352,13 @@ pub struct LBtcReverseRecovery{
     pub redeem_script: String
 }
 impl LBtcReverseRecovery {
-    pub fn new(id: String, preimage: &Preimage, claim_key: &Keypair, blinding_key: ZKKeyPair, redeem_script: String)->Self{
+    pub fn new(id: &str, preimage: &Preimage, claim_key: &Keypair, blinding_key: &ZKKeyPair, redeem_script: &str)->Self{
         LBtcReverseRecovery{
-            id,
+            id:id.to_string(),
             claim_key: claim_key.display_secret().to_string(),
             blinding_key: blinding_key.display_secret().to_string(),
             preimage: preimage.to_string().unwrap(),
-            redeem_script,
+            redeem_script:redeem_script.to_string(),
         }
     }
 }

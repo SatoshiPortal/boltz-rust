@@ -638,10 +638,10 @@ pub struct ChannelDetails {
 pub struct CreateSwapResponse {
     id: String,
     pub invoice: Option<String>,
-    pub redeem_script: Option<String>,
+    redeem_script: Option<String>,
     pub timeout_block_height: Option<u64>,
     pub onchain_amount: Option<u64>,
-    pub lockup_address: Option<String>,
+    lockup_address: Option<String>,
     pub miner_fee_invoice: Option<String>,
     pub service_fee_percentage: Option<f64>,
     pub preimage: Option<String>,
