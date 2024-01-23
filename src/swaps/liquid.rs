@@ -1,7 +1,7 @@
 use electrum_client::ElectrumApi;
 use std::str::FromStr;
 
-use bitcoin::{script::Script as BitcoinScript, Witness};
+use bitcoin::{script::Script as BitcoinScript, secp256k1::Keypair, Witness};
 use elements::{
     confidential::{self, AssetBlindingFactor, ValueBlindingFactor},
     hashes::hash160,
@@ -593,7 +593,7 @@ impl LBtcSwapTx {
     /// Sign a claim transaction for a reverse swap
     fn sign_claim_tx(
         &self,
-        keys: ZKKeyPair,
+        keys: Keypair,
         preimage: Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
@@ -745,7 +745,7 @@ impl LBtcSwapTx {
         Ok(signed_tx)
     }
     /// Sign a refund transaction for a submarine swap
-    fn sign_refund_tx(&self, keys: ZKKeyPair, absolute_fees: u64) -> Result<Transaction, S5Error> {
+    fn sign_refund_tx(&self, keys: Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
                 ErrorKind::Script,
@@ -898,7 +898,7 @@ impl LBtcSwapTx {
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
-    pub fn size(&self, keys: ZKKeyPair, preimage: Preimage) -> Result<usize, S5Error> {
+    pub fn size(&self, keys: Keypair, preimage: Preimage) -> Result<usize, S5Error> {
         let dummy_abs_fee = 5_000;
         let tx = match self.kind {
             _ => self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
