@@ -431,10 +431,12 @@ impl BtcSwapTx {
                 &format!("0 utxos found for this script",),
             ));
         } else {
-            let outpoint_0 = OutPoint::new(
-                bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap(),
-                utxos[0].tx_pos as u32,
-            );
+            let txid = match bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()) {
+                Ok(result) => result,
+                Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+            };
+
+            let outpoint_0 = OutPoint::new(txid, utxos[0].tx_pos as u32);
             let utxo_value = utxos[0].value;
             if utxo_value >= expected_value {
                 self.utxo = Some(outpoint_0);
@@ -478,7 +480,7 @@ impl BtcSwapTx {
         } else {
             return Err(S5Error::new(ErrorKind::Input, "No preimage provided"));
         };
-        
+
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
@@ -510,17 +512,17 @@ impl BtcSwapTx {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
-        let sighash_message = match Message::from_digest_slice(&sighash[..]){
-            Ok(result)=>result,
-            Err(e)=>return Err(S5Error::new(ErrorKind::Transaction, &e.to_string()))
+        let sighash_message = match Message::from_digest_slice(&sighash[..]) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
         let signature = match bitcoin::ecdsa::Signature::from_str(
             &secp
                 .sign_ecdsa(&sighash_message, &keys.secret_key())
                 .to_string(),
-        ){
-            Ok(result)=>result,
-            Err(e)=>return Err(S5Error::new(ErrorKind::Transaction, &e.to_string()))
+        ) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
 
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
@@ -587,17 +589,17 @@ impl BtcSwapTx {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
-        let sighash_message = match Message::from_digest_slice(&sighash[..]){
-            Ok(result)=>result,
-            Err(e)=>return Err(S5Error::new(ErrorKind::Transaction, &e.to_string()))
+        let sighash_message = match Message::from_digest_slice(&sighash[..]) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
         let signature = match bitcoin::ecdsa::Signature::from_str(
             &secp
                 .sign_ecdsa(&sighash_message, &keys.secret_key())
                 .to_string(),
-        ){
-            Ok(result)=>result,
-            Err(e)=>return Err(S5Error::new(ErrorKind::Transaction, &e.to_string()))
+        ) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
         };
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
