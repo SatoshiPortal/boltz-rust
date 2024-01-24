@@ -1,12 +1,13 @@
-use std::os::unix::net;
+use std::{os::unix::net, str::FromStr};
 
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
-        liquid::LBtcSwapTx,
+        liquid::{LBtcSwapScript, LBtcSwapTx},
     },
-    util::secrets::{LiquidSwapKey, Preimage, SwapKey},
+    util::secrets::{LBtcReverseRecovery, LiquidSwapKey, Preimage, SwapKey},
+    ZKKeyPair, Keypair
 };
 pub mod test_utils;
 /// submarine swap integration
@@ -71,7 +72,7 @@ fn test_liquid_ssi() {
 fn test_liquid_rsi() {
     // https://liquidtestnet.com/faucet
     const RETURN_ADDRESS: &str =
-        "tlq1qqtc07z9kljll7dk2jyhz0qj86df9gnrc70t0wuexutzkxjavdpht0d4vwhgs2pq2f09zsvfr5nkglc394766w3hdaqrmay4tw";
+        "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7";
     let out_amount = 50_000;
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
@@ -79,9 +80,7 @@ fn test_liquid_rsi() {
     let lsk: LiquidSwapKey = swap_key.into();
     let keypair = lsk.keypair;
 
-    println!("SECRET-KEY: {:?}", keypair.display_secret());
     let preimage = Preimage::new();
-    println!("PREIMAGE: {}", hex::encode(preimage.bytes.unwrap()));
     // SECRETS
     let network_config = ElectrumConfig::default_liquid();
     let _electrum_client = network_config.build_client().unwrap();
@@ -100,7 +99,7 @@ fn test_liquid_rsi() {
     );
     let response = boltz_client.create_swap(request).unwrap();
     let id = response.get_id();
-
+    let blinding_key = ZKKeyPair::from_str(&response.get_blinding_key().unwrap()).unwrap();
     let invoice = response.get_invoice().unwrap();
     let boltz_script_elements = response
         .into_lbtc_rev_swap_script(&preimage, &keypair, Chain::LiquidTestnet)
@@ -109,6 +108,8 @@ fn test_liquid_rsi() {
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();
 
+    let recovery = LBtcReverseRecovery::new(&id, &preimage, &keypair, &blinding_key, &response.get_redeem_script().unwrap());
+    println!("RECOVERY: {:#?}", recovery);    
     println!("*******PAY********************");
     println!("*******LN*********************");
     println!("*******INVOICE****************");
@@ -153,4 +154,30 @@ fn test_liquid_rsi() {
         .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
+}
+
+#[test]
+fn test_recover_liquid_rsi(){
+    const RETURN_ADDRESS: &str =
+    "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7";
+    let recovery = &LBtcReverseRecovery {
+        id: "G5GDSN".to_string(),
+        preimage: "76878e58c6bfedc5e961b1c09fc5fad03bcbfce3237b586266b8288cdf70391f".to_string(),
+        claim_key: "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6".to_string(),
+        blinding_key: "b8ec3f5a97af0567a80246d0ed4f4c39106649797ced86a2085eaf2a5fd17d91".to_string(),
+        redeem_script: "8201208763a914756ec1797f685b2499638c5afbc69a418795073a882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c67750351d612b175210264db3a3b1c2a06a2a7ea5ccbb0d8e73d0605e4f9049c4b634ecd31c87880e1b668ac".to_string(),
+    };
+    let script: LBtcSwapScript = recovery.try_into().unwrap();
+    let mut tx = LBtcSwapTx::new_claim(script, RETURN_ADDRESS.to_string()).unwrap();
+    let network_config = ElectrumConfig::default_liquid();
+    let _ = tx.fetch_utxo(&network_config).unwrap();
+    let _keypair: Keypair = recovery.try_into().unwrap();
+    let _preimage : Preimage = recovery.try_into().unwrap();
+
+    // let signed_tx = tx
+    // .drain(&keypair, &preimage, 1_000)
+    // .unwrap();
+    // let txid = tx.broadcast(signed_tx, &network_config).unwrap();
+    // println!("{}", txid);
+
 }

@@ -477,16 +477,14 @@ impl LBtcSwapTx {
         let address = self.swap_script.to_address(network_config.network())?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
             self.swap_script
-                .to_address(network_config.network())?
-                .script_pubkey()
-                .as_bytes(),
+                .to_script()?.to_v0_p2wsh().as_bytes(),
         )) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
         };
         let bitcoin_txid = match history.last() {
             Some(result) => result,
-            None => return Err(S5Error::new(ErrorKind::Input, "No Trasnaction History")),
+            None => return Err(S5Error::new(ErrorKind::Input, "No Transaction History")),
         }
         .tx_hash;
         println!("{}", bitcoin_txid);

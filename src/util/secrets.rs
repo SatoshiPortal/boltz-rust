@@ -1,4 +1,6 @@
 use crate::network::Chain;
+use crate::swaps::bitcoin::BtcSwapScript;
+use crate::swaps::liquid::LBtcSwapScript;
 use crate::util::error::{ErrorKind, S5Error};
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
@@ -308,6 +310,22 @@ impl BtcSubmarineRecovery {
         }
     }
 }
+
+impl TryInto<BtcSwapScript> for &BtcSubmarineRecovery {
+    type Error = S5Error;
+    fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
+        Ok(BtcSwapScript::submarine_from_str(&self.redeem_script).unwrap())
+    }
+}
+
+impl TryInto<Keypair> for &BtcSubmarineRecovery {
+    type Error = S5Error;
+    fn try_into(self) -> Result<Keypair, Self::Error> {
+        let secp = Secp256k1::new();
+        Ok(Keypair::from_seckey_str(&secp, &self.refund_key).unwrap())
+    }
+}
+
 /// Recovery items for storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BtcReverseRecovery {
@@ -326,6 +344,27 @@ impl BtcReverseRecovery {
         }
     }
 }
+impl TryInto<BtcSwapScript> for &BtcReverseRecovery {
+    type Error = S5Error;
+    fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
+        Ok(BtcSwapScript::reverse_from_str(&self.redeem_script).unwrap())
+    }
+}
+
+impl TryInto<Keypair> for &BtcReverseRecovery {
+    type Error = S5Error;
+    fn try_into(self) -> Result<Keypair, Self::Error> {
+        let secp = Secp256k1::new();
+        Ok(Keypair::from_seckey_str(&secp, &self.claim_key).unwrap())
+    }
+}
+impl TryInto<Preimage> for &BtcReverseRecovery {
+    type Error = S5Error;
+    fn try_into(self) -> Result<Preimage, Self::Error> {
+        Ok(Preimage::from_str(&self.preimage).unwrap())
+    }
+}
+
 /// Recovery items for storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LBtcSubmarineRecovery {
@@ -375,7 +414,26 @@ impl LBtcReverseRecovery {
         }
     }
 }
+impl TryInto<LBtcSwapScript> for &LBtcReverseRecovery {
+    type Error = S5Error;
+    fn try_into(self) -> Result<LBtcSwapScript, Self::Error> {
+        Ok(LBtcSwapScript::reverse_from_str(&self.redeem_script, &self.blinding_key).unwrap())
+    }
+}
 
+impl TryInto<Keypair> for &LBtcReverseRecovery {
+    type Error = S5Error;
+    fn try_into(self) -> Result<Keypair, Self::Error> {
+        let secp = Secp256k1::new();
+        Ok(Keypair::from_seckey_str(&secp, &self.claim_key).unwrap())
+    }
+}
+impl TryInto<Preimage> for &LBtcReverseRecovery {
+    type Error = S5Error;
+    fn try_into(self) -> Result<Preimage, Self::Error> {
+        Ok(Preimage::from_str(&self.preimage).unwrap())
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
