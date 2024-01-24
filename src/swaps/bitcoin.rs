@@ -11,6 +11,7 @@ use bitcoin::{
 };
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
 use electrum_client::ElectrumApi;
+use serde::Serialize;
 
 use crate::{
     network::{electrum::ElectrumConfig, Chain},
@@ -395,18 +396,6 @@ impl BtcSwapTx {
             utxo_value: None,
         })
     }
-    /// Sweep the script utxo.
-    pub fn drain(
-        &mut self,
-        keys: &Keypair,
-        preimage: &Preimage,
-        absolute_fees: u64,
-    ) -> Result<Transaction, S5Error> {
-        match self.kind {
-            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
-            SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
-        }
-    }
     /// Fetch utxo for the script
     pub fn fetch_utxo(
         &mut self,
@@ -459,6 +448,19 @@ impl BtcSwapTx {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
 
+    /// Sweep the script utxo.
+    pub fn drain(
+        &mut self,
+        keys: &Keypair,
+        preimage: &Preimage,
+        absolute_fees: u64,
+    ) -> Result<Transaction, S5Error> {
+        match self.kind {
+            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
+            SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
+        }
+    }
+
     /// Sign a reverse swap claim transaction
     fn sign_claim_tx(
         &self,
@@ -503,31 +505,31 @@ impl BtcSwapTx {
         let redeem_script = self.swap_script.to_script()?;
         let secp = Secp256k1::new();
         let hash_type = bitcoin::sighash::EcdsaSighashType::All;
-        let sighash = match SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
+        let sighash = match SighashCache::new(unsigned_tx.clone()).p2wsh_signature_hash(
             0,
             &redeem_script,
             Amount::from_sat(self.utxo_value.unwrap()),
             hash_type,
         ) {
             Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
+            Err(e) => {
+                return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e)))
+            }
         };
         let sighash_message = match Message::from_digest_slice(&sighash[..]) {
             Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
-        };
-        let signature = match bitcoin::ecdsa::Signature::from_str(
-            &secp
-                .sign_ecdsa(&sighash_message, &keys.secret_key())
-                .to_string(),
-        ) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
-        };
+            Err(e) => {
+                return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e)))
 
+            }
+        };
+        let signature = secp
+                .sign_ecdsa(&sighash_message, &keys.secret_key());
+        signature.verify(&sighash_message, &keys.public_key()).unwrap();
+        let ecdsa_signature = bitcoin::ecdsa::Signature::sighash_all(signature);
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
-        witness.push_ecdsa_signature(&signature);
+        witness.push_ecdsa_signature(&ecdsa_signature);
         witness.push(preimage_bytes);
         witness.push(redeem_script.as_bytes());
 

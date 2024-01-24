@@ -6,7 +6,7 @@ use boltz_client::{
             BoltzApiClient, CreateSwapRequest, SwapStatusRequest, SwapType, BOLTZ_TESTNET_URL,
         },
     },
-    util::secrets::{Preimage, SwapKey},
+    util::secrets::{BtcReverseRecovery, Preimage, SwapKey},
     Bolt11Invoice, Keypair, Secp256k1,
 };
 
@@ -59,8 +59,8 @@ fn test_bitcoin_ssi() {
     println!("{:?}", response);
 
     let _id = response.get_id();
-    let funding_amount = response.get_expected_amount().unwrap();
-    let script = response.into_btc_sub_swap_script(&preimage).unwrap();
+    let funding_amount = response.get_funding_amount().unwrap();
+    let script = response.into_btc_sub_swap_script(&preimage, network_config.network()).unwrap();
     let funding_address = script.to_address(network_config.network()).unwrap();
 
     println!("*******FUND*********************");
@@ -81,29 +81,20 @@ fn test_bitcoin_ssi() {
 fn test_bitcoin_rsi() {
     const RETURN_ADDRESS: &str = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu";
     let out_amount = 50_000;
-
     // SECRETS
-    let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
+    let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
 
     let keypair =
-        SwapKey::from_reverse_account(&&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
+        SwapKey::from_reverse_account(mnemonic, "", Chain::BitcoinTestnet, 1)
             .unwrap()
             .keypair;
-    println!(
-        "****SECRETS****:\n sec: {:?}, pub: {:?}",
-        keypair.display_secret(),
-        keypair.public_key()
-    );
     let preimage = Preimage::new();
-    println!("****SECRETS****:\n preimage: {:?}", preimage.to_string());
     // SECRETS
-
     let network_config = ElectrumConfig::default_bitcoin();
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_btc_pair = boltz_pairs.get_btc_pair();
-
     let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
         &boltz_btc_pair.unwrap().hash,
         &preimage.sha256.to_string(),
@@ -121,6 +112,9 @@ fn test_bitcoin_rsi() {
     let script_balance = boltz_rev_script.get_balance(&network_config).unwrap();
     assert_eq!(script_balance.0, 0);
     assert_eq!(script_balance.1, 0);
+
+    let recovery = BtcReverseRecovery::new(&id, &preimage, &keypair, &response.get_redeem_script().unwrap());
+    println!("RECOVERY: {:#?}", recovery);
     println!("*******PAY********************");
     println!("*******LN*********************");
     println!("*******INVOICE****************");
@@ -135,7 +129,6 @@ fn test_bitcoin_rsi() {
         assert!(response.is_ok());
         let swap_status = response.unwrap().status;
         println!("SwapStatus: {}", swap_status);
-
         if swap_status == "swap.created" {
             println!("Your turn: Pay the invoice");
         }
@@ -162,7 +155,7 @@ fn test_bitcoin_rsi() {
         network_config.network(),
     )
     .unwrap();
-    let _ = rv_claim_tx.fetch_utxo(out_amount, &network_config);
+    let _ = rv_claim_tx.fetch_utxo(response.get_lockup_amount().unwrap(), &network_config).unwrap();
     let signed_tx = rv_claim_tx
         .drain(&keypair, &preimage, absolute_fees)
         .unwrap();

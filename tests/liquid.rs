@@ -47,8 +47,8 @@ fn test_liquid_ssi() {
 
     println!("{:?}", response);
 
-    let expected_amount = response.get_expected_amount().unwrap();
-    let boltz_script_elements = response.into_lbtc_sub_swap_script(&preimage).unwrap();
+    let expected_amount = response.get_funding_amount().unwrap();
+    let boltz_script_elements = response.into_lbtc_sub_swap_script(&preimage, network_config.network()).unwrap();
     let funding_address = boltz_script_elements
         .to_address(network_config.network())
         .unwrap()

@@ -152,7 +152,17 @@ So when manually testing, make sure you update the invoice variable.
 
 For all ignored unit tests read the tests before running.
 
+### connecting a ln testnet channel with boltz
 
+Its better to connect directly to boltz for testing to ensure payment routes are guarenteed.
+
+Use botlz's 02* channel for testing with small amounts.
+
+```bash
+export FUND=2100000
+lightning-cli --lightning-dir=/.lightning connect 029040945df331e634fba152ce6a21e3dfca87b68d275e078caeee4753f43e9acb 212.46.38.66:9736
+lightning-cli --lightning-dir=/.lightning fundchannel 029040945df331e634fba152ce6a21e3dfca87b68d275e078caeee4753f43e9acb $FUND
+```
 ## Milestones
 
 - [x] NormalSwap  (BTC): Claim (Invoice paid)

@@ -742,6 +742,26 @@ impl CreateSwapResponse {
         }
         Ok(self.redeem_script.clone().unwrap())
     }
+    /// Get a copy of the address to fund for a submarine swap
+    pub fn get_funding_address(&self) -> Result<String, S5Error> {
+        if self.address.is_none() {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "Boltz response does not contain a redeem script.",
+            ));
+        }
+        Ok(self.address.clone().unwrap())
+    }
+    /// Get a copy of the expected amount to fund a submarine swap
+    pub fn get_funding_amount(&self) -> Result<u64, S5Error> {
+        if self.expected_amount.is_none() {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "Boltz response does not contain an expected amount.",
+            ));
+        }
+        Ok(self.expected_amount.clone().unwrap())
+    }
 
     /// Get a copy of the blinding key
     pub fn get_blinding_key(&self) -> Result<String, S5Error> {
@@ -753,17 +773,26 @@ impl CreateSwapResponse {
         }
         Ok(self.blinding_key.clone().unwrap())
     }
-    /// Get a copy of the expected amount (utxo size of a reverse swap)
-    pub fn get_expected_amount(&self) -> Result<u64, S5Error> {
-        if self.expected_amount.is_none() {
+    /// Get a copy of the lockup address to sweep for a reverse swap
+    pub fn get_lockup_address(&self) -> Result<String, S5Error> {
+        if self.lockup_address.is_none() {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "Boltz response does not contain a redeem script.",
+            ));
+        }
+        Ok(self.lockup_address.clone().unwrap())
+    }
+    /// Get a copy of the onchain lockup amount (utxo size of a reverse swap)
+    pub fn get_lockup_amount(&self) -> Result<u64, S5Error> {
+        if self.onchain_amount.is_none() {
             return Err(S5Error::new(
                 ErrorKind::Input,
                 "Boltz response does not contain an expected amount.",
             ));
         }
-        Ok(self.expected_amount.clone().unwrap())
+        Ok(self.onchain_amount.clone().unwrap())
     }
-
     /// Get a copy of the Timelock value
     pub fn get_timeout(&self) -> Result<u64, S5Error> {
         if self.timeout_block_height.is_none() {
@@ -788,8 +817,12 @@ impl CreateSwapResponse {
         }
     }
     /// Get a BtcSwapScript of the a btc submarine swap response
-    pub fn into_btc_sub_swap_script(&self, preimage: &Preimage) -> Result<BtcSwapScript, S5Error> {
-        match self.validate_submarine(&preimage.hash160) {
+    pub fn into_btc_sub_swap_script(
+        &self,
+        preimage: &Preimage,
+        chain: Chain,
+    ) -> Result<BtcSwapScript, S5Error> {
+        match self.validate_submarine(&preimage.hash160, chain) {
             Ok(()) => {
                 if self.redeem_script.is_none() {
                     return Err(S5Error::new(
@@ -808,8 +841,9 @@ impl CreateSwapResponse {
     pub fn into_lbtc_sub_swap_script(
         &self,
         preimage: &Preimage,
+        chain: Chain,
     ) -> Result<LBtcSwapScript, S5Error> {
-        match self.validate_submarine(&preimage.hash160) {
+        match self.validate_submarine(&preimage.hash160, chain) {
             Ok(()) => {
                 if self.redeem_script.is_none() {
                     return Err(S5Error::new(
@@ -872,22 +906,39 @@ impl CreateSwapResponse {
         }
     }
     /// Ensure submarine swap redeem script uses the preimage hash used in the invoice
-    fn validate_submarine(&self, preimage_hash160: &hash160::Hash) -> Result<(), S5Error> {
+    fn validate_submarine(
+        &self,
+        preimage_hash160: &hash160::Hash,
+        chain: Chain,
+    ) -> Result<(), S5Error> {
         match &self.redeem_script {
             Some(rs) => {
                 let script_elements = BtcSwapScript::submarine_from_str(&rs)?;
                 if &script_elements.hashlock == &preimage_hash160.to_string() {
-                    Ok(())
+                    ()
                 } else {
-                    Err(S5Error::new(
+                    return Err(S5Error::new(
                         ErrorKind::BoltzApi,
                         &format!(
-                            "{},{}",
+                            "Hash160 mismatch: {},{}",
                             script_elements.hashlock,
                             preimage_hash160.to_string()
                         ),
-                    ))
+                    ));
                 }
+                if script_elements.to_address(chain)?.to_string() == self.get_funding_address()? {
+                    ()
+                } else {
+                    return Err(S5Error::new(
+                        ErrorKind::BoltzApi,
+                        &format!(
+                            "Address mismatch: {},{}",
+                            script_elements.to_address(chain)?.to_string(),
+                            self.get_funding_address()?
+                        ),
+                    ));
+                }
+                Ok(())
             }
             None => Err(S5Error::new(
                 ErrorKind::BoltzApi,
@@ -950,7 +1001,7 @@ impl CreateSwapResponse {
                 );
                 let address = constructed_rev_script.to_address(chain).unwrap();
                 if constructed_rev_script == boltz_rev_script
-                    && address.to_string() == self.lockup_address.as_ref().unwrap().to_string()
+                    && address.to_string() == self.get_lockup_address()?
                 {
                     Ok(())
                 } else {
