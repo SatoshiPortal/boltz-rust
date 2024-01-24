@@ -4,9 +4,9 @@ use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
-        liquid::{LBtcSwapTx},
+        liquid::LBtcSwapTx,
     },
-    util::{secrets::{SwapKey, LiquidSwapKey,Preimage}},
+    util::secrets::{LiquidSwapKey, Preimage, SwapKey},
 };
 pub mod test_utils;
 /// submarine swap integration
@@ -32,8 +32,9 @@ fn test_liquid_ssi() {
     let _electrum_client = network_config.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let boltz_lbtc_pair = boltz_pairs.get_lbtc_pair();
-    let fees = boltz_lbtc_pair.fees.submarine_boltz(_out_amount).unwrap() +  boltz_lbtc_pair.fees.submarine_claim().unwrap();
+    let boltz_lbtc_pair = boltz_pairs.get_lbtc_pair().unwrap();
+    let fees = boltz_lbtc_pair.fees.submarine_boltz(_out_amount).unwrap()
+        + boltz_lbtc_pair.fees.submarine_claim().unwrap();
     println!("TOTAL FEES:{}", fees);
 
     let request = CreateSwapRequest::new_lbtc_submarine(
@@ -48,7 +49,10 @@ fn test_liquid_ssi() {
 
     let expected_amount = response.get_expected_amount().unwrap();
     let boltz_script_elements = response.into_lbtc_sub_swap_script(&preimage).unwrap();
-    let funding_address = boltz_script_elements.to_address(network_config.network()).unwrap().to_string();
+    let funding_address = boltz_script_elements
+        .to_address(network_config.network())
+        .unwrap()
+        .to_string();
 
     println!("{:?}", boltz_script_elements);
 
@@ -71,8 +75,7 @@ fn test_liquid_rsi() {
     let out_amount = 50_000;
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let swap_key = SwapKey::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1)
-        .unwrap();
+    let swap_key = SwapKey::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1).unwrap();
     let lsk: LiquidSwapKey = swap_key.into();
     let keypair = lsk.keypair;
 
@@ -84,8 +87,9 @@ fn test_liquid_rsi() {
     let _electrum_client = network_config.build_client().unwrap();
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let boltz_lbtc_pair = boltz_pairs.get_lbtc_pair();
-    let fees = boltz_lbtc_pair.fees.reverse_boltz(out_amount).unwrap() + boltz_lbtc_pair.fees.reverse_lockup().unwrap();
+    let boltz_lbtc_pair = boltz_pairs.get_lbtc_pair().unwrap();
+    let fees = boltz_lbtc_pair.fees.reverse_boltz(out_amount).unwrap()
+        + boltz_lbtc_pair.fees.reverse_lockup().unwrap();
     println!("TOTAL FEES: {}", fees);
 
     let request = CreateSwapRequest::new_lbtc_reverse_onchain_amt(
@@ -98,7 +102,9 @@ fn test_liquid_rsi() {
     let id = response.get_id();
 
     let invoice = response.get_invoice().unwrap();
-    let boltz_script_elements = response.into_lbtc_rev_swap_script(&preimage, &keypair, Chain::LiquidTestnet).unwrap();
+    let boltz_script_elements = response
+        .into_lbtc_rev_swap_script(&preimage, &keypair, Chain::LiquidTestnet)
+        .unwrap();
 
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();
@@ -143,11 +149,7 @@ fn test_liquid_rsi() {
     test_utils::pause_and_wait("Waiting....");
 
     let signed_tx = rev_swap_tx
-        .drain(
-            &keypair,
-            &preimage,
-            absolute_fees,
-        )
+        .drain(&keypair, &preimage, absolute_fees)
         .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);

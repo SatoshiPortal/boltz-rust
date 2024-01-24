@@ -2,7 +2,7 @@
 mod tests {
     use std::str::FromStr;
 
-    use elements::secp256k1_zkp::{Generator, RangeProof, Tag, Tweak,SecretKey};
+    use elements::secp256k1_zkp::{Generator, RangeProof, SecretKey, Tag, Tweak};
     use hex::FromHex;
 
     use elements::secp256k1_zkp::{PedersenCommitment, Secp256k1 as ZKSecp256k1};

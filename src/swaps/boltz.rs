@@ -76,14 +76,24 @@ impl BoltzApiClient {
 
         match ureq::get(&url).call() {
             Ok(res) => {
-                let body = res.into_string().unwrap();
-                let get_pairs_response: GetPairsResponse = serde_json::from_str(&body).unwrap();
+                let body = match res.into_string() {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
+                let get_pairs_response: GetPairsResponse = match serde_json::from_str(&body) {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
                 Ok(get_pairs_response)
             }
-            Err(Error::Status(_code, res)) => Err(S5Error::new(
-                ErrorKind::BoltzApi,
-                &res.into_string().unwrap(),
-            )),
+            Err(Error::Status(_code, res)) => {
+                let message = match res.into_string() {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
+                Err(S5Error::new(ErrorKind::BoltzApi, &message))
+            }
+
             Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
         }
     }
@@ -93,15 +103,24 @@ impl BoltzApiClient {
 
         match ureq::get(&url).call() {
             Ok(res) => {
-                let body = res.into_string().unwrap();
+                let body = match res.into_string() {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
                 let get_fee_estimation_response: GetFeeEstimationResponse =
-                    serde_json::from_str(&body).unwrap();
+                    match serde_json::from_str(&body) {
+                        Ok(t) => t,
+                        Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                    };
                 Ok(get_fee_estimation_response)
             }
-            Err(Error::Status(_code, res)) => Err(S5Error::new(
-                ErrorKind::BoltzApi,
-                &res.into_string().unwrap(),
-            )),
+            Err(Error::Status(_code, res)) => {
+                let message = match res.into_string() {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
+                Err(S5Error::new(ErrorKind::BoltzApi, &message))
+            }
             Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
         }
     }
@@ -109,33 +128,58 @@ impl BoltzApiClient {
     /// Check CreateSwapRequest to see how to construct each swap request.
     pub fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, S5Error> {
         let url = format!("{}/createswap", self.base_url);
-
-        match ureq::post(&url).send_json(serde_json::to_value(request).unwrap()) {
+        let data = match serde_json::to_value(request) {
+            Ok(t) => t,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+        match ureq::post(&url).send_json(data) {
             Ok(res) => {
-                let body = res.into_string().unwrap();
-                let create_swap_response: CreateSwapResponse = serde_json::from_str(&body).unwrap();
+                let body = match res.into_string() {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
+                let create_swap_response: CreateSwapResponse = match serde_json::from_str(&body) {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
                 Ok(create_swap_response)
             }
-            Err(Error::Status(_code, res)) => Err(S5Error::new(
-                ErrorKind::BoltzApi,
-                &res.into_string().unwrap(),
-            )),
+            Err(Error::Status(_code, res)) => {
+                let message = match res.into_string() {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
+                Err(S5Error::new(ErrorKind::BoltzApi, &message))
+            }
             Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
         }
     }
     /// Checks the status of an ongoing swap with boltz.
     pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, S5Error> {
         let url = format!("{}/swapstatus", self.base_url);
-        match ureq::post(&url).send_json(serde_json::to_value(request).unwrap()) {
+        let data = match serde_json::to_value(request) {
+            Ok(t) => t,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+        match ureq::post(&url).send_json(data) {
             Ok(res) => {
-                let body = res.into_string().unwrap();
-                let swap_status_response: SwapStatusResponse = serde_json::from_str(&body).unwrap();
+                let body = match res.into_string() {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
+                let swap_status_response: SwapStatusResponse = match serde_json::from_str(&body) {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
                 Ok(swap_status_response)
             }
-            Err(Error::Status(_code, res)) => Err(S5Error::new(
-                ErrorKind::BoltzApi,
-                &res.into_string().unwrap(),
-            )),
+            Err(Error::Status(_code, res)) => {
+                let message = match res.into_string() {
+                    Ok(t) => t,
+                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
+                };
+                Err(S5Error::new(ErrorKind::BoltzApi, &message))
+            }
             Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
         }
     }
@@ -189,21 +233,34 @@ pub struct GetPairsResponse {
 }
 
 impl GetPairsResponse {
-    pub fn get_btc_pair(&self) -> Pair {
-        self.pairs
+    pub fn get_btc_pair(&self) -> Result<Pair, S5Error> {
+        match self
+            .pairs
             .pairs
             .get(&PairId::BtcBtc.to_string())
             .map(|pair_info| pair_info)
-            .unwrap()
-            .clone()
+        {
+            Some(t) => Ok(t.clone()),
+            None => Err(S5Error::new(
+                ErrorKind::BoltzApi,
+                "Could not find pair BTC/BTC",
+            )),
+        }
     }
-    pub fn get_lbtc_pair(&self) -> Pair {
-        self.pairs
+    pub fn get_lbtc_pair(&self) -> Result<Pair, S5Error> {
+        match self
+            .pairs
             .pairs
             .get(&PairId::LBtcBtc.to_string())
             .map(|pair_info| pair_info)
-            .unwrap()
-            .clone()
+        {
+            Some(t) => Ok(t.clone()),
+            None => Err(S5Error::new(
+                ErrorKind::BoltzApi,
+                "Could not find pair LBTC/BTC",
+            )),
+        }
+        .clone()
     }
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1017,12 +1074,20 @@ mod tests {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let response = client.get_pairs().unwrap();
         let output_amount = 100_000;
-        let _btc_pair_hash = response.get_btc_pair().hash;
-        let _rev_total_fee= response.get_btc_pair().fees.reverse_total(output_amount);
-        let _btc_limits = response.get_btc_pair().limits;
-        let _lbtc_pair_hash = response.get_lbtc_pair().hash;
-        let _sub_total_fee = response.get_lbtc_pair().fees.submarine_total(output_amount);
-        let _lbtc_limits = response.get_lbtc_pair().limits;
+        let _btc_pair_hash = response.get_btc_pair().unwrap().hash;
+        let _rev_total_fee = response
+            .get_btc_pair()
+            .unwrap()
+            .fees
+            .reverse_total(output_amount);
+        let _btc_limits = response.get_btc_pair().unwrap().limits;
+        let _lbtc_pair_hash = response.get_lbtc_pair().unwrap().hash;
+        let _sub_total_fee = response
+            .get_lbtc_pair()
+            .unwrap()
+            .fees
+            .submarine_total(output_amount);
+        let _lbtc_limits = response.get_lbtc_pair().unwrap().limits;
     }
 
     #[test]
@@ -1085,7 +1150,7 @@ mod tests {
     fn test_composite() {
         let client = BoltzApiClient::new(BOLTZ_MAINNET_URL);
         let pairs = client.get_pairs().unwrap();
-        let btc_pair = pairs.get_btc_pair();
+        let btc_pair = pairs.get_btc_pair().unwrap();
         let output_amount = 75_000;
         let base_fees = btc_pair.fees.reverse_boltz(output_amount).unwrap()
             + btc_pair.fees.reverse_lockup().unwrap();

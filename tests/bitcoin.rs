@@ -6,7 +6,7 @@ use boltz_client::{
             BoltzApiClient, CreateSwapRequest, SwapStatusRequest, SwapType, BOLTZ_TESTNET_URL,
         },
     },
-    util::secrets::{SwapKey,Preimage},
+    util::secrets::{Preimage, SwapKey},
     Bolt11Invoice, Keypair, Secp256k1,
 };
 
@@ -44,8 +44,9 @@ fn test_bitcoin_ssi() {
     // CHECK FEES AND LIMITS IN BOLTZ AND MAKE SURE USER CONFIRMS THIS FIRST
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
-    let boltz_btc_pair = boltz_pairs.get_btc_pair();
-    let fees = boltz_btc_pair.fees.submarine_boltz(out_amount).unwrap() + boltz_btc_pair.fees.submarine_claim().unwrap();
+    let boltz_btc_pair = boltz_pairs.get_btc_pair().unwrap();
+    let fees = boltz_btc_pair.fees.submarine_boltz(out_amount).unwrap()
+        + boltz_btc_pair.fees.submarine_claim().unwrap();
     println!("TOTAL FEES: {}", fees);
     let request = CreateSwapRequest::new_btc_submarine(
         &boltz_btc_pair.hash,
@@ -94,10 +95,7 @@ fn test_bitcoin_rsi() {
         keypair.public_key()
     );
     let preimage = Preimage::new();
-    println!(
-        "****SECRETS****:\n preimage: {:?}",
-        preimage.to_string()
-    );
+    println!("****SECRETS****:\n preimage: {:?}", preimage.to_string());
     // SECRETS
 
     let network_config = ElectrumConfig::default_bitcoin();
@@ -107,7 +105,7 @@ fn test_bitcoin_rsi() {
     let boltz_btc_pair = boltz_pairs.get_btc_pair();
 
     let request = CreateSwapRequest::new_btc_reverse_invoice_amt(
-        &boltz_btc_pair.hash,
+        &boltz_btc_pair.unwrap().hash,
         &preimage.sha256.to_string(),
         &keypair.public_key().to_string(),
         out_amount,
@@ -116,11 +114,11 @@ fn test_bitcoin_rsi() {
     println!("{:?}", response);
     let id = response.get_id();
     let invoice = response.get_invoice().unwrap();
-    let boltz_rev_script = response.into_btc_rev_swap_script(&preimage, &keypair, Chain::BitcoinTestnet).unwrap();
-
-    let script_balance = boltz_rev_script
-        .get_balance(&network_config)
+    let boltz_rev_script = response
+        .into_btc_rev_swap_script(&preimage, &keypair, Chain::BitcoinTestnet)
         .unwrap();
+
+    let script_balance = boltz_rev_script.get_balance(&network_config).unwrap();
     assert_eq!(script_balance.0, 0);
     assert_eq!(script_balance.1, 0);
     println!("*******PAY********************");
@@ -145,9 +143,7 @@ fn test_bitcoin_rsi() {
             println!("*******BOLTZ******************");
             println!("*******ONCHAIN-TX*************");
             println!("*******DETECTED***************");
-            let script_balance = boltz_rev_script
-                .get_balance(&network_config)
-                .unwrap();
+            let script_balance = boltz_rev_script.get_balance(&network_config).unwrap();
             println!(
                 "confirmed: {}, unconfirmed: {}",
                 script_balance.0, script_balance.1
@@ -167,7 +163,9 @@ fn test_bitcoin_rsi() {
     )
     .unwrap();
     let _ = rv_claim_tx.fetch_utxo(out_amount, &network_config);
-    let signed_tx = rv_claim_tx.drain(&keypair, &preimage, absolute_fees).unwrap();
+    let signed_tx = rv_claim_tx
+        .drain(&keypair, &preimage, absolute_fees)
+        .unwrap();
     let txid = rv_claim_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
 }
@@ -212,15 +210,9 @@ fn test_recover_bitcoin_rsi() {
     .unwrap();
 
     let _ = rev_swap_tx.fetch_utxo(out_amount, &network_config);
-    let signed_tx = rev_swap_tx.drain(&keypair, &preimage, absolute_fees).unwrap();
+    let signed_tx = rev_swap_tx
+        .drain(&keypair, &preimage, absolute_fees)
+        .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
 }
-
-
-
-
-
-
-
-
