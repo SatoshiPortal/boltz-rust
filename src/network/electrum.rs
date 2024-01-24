@@ -30,7 +30,6 @@ impl ElectrumUrl {
             Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
         }
     }
-    
 }
 
 /// Electrum client configuration.
@@ -43,7 +42,13 @@ pub struct ElectrumConfig {
 
 impl ElectrumConfig {
     pub fn default_bitcoin() -> Self {
-        ElectrumConfig::new(Chain::BitcoinTestnet, DEFAULT_TESTNET_NODE, true, true, DEFAULT_ELECTRUM_TIMEOUT)
+        ElectrumConfig::new(
+            Chain::BitcoinTestnet,
+            DEFAULT_TESTNET_NODE,
+            true,
+            true,
+            DEFAULT_ELECTRUM_TIMEOUT,
+        )
     }
     pub fn default_liquid() -> Self {
         ElectrumConfig::new(

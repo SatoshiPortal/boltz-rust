@@ -10,4 +10,3 @@ pub fn pause_and_wait(msg: &str) {
     stdout.flush().unwrap();
     let _ = stdin.read_line(&mut String::new()).unwrap();
 }
-

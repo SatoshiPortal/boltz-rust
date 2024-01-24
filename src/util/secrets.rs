@@ -1,7 +1,7 @@
 use crate::network::Chain;
 use crate::util::error::{ErrorKind, S5Error};
 use bip39::Mnemonic;
-use bitcoin::bip32::{DerivationPath, Xpriv, Fingerprint};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
 use bitcoin::secp256k1::{Keypair, Secp256k1};
 use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 
@@ -164,7 +164,9 @@ pub struct LiquidSwapKey {
 impl From<SwapKey> for LiquidSwapKey {
     fn from(swapkey: SwapKey) -> Self {
         let secp = ZKSecp256k1::new();
-        let liquid_keypair = ZKKeyPair::from_seckey_str(&secp, &swapkey.keypair.display_secret().to_string()).unwrap();
+        let liquid_keypair =
+            ZKKeyPair::from_seckey_str(&secp, &swapkey.keypair.display_secret().to_string())
+                .unwrap();
 
         LiquidSwapKey {
             fingerprint: swapkey.fingerprint,
@@ -290,75 +292,86 @@ impl Preimage {
     }
 }
 
-/// Recovery items for storage 
+/// Recovery items for storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BtcSubmarineRecovery{
+pub struct BtcSubmarineRecovery {
     pub id: String,
     pub refund_key: String,
-    pub redeem_script: String
+    pub redeem_script: String,
 }
 impl BtcSubmarineRecovery {
-    pub fn new(id: String, refund_key: Keypair, redeem_script: String)->Self{
-        BtcSubmarineRecovery{
+    pub fn new(id: String, refund_key: Keypair, redeem_script: String) -> Self {
+        BtcSubmarineRecovery {
             id,
             refund_key: refund_key.display_secret().to_string(),
             redeem_script,
         }
     }
 }
-/// Recovery items for storage 
+/// Recovery items for storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BtcReverseRecovery{
+pub struct BtcReverseRecovery {
     pub id: String,
     pub preimage: String,
     pub claim_key: String,
-    pub redeem_script: String
+    pub redeem_script: String,
 }
 impl BtcReverseRecovery {
-    pub fn new(id: &str, preimage: &Preimage, claim_key: &Keypair, redeem_script: &str)->Self{
-        BtcReverseRecovery{
+    pub fn new(id: &str, preimage: &Preimage, claim_key: &Keypair, redeem_script: &str) -> Self {
+        BtcReverseRecovery {
             id: id.to_string(),
             claim_key: claim_key.display_secret().to_string(),
             preimage: preimage.to_string().unwrap(),
-            redeem_script:redeem_script.to_string(),
+            redeem_script: redeem_script.to_string(),
         }
     }
 }
-/// Recovery items for storage 
+/// Recovery items for storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct LBtcSubmarineRecovery{
+pub struct LBtcSubmarineRecovery {
     pub id: String,
     pub refund_key: String,
     pub blinding_key: String,
-    pub redeem_script: String
+    pub redeem_script: String,
 }
 impl LBtcSubmarineRecovery {
-    pub fn new(id: &str, refund_key: &Keypair, blinding_key: &ZKKeyPair, redeem_script: &str)->Self{
-        LBtcSubmarineRecovery{
+    pub fn new(
+        id: &str,
+        refund_key: &Keypair,
+        blinding_key: &ZKKeyPair,
+        redeem_script: &str,
+    ) -> Self {
+        LBtcSubmarineRecovery {
             id: id.to_string(),
             refund_key: refund_key.display_secret().to_string(),
-            redeem_script:redeem_script.to_string(),
+            redeem_script: redeem_script.to_string(),
             blinding_key: blinding_key.display_secret().to_string(),
         }
     }
 }
-/// Recovery items for storage 
+/// Recovery items for storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct LBtcReverseRecovery{
+pub struct LBtcReverseRecovery {
     pub id: String,
     pub preimage: String,
     pub claim_key: String,
     pub blinding_key: String,
-    pub redeem_script: String
+    pub redeem_script: String,
 }
 impl LBtcReverseRecovery {
-    pub fn new(id: &str, preimage: &Preimage, claim_key: &Keypair, blinding_key: &ZKKeyPair, redeem_script: &str)->Self{
-        LBtcReverseRecovery{
-            id:id.to_string(),
+    pub fn new(
+        id: &str,
+        preimage: &Preimage,
+        claim_key: &Keypair,
+        blinding_key: &ZKKeyPair,
+        redeem_script: &str,
+    ) -> Self {
+        LBtcReverseRecovery {
+            id: id.to_string(),
             claim_key: claim_key.display_secret().to_string(),
             blinding_key: blinding_key.display_secret().to_string(),
             preimage: preimage.to_string().unwrap(),
-            redeem_script:redeem_script.to_string(),
+            redeem_script: redeem_script.to_string(),
         }
     }
 }
@@ -375,15 +388,9 @@ mod tests {
         let lks: LiquidSwapKey = sk.clone().into();
         assert!(sk.fingerprint == lks.fingerprint);
         // println!("{:?}", derived.unwrap().Keypair.display_secret());
+        assert_eq!(&sk.fingerprint.to_string().clone(), "9a6a2580");
         assert_eq!(
-            &sk.fingerprint.to_string().clone(),
-            "9a6a2580"
-        );
-        assert_eq!(
-            &sk
-                .keypair
-                .display_secret()
-                .to_string(),
+            &sk.keypair.display_secret().to_string(),
             "d8d26ab9ba4e2c44f1a1fb9e10dc9d78707aaaaf38b5d42cf5c8bf00306acd85"
         );
     }
