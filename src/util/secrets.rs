@@ -293,6 +293,55 @@ impl Preimage {
         }
     }
 }
+use serde_json;
+use std::fs::File;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+
+/// Boltz standard JSON refund swap file. Can be used to create a file that can be uploaded to boltz.exchange 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RefundSwapFile {
+    pub id: String,
+    pub currency: String,
+    pub redeem_script: String,
+    pub private_key: String,
+    pub timeout_block_height: u64,
+}
+impl RefundSwapFile {
+    pub fn file_name(&self)->String{
+        format!("boltz-{}.json", self.id)
+    }
+    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), S5Error> {
+        let mut full_path = PathBuf::from(path.as_ref());
+        full_path.push(self.file_name());
+        let mut file = match File::create(&full_path) {
+            Ok(f) => f,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+        let json = match serde_json::to_string_pretty(self) {
+            Ok(j) => j,
+            Err(e) => return Err(S5Error::new(ErrorKind::Script, &e.to_string())),
+        };
+        if let Err(e) = writeln!(file, "{}", json) {
+            return Err(S5Error::new(ErrorKind::Input, &e.to_string()));
+        }
+        Ok(())
+    }
+    pub fn read_from_file<P: AsRef<Path>>(path: P) -> Result<Self, S5Error> {
+        let mut file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+        let mut contents = String::new();
+        if let Err(e) = file.read_to_string(&mut contents) {
+            return Err(S5Error::new(ErrorKind::Input, &e.to_string()));
+        }
+        match serde_json::from_str(&contents) {
+            Ok(refund_swap_file) => Ok(refund_swap_file),
+            Err(e) => Err(S5Error::new(ErrorKind::Script, &e.to_string())),
+        }
+    }
+}
 
 /// Recovery items for storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -302,11 +351,23 @@ pub struct BtcSubmarineRecovery {
     pub redeem_script: String,
 }
 impl BtcSubmarineRecovery {
-    pub fn new(id: String, refund_key: Keypair, redeem_script: String) -> Self {
+    pub fn new(id: &str, refund_key: &Keypair, redeem_script: &str) -> Self {
         BtcSubmarineRecovery {
-            id,
+            id: id.to_string(),
             refund_key: refund_key.display_secret().to_string(),
-            redeem_script,
+            redeem_script: redeem_script.to_string(),
+        }
+    }
+}
+impl Into<RefundSwapFile> for BtcSubmarineRecovery {
+    fn into(self) -> RefundSwapFile {
+        let script = BtcSwapScript::submarine_from_str(&self.redeem_script).unwrap();
+        RefundSwapFile {
+            id: self.id,
+            currency: "BTC".to_string(),
+            redeem_script: self.redeem_script,
+            private_key: self.refund_key,
+            timeout_block_height: script.timelock as u64,
         }
     }
 }
@@ -388,6 +449,18 @@ impl LBtcSubmarineRecovery {
         }
     }
 }
+impl Into<RefundSwapFile> for LBtcSubmarineRecovery {
+    fn into(self) -> RefundSwapFile {
+        let script = LBtcSwapScript::submarine_from_str(&self.redeem_script, &self.blinding_key).unwrap();
+        RefundSwapFile {
+            id: self.id,
+            currency: "L-BTC".to_string(),
+            redeem_script: self.redeem_script,
+            private_key: self.refund_key,
+            timeout_block_height: script.timelock as u64,
+        }
+    }
+}
 /// Recovery items for storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LBtcReverseRecovery {
@@ -436,6 +509,8 @@ impl TryInto<Preimage> for &LBtcReverseRecovery {
 }
 #[cfg(test)]
 mod tests {
+    use std::{cell::Ref, path};
+
     use super::*;
 
     #[test]
@@ -451,5 +526,22 @@ mod tests {
             &sk.keypair.display_secret().to_string(),
             "d8d26ab9ba4e2c44f1a1fb9e10dc9d78707aaaaf38b5d42cf5c8bf00306acd85"
         );
+    }
+
+    #[test]
+    fn test_recover(){
+        let recovery = LBtcSubmarineRecovery {
+            id: "G5GDSN".to_string(),
+            refund_key: "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6".to_string(),
+            blinding_key: "b8ec3f5a97af0567a80246d0ed4f4c39106649797ced86a2085eaf2a5fd17d91".to_string(),
+            redeem_script: "8201208763a914756ec1797f685b2499638c5afbc69a418795073a882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c67750351d612b175210264db3a3b1c2a06a2a7ea5ccbb0d8e73d0605e4f9049c4b634ecd31c87880e1b668ac".to_string(),
+        };
+        let file: RefundSwapFile = recovery.into();
+        let base_path = "/tmp/boltz-rust";
+        file.write_to_file(base_path);
+        let file_path = base_path.to_owned() + "/" + &file.file_name();
+        let file_struct = RefundSwapFile::read_from_file(file_path);
+        println!("Refund File: {:?}", file_struct);
+
     }
 }

@@ -6,7 +6,7 @@ use boltz_client::{
             BoltzApiClient, CreateSwapRequest, SwapStatusRequest, SwapType, BOLTZ_TESTNET_URL,
         },
     },
-    util::secrets::{BtcReverseRecovery, Preimage, SwapKey},
+    util::secrets::{BtcReverseRecovery, BtcSubmarineRecovery, Preimage, SwapKey},
     Bolt11Invoice, Keypair, Secp256k1,
 };
 
@@ -20,7 +20,7 @@ pub mod test_utils;
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice_str = "lntb500u1pjeqvw7pp5gzea37hweufaa2y7clud9rk9tvvzwkh0lpnn9vqp0wd955hfaupsdq8w3ehx6gxqyjw5qcqp2sp5qnxwk5ntp6a9vua4e0e3nwccuzxk2sp4kn76w3z7xrf0ve7p5jfsrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkfkdwyqqq4sqqyqqqqqpqqqqqzsqqc9qyyssqlx2zzmaep37rrm9qg2xuqnm3teasy3p29jk3459ne9ts3uctc4syps2zqt94vlkqpdqn43y2z4w7rqdupz8mfdrw0qfrkvn34tt4m4gpq5g9c6";
+    let invoice_str = "lntb1m1pjmzjlepp5a3nqd49gqpr0mfcxpu7usx4n67lhup5ql9qhh89mngu8rtccjx9sdq8x9j8xvsxqyjw5qcqp2sp5p7jm5trdls4qv82rm4f6zxdqpkxzvydp66ccmkjzr96zg3wqv8vqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssq2a94xtph8w65dyt6ds0g0hc32qm407xkutuanltluecj3k4r8t3ym84d8wcc6zaqcdvl7026jluadzk5z67vw0xjqcxuexe5azcylwqqhp8u9l";
 
     let invoice = Bolt11Invoice::from_str(invoice_str).unwrap();
     let out_amount = invoice.amount_milli_satoshis().unwrap() / 1000;
@@ -63,6 +63,8 @@ fn test_bitcoin_ssi() {
     let script = response.into_btc_sub_swap_script(&preimage, network_config.network()).unwrap();
     let funding_address = script.to_address(network_config.network()).unwrap();
 
+    let recovery = BtcSubmarineRecovery::new(&_id, &keypair, &response.get_redeem_script().unwrap());
+    println!("RECOVERY: {:#?}", recovery);
     println!("*******FUND*********************");
     println!("*******SWAP*********************");
     println!("*******SCRIPT*******************");
@@ -157,7 +159,7 @@ fn test_bitcoin_rsi() {
     .unwrap();
     let _ = rv_claim_tx.fetch_utxo(response.get_lockup_amount().unwrap(), &network_config).unwrap();
     let signed_tx = rv_claim_tx
-        .drain(&keypair, Some(&preimage), absolute_fees)
+        .drain(&keypair, &preimage, absolute_fees)
         .unwrap();
     let txid = rv_claim_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
@@ -204,7 +206,7 @@ fn test_recover_bitcoin_rsi() {
 
     let _ = rev_swap_tx.fetch_utxo(out_amount, &network_config);
     let signed_tx = rev_swap_tx
-        .drain(&keypair, Some(&preimage), absolute_fees)
+        .drain(&keypair, &preimage, absolute_fees)
         .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);

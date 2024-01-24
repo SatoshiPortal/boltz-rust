@@ -452,19 +452,11 @@ impl BtcSwapTx {
     pub fn drain(
         &mut self,
         keys: &Keypair,
-        preimage: Option<&Preimage>, // not required by refund_tx
+        preimage: &Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, S5Error> {
         match self.kind {
-            SwapTxKind::Claim => {
-                if preimage.is_none(){
-                    return Err(S5Error::new(
-                        ErrorKind::Input,
-                        "Preimage required to claim a swap",
-                    ));
-                }
-                self.sign_claim_tx(keys, preimage.unwrap(), absolute_fees)
-            },
+            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
             SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
         }
     }
@@ -659,8 +651,6 @@ impl BtcSwapTx {
 mod tests {
     use super::*;
     use crate::network::electrum::ElectrumConfig;
-    use crate::util::secrets::BtcReverseRecovery;
-    use bitcoin::absolute;
     use bitcoin::opcodes::all::{OP_EQUAL, OP_HASH160};
     use bitcoin::script::Builder;
     use bitcoin::secp256k1::hashes::{hash160, Hash};
@@ -802,56 +792,8 @@ mod tests {
         println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
         assert!(address.to_string() == expected_address);
     }
-
-    #[test]
-    fn test_refund_tx_with_custom_timeout(){
-
-        
-        let sweep_address = "".to_string();
-        let secp = Secp256k1::new();
-        // assume this is the preimage in the invoice that boltz needs to pay
-        let preimage =  Preimage::from_sha256_str("15179ea269e6eef9e3815677f7eaa9cef840089adacb1b79aa44b17a5a7d8e3d").unwrap();
-        let swap_type = SwapType::Submarine;
-        // this would be boltz key that can claim the script
-        let claim_keypair = Keypair::from_seckey_str(
-            &secp,
-            "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
-        ).unwrap();
-        // we want to solve for this as refund transaction
-        let refund_keypair = Keypair::from_seckey_str(
-            &secp,
-            "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6",
-        ).unwrap();
-        let current_block = 2_570_806 ; // update with current blockheight
-        let timelock = current_block + 5;
-        let swap_script = BtcSwapScript::new(swap_type, &preimage.hash160.to_string(), &claim_keypair.public_key().to_string(), &timelock, &refund_keypair.public_key().to_string());
-        let amount = 52_000;
-        let address = swap_script.to_address(Chain::BitcoinTestnet).unwrap();
-        println!("PAY {} sats to {}", amount, address);
-
-        pause_and_wait("WAITING FOR 5 TESTNET BLOCKS");
-        //wait until utxo is created && until timelock has passed
-        let mut swap_refund_tx = BtcSwapTx::new_refund(swap_script, sweep_address, Chain::BitcoinTestnet).unwrap();
-        let network_config = &ElectrumConfig::default_bitcoin();
-        let _ = swap_refund_tx.fetch_utxo(amount, network_config);
-        let absolute_fees = 800;
-        let signed_tx = swap_refund_tx.drain(&refund_keypair, Some(&preimage), absolute_fees).unwrap();
-        let txid = swap_refund_tx.broadcast(signed_tx, network_config).unwrap();
-        println!("TXID: {}", txid);
-    }
 }
-use std::io::{self, Write};
 
-fn pause_and_wait(msg: &str) {
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    write!(stdout, "\n").unwrap();
-    write!(stdout, "******{msg}******").unwrap();
-    write!(stdout, "\n").unwrap();
-    write!(stdout, "Press Enter to continue...").unwrap();
-    stdout.flush().unwrap();
-    let _ = stdin.read_line(&mut String::new()).unwrap();
-}
 /*
 
 lightning-cli --lightning-dir=/.lightning

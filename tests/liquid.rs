@@ -150,7 +150,7 @@ fn test_liquid_rsi() {
     test_utils::pause_and_wait("Waiting....");
 
     let signed_tx = rev_swap_tx
-        .drain(&keypair, Some(&preimage), absolute_fees)
+        .drain(&keypair, &preimage, absolute_fees)
         .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
@@ -175,7 +175,7 @@ fn test_recover_liquid_rsi(){
     let _preimage : Preimage = recovery.try_into().unwrap();
 
     // let signed_tx = tx
-    // .drain(&keypair, &preimage, 1_000)
+    // .drain(&_keypair, &_preimage, 1_000)
     // .unwrap();
     // let txid = tx.broadcast(signed_tx, &network_config).unwrap();
     // println!("{}", txid);

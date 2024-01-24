@@ -459,6 +459,18 @@ impl LBtcSwapTx {
             txout_secrets: None,
         })
     }
+    /// Sweep the script utxo.
+    pub fn drain(
+        &mut self,
+        keys: &ZKKeyPair,
+        preimage: &Preimage,
+        absolute_fees: u64,
+    ) -> Result<Transaction, S5Error> {
+        match self.kind {
+            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
+            SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
+        }
+    }
     /// Fetch utxo for the script
     pub fn fetch_utxo(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
         let electrum_client = network_config.clone().build_client()?;
@@ -578,26 +590,7 @@ impl LBtcSwapTx {
     pub fn _check_utxo_value(&self, expected_value: u64) -> bool {
         self.has_utxo() && self.utxo_value.unwrap() == expected_value
     }
-    /// Sweep the script utxo.
-    pub fn drain(
-        &mut self,
-        keys: &ZKKeyPair,
-        preimage: Option<&Preimage>,
-        absolute_fees: u64,
-    ) -> Result<Transaction, S5Error> {
-        match self.kind {
-            SwapTxKind::Claim => {
-                if preimage.is_none(){
-                    return Err(S5Error::new(
-                        ErrorKind::Input,
-                        "Preimage required to claim a swap",
-                    ));
-                }
-                self.sign_claim_tx(keys, preimage.unwrap(), absolute_fees)
-            },
-            SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
-        }
-    }
+
     /// Sign a claim transaction for a reverse swap
     fn sign_claim_tx(
         &self,
@@ -1056,7 +1049,7 @@ mod tests {
         let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
         let final_tx = liquid_swap_tx
-            .drain(&my_key_pair, Some(&preimage), 5_000)
+            .drain(&my_key_pair, &preimage, 5_000)
             .unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         // let manifest_dir = env!("CARGO_MANIFEST_DIR");
