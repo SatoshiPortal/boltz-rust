@@ -768,7 +768,7 @@ impl CreateSwapResponse {
         }
     }
 
-    /// Get a copy of the blinding key
+    /// Get a copy of the blinding key.
     pub fn get_blinding_key(&self) -> Result<String, S5Error> {
         if let Some(key) = &self.blinding_key {
             Ok(key.clone())
@@ -787,7 +787,7 @@ impl CreateSwapResponse {
         } else {
             Err(S5Error::new(
                 ErrorKind::Input,
-                "Boltz response does not contain a redeem script.",
+                "Boltz response does not contain a lockup address.",
             ))
         }
     }

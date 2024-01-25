@@ -442,9 +442,9 @@ impl BtcSwapTx {
     }
 
     /// Internally used to check if utxos are present in the struct to build the transaction.
-    fn has_utxo(&self) -> bool {
-        self.utxo.is_some() && self.utxo_value.is_some()
-    }
+    // fn has_utxo(&self) -> bool {
+    //     self.utxo.is_some() && self.utxo_value.is_some()
+    // }
 
     /// Sign a reverse swap claim transaction
     pub fn sign_claim(
@@ -465,23 +465,39 @@ impl BtcSwapTx {
                 "Constructed transaction is for a refund. Cannot claim.",
             ));
         }
-        if !self.has_utxo() {
-            return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
-        }
-        let preimage_bytes = if preimage.bytes.is_some() {
-            preimage.bytes.unwrap()
+        // if !self.has_utxo() {
+        //     return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
+        // }
+
+        let utxo = if let Some(utxo_value) = self.utxo {
+            utxo_value
         } else {
-            return Err(S5Error::new(ErrorKind::Input, "No preimage provided"));
+            return Err(S5Error::new(ErrorKind::Transaction, "No UTXO found."));
+        };
+
+        let utxo_value = if let Some(value) = self.utxo_value {
+            value
+        } else {
+            return Err(S5Error::new(ErrorKind::Transaction, "No UTXO value found."));
+        };
+
+        let preimage_bytes = if let Some(value) = preimage.bytes {
+            value
+        } else {
+            return Err(S5Error::new(
+                ErrorKind::Transaction,
+                "No preimage provided.",
+            ));
         };
 
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
-            previous_output: self.utxo.unwrap(),
+            previous_output: utxo,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-        let output_amount: Amount = Amount::from_sat(self.utxo_value.unwrap() - absolute_fees);
+        let output_amount: Amount = Amount::from_sat(utxo_value - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
@@ -499,7 +515,7 @@ impl BtcSwapTx {
         let sighash = match SighashCache::new(unsigned_tx.clone()).p2wsh_signature_hash(
             0,
             &redeem_script,
-            Amount::from_sat(self.utxo_value.unwrap()),
+            Amount::from_sat(utxo_value),
             hash_type,
         ) {
             Ok(result) => result,
@@ -510,9 +526,7 @@ impl BtcSwapTx {
             Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e))),
         };
         let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
-        signature
-            .verify(&sighash_message, &keys.public_key())
-            .unwrap();
+        signature.verify(&sighash_message, &keys.public_key())?;
         let ecdsa_signature = bitcoin::ecdsa::Signature::sighash_all(signature);
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
@@ -521,7 +535,7 @@ impl BtcSwapTx {
         witness.push(redeem_script.as_bytes());
 
         let signed_txin = TxIn {
-            previous_output: self.utxo.unwrap(),
+            previous_output: utxo,
             script_sig: ScriptBuf::new(),
             sequence: sequence,
             witness: witness,
@@ -543,9 +557,22 @@ impl BtcSwapTx {
                 "Refund transactions can only be constructed for Submarine swaps.",
             ));
         }
-        if !self.has_utxo() {
-            return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
-        }
+        // if !self.has_utxo() {
+        //     return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
+        // }
+
+        let utxo = if let Some(utxo_value) = self.utxo {
+            utxo_value
+        } else {
+            return Err(S5Error::new(ErrorKind::Transaction, "No UTXO found."));
+        };
+
+        let utxo_value = if let Some(value) = self.utxo_value {
+            value
+        } else {
+            return Err(S5Error::new(ErrorKind::Transaction, "No UTXO value found."));
+        };
+
         if self.kind == SwapTxKind::Claim {
             return Err(S5Error::new(
                 ErrorKind::Script,
@@ -555,11 +582,11 @@ impl BtcSwapTx {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
-            previous_output: self.utxo.unwrap(),
+            previous_output: utxo,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-        let output_amount: Amount = Amount::from_sat(self.utxo_value.unwrap() - absolute_fees);
+        let output_amount: Amount = Amount::from_sat(utxo_value - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
@@ -577,7 +604,7 @@ impl BtcSwapTx {
         let sighash = match SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
             0,
             &redeem_script,
-            Amount::from_sat(self.utxo_value.unwrap()),
+            Amount::from_sat(utxo_value),
             hash_type,
         ) {
             Ok(result) => result,
@@ -602,7 +629,7 @@ impl BtcSwapTx {
         witness.push(redeem_script.as_bytes());
 
         let signed_txin = TxIn {
-            previous_output: self.utxo.unwrap(),
+            previous_output: utxo,
             script_sig: ScriptBuf::new(),
             sequence: sequence,
             witness: witness,
