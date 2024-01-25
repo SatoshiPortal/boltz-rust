@@ -441,10 +441,14 @@ impl BtcSwapTx {
         }
     }
 
-    /// Internally used to check if utxos are present in the struct to build the transaction.
-    // fn has_utxo(&self) -> bool {
-    //     self.utxo.is_some() && self.utxo_value.is_some()
-    // }
+    // Internally used to get  utxos are present in the struct to build the transaction.
+    fn get_internal_utxo(&self) -> Result<(OutPoint, u64), S5Error> {
+        if self.utxo.is_some() && self.utxo_value.is_some() {
+            Ok((self.utxo.unwrap(), self.utxo_value.unwrap()))
+        } else {
+            Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."))
+        }
+    }
 
     /// Sign a reverse swap claim transaction
     pub fn sign_claim(
@@ -465,21 +469,7 @@ impl BtcSwapTx {
                 "Constructed transaction is for a refund. Cannot claim.",
             ));
         }
-        // if !self.has_utxo() {
-        //     return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
-        // }
-
-        let utxo = if let Some(utxo_value) = self.utxo {
-            utxo_value
-        } else {
-            return Err(S5Error::new(ErrorKind::Transaction, "No UTXO found."));
-        };
-
-        let utxo_value = if let Some(value) = self.utxo_value {
-            value
-        } else {
-            return Err(S5Error::new(ErrorKind::Transaction, "No UTXO value found."));
-        };
+        let (utxo, utxo_value) = self.get_internal_utxo()?;
 
         let preimage_bytes = if let Some(value) = preimage.bytes {
             value

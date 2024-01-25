@@ -1,8 +1,8 @@
 use bitcoin::secp256k1;
+use core::convert::Infallible;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::fmt::Formatter;
-
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum ErrorKind {
     Key,
