@@ -1,3 +1,4 @@
+use bitcoin::secp256k1;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -41,6 +42,15 @@ impl S5Error {
     }
 }
 
+impl From<secp256k1::Error> for S5Error {
+    fn from(error: secp256k1::Error) -> Self {
+        S5Error {
+            kind: ErrorKind::Key,
+            message: error.to_string(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Error {
     Key(String),
@@ -62,3 +72,4 @@ impl Display for Error {
         }
     }
 }
+// Error::BoltzApi(e.to_string())
