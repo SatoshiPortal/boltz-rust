@@ -1,3 +1,4 @@
+use bitcoin::psbt::Output;
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::transaction::Version;
 use bitcoin::Amount;
@@ -310,102 +311,13 @@ impl BtcSwapScript {
             };
         Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
-}
 
-fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
-    let mut result = 0u32;
-    for (i, &byte) in bytes.iter().enumerate() {
-        result |= (byte as u32) << (8 * i);
-    }
-    result
-}
-
-/// Bitcoin swap transaction helper.
-pub struct BtcSwapTx {
-    kind: SwapTxKind,
-    swap_script: BtcSwapScript,
-    output_address: Address,
-    utxo: Option<OutPoint>,
-    utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
-}
-
-impl BtcSwapTx {
-    /// Required to claim reverse swaps only. Cannot be used for submarine swaps.
-    pub fn new_claim(
-        swap_script: BtcSwapScript,
-        output_address: String,
-        network: Chain,
-    ) -> Result<BtcSwapTx, S5Error> {
-        if swap_script.swap_type == SwapType::Submarine {
-            return Err(S5Error::new(
-                ErrorKind::Script,
-                "Claim transactions can only be constructed for Reverse swaps.",
-            ));
-        }
-        let network = if network == Chain::Bitcoin {
-            Network::Bitcoin
-        } else {
-            Network::Testnet
-        };
-        let address = match Address::from_str(&output_address) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-
-        address.is_valid_for_network(network);
-
-        Ok(BtcSwapTx {
-            kind: SwapTxKind::Claim,
-            swap_script,
-            output_address: address.assume_checked(),
-            utxo: None,
-            utxo_value: None,
-        })
-    }
-    /// Required to claim submarine swaps only. Cannot be used for reverse swaps.
-    pub fn new_refund(
-        swap_script: BtcSwapScript,
-        output_address: String,
-        network: Chain,
-    ) -> Result<BtcSwapTx, S5Error> {
-        if swap_script.swap_type == SwapType::ReverseSubmarine {
-            return Err(S5Error::new(
-                ErrorKind::Script,
-                "Refund transactions can only be constructed for Submarine swaps.",
-            ));
-        }
-        let network = if network == Chain::Bitcoin {
-            Network::Bitcoin
-        } else {
-            Network::Testnet
-        };
-
-        let address = match Address::from_str(&output_address) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-        address.is_valid_for_network(network);
-
-        Ok(BtcSwapTx {
-            kind: SwapTxKind::Refund,
-            swap_script: swap_script,
-            output_address: address.assume_checked(),
-            utxo: None,
-            utxo_value: None,
-        })
-    }
-    /// Fetch utxo for the script
-    pub fn fetch_utxo(
-        &mut self,
-        expected_value: u64,
-        network_config: &ElectrumConfig,
-    ) -> Result<(), S5Error> {
+    pub fn fetch_utxo(&self, network_config: &ElectrumConfig) -> Result<(OutPoint, u64), S5Error> {
         let electrum_client = network_config.build_client()?;
 
         let utxos =
             match electrum_client.script_list_unspent(electrum_client::bitcoin::Script::from_bytes(
-                self.swap_script
-                    .to_address(network_config.network())?
+                self.to_address(network_config.network())?
                     .script_pubkey()
                     .as_bytes(),
             )) {
@@ -425,30 +337,95 @@ impl BtcSwapTx {
 
             let outpoint_0 = OutPoint::new(txid, utxos[0].tx_pos as u32);
             let utxo_value = utxos[0].value;
-            if utxo_value >= expected_value {
-                self.utxo = Some(outpoint_0);
-                self.utxo_value = Some(utxo_value);
-                Ok(())
-            } else {
-                return Err(S5Error::new(
-                    ErrorKind::Input,
-                    &format!(
-                        "Expected value does not match utxo value. Expected {}, Found {}",
-                        expected_value, utxo_value
-                    ),
-                ));
-            }
-        }
-    }
 
-    // Internally used to get  utxos are present in the struct to build the transaction.
-    fn get_internal_utxo(&self) -> Result<(OutPoint, u64), S5Error> {
-        if self.utxo.is_some() && self.utxo_value.is_some() {
-            Ok((self.utxo.unwrap(), self.utxo_value.unwrap()))
-        } else {
-            Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."))
+            Ok((outpoint_0, utxo_value))
         }
     }
+}
+
+fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
+    let mut result = 0u32;
+    for (i, &byte) in bytes.iter().enumerate() {
+        result |= (byte as u32) << (8 * i);
+    }
+    result
+}
+
+/// Bitcoin swap transaction helper.
+pub struct BtcSwapTx {
+    kind: SwapTxKind,
+    swap_script: BtcSwapScript,
+    output_address: Address,
+    utxo: OutPoint,
+    utxo_value: u64, // there should only ever be one outpoint in a swap
+}
+impl BtcSwapTx {
+    pub fn new_claim(
+        swap_script: BtcSwapScript,
+        output_address: String,
+        network_config: &ElectrumConfig,
+    ) -> Result<BtcSwapTx, S5Error> {
+        if swap_script.swap_type == SwapType::Submarine {
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Claim transactions can only be constructed for Reverse swaps.",
+            ));
+        }
+        let network = if network_config.network() == Chain::Bitcoin {
+            Network::Bitcoin
+        } else {
+            Network::Testnet
+        };
+        let address = match Address::from_str(&output_address) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+
+        address.is_valid_for_network(network);
+
+        let (utxo, utxo_value) = swap_script.fetch_utxo(network_config)?;
+        Ok(BtcSwapTx {
+            kind: SwapTxKind::Claim,
+            swap_script,
+            output_address: address.assume_checked(),
+            utxo: utxo,
+            utxo_value: utxo_value,
+        })
+    }
+    /// Required to claim submarine swaps only. Cannot be used for reverse swaps.
+    pub fn new_refund(
+        swap_script: BtcSwapScript,
+        output_address: String,
+        network_config: &ElectrumConfig,
+    ) -> Result<BtcSwapTx, S5Error> {
+        if swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Refund transactions can only be constructed for Submarine swaps.",
+            ));
+        }
+        let network = if network_config.network() == Chain::Bitcoin {
+            Network::Bitcoin
+        } else {
+            Network::Testnet
+        };
+
+        let address = match Address::from_str(&output_address) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+        address.is_valid_for_network(network);
+
+        let (utxo, utxo_value) = swap_script.fetch_utxo(network_config)?;
+        Ok(BtcSwapTx {
+            kind: SwapTxKind::Refund,
+            swap_script,
+            output_address: address.assume_checked(),
+            utxo: utxo,
+            utxo_value: utxo_value,
+        })
+    }
+    /// Fetch utxo for the script
 
     /// Sign a reverse swap claim transaction
     pub fn sign_claim(
@@ -469,7 +446,6 @@ impl BtcSwapTx {
                 "Constructed transaction is for a refund. Cannot claim.",
             ));
         }
-        let (utxo, utxo_value) = self.get_internal_utxo()?;
 
         let preimage_bytes = if let Some(value) = preimage.bytes {
             value
@@ -483,11 +459,11 @@ impl BtcSwapTx {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
-            previous_output: utxo,
+            previous_output: self.utxo,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-        let output_amount: Amount = Amount::from_sat(utxo_value - absolute_fees);
+        let output_amount: Amount = Amount::from_sat(self.utxo_value - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
@@ -505,7 +481,7 @@ impl BtcSwapTx {
         let sighash = match SighashCache::new(unsigned_tx.clone()).p2wsh_signature_hash(
             0,
             &redeem_script,
-            Amount::from_sat(utxo_value),
+            Amount::from_sat(self.utxo_value),
             hash_type,
         ) {
             Ok(result) => result,
@@ -525,7 +501,7 @@ impl BtcSwapTx {
         witness.push(redeem_script.as_bytes());
 
         let signed_txin = TxIn {
-            previous_output: utxo,
+            previous_output: self.utxo,
             script_sig: ScriptBuf::new(),
             sequence: sequence,
             witness: witness,
@@ -551,18 +527,6 @@ impl BtcSwapTx {
         //     return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
         // }
 
-        let utxo = if let Some(utxo_value) = self.utxo {
-            utxo_value
-        } else {
-            return Err(S5Error::new(ErrorKind::Transaction, "No UTXO found."));
-        };
-
-        let utxo_value = if let Some(value) = self.utxo_value {
-            value
-        } else {
-            return Err(S5Error::new(ErrorKind::Transaction, "No UTXO value found."));
-        };
-
         if self.kind == SwapTxKind::Claim {
             return Err(S5Error::new(
                 ErrorKind::Script,
@@ -572,11 +536,11 @@ impl BtcSwapTx {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
-            previous_output: utxo,
+            previous_output: self.utxo,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-        let output_amount: Amount = Amount::from_sat(utxo_value - absolute_fees);
+        let output_amount: Amount = Amount::from_sat(self.utxo_value - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
@@ -594,7 +558,7 @@ impl BtcSwapTx {
         let sighash = match SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
             0,
             &redeem_script,
-            Amount::from_sat(utxo_value),
+            Amount::from_sat(self.utxo_value),
             hash_type,
         ) {
             Ok(result) => result,
@@ -619,7 +583,7 @@ impl BtcSwapTx {
         witness.push(redeem_script.as_bytes());
 
         let signed_txin = TxIn {
-            previous_output: utxo,
+            previous_output: self.utxo,
             script_sig: ScriptBuf::new(),
             sequence: sequence,
             witness: witness,
@@ -644,7 +608,7 @@ impl BtcSwapTx {
     }
     /// Broadcast transaction to the network
     pub fn broadcast(
-        &mut self,
+        &self,
         signed_tx: Transaction,
         network_config: &ElectrumConfig,
     ) -> Result<String, S5Error> {
