@@ -1,6 +1,6 @@
 //! A boltz client for submarine/reverse swaps between Bitcoin, Lightning & Liquid
 //! Refer to tests/ folder for usage
-//! THIS LIBRARY IS IN EARLY ALPHA. DO NOT USE ON MAINNET.
+//! THIS LIBRARY IS IN EARLY ALPHA. TEST AND REVIEW BEFORE USING IN PRODUCTION.
 
 pub mod network;
 /// core swap logic

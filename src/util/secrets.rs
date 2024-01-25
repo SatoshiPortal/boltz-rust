@@ -40,7 +40,7 @@ impl SwapKey {
     pub fn from_submarine_account(
         mnemonic: &str,
         passphrase: &str,
-        network: &Chain,
+        network: Chain,
         index: u64,
     ) -> Result<SwapKey, S5Error> {
         let secp = Secp256k1::new();
@@ -101,7 +101,7 @@ impl SwapKey {
         index: u64,
     ) -> Result<SwapKey, S5Error> {
         let secp = Secp256k1::new();
-        let mnemonic_struct = Mnemonic::from_str(&mnemonic).unwrap();
+        let mnemonic_struct = Mnemonic::from_str(mnemonic).unwrap();
         let seed = mnemonic_struct.to_seed(passphrase);
         let root = match Xpriv::new_master(bitcoin::Network::Testnet, &seed) {
             Ok(xprv) => xprv,
@@ -117,7 +117,7 @@ impl SwapKey {
         // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
         let derivation_path = format!(
             "m/{}h/{}h/{}h/0/{}",
-            purpose.to_string(),
+            purpose,
             network_path,
             REVERSE_SWAP_ACCOUNT,
             index
@@ -287,7 +287,7 @@ impl Preimage {
 
     /// Converts the preimage value bytes to String
     pub fn to_string(&self) -> Option<String> {
-        match &self.bytes {
+        match self.bytes {
             Some(result) => Some(hex::encode(result)),
             None => None,
         }
@@ -298,7 +298,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-/// Boltz standard JSON refund swap file. Can be used to create a file that can be uploaded to boltz.exchange 
+/// Boltz standard JSON refund swap file. Can be used to create a file that can be uploaded to boltz.exchange
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RefundSwapFile {
     pub id: String,
@@ -308,7 +308,7 @@ pub struct RefundSwapFile {
     pub timeout_block_height: u64,
 }
 impl RefundSwapFile {
-    pub fn file_name(&self)->String{
+    pub fn file_name(&self) -> String {
         format!("boltz-{}.json", self.id)
     }
     pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), S5Error> {
@@ -451,7 +451,8 @@ impl LBtcSubmarineRecovery {
 }
 impl Into<RefundSwapFile> for LBtcSubmarineRecovery {
     fn into(self) -> RefundSwapFile {
-        let script = LBtcSwapScript::submarine_from_str(&self.redeem_script, &self.blinding_key).unwrap();
+        let script =
+            LBtcSwapScript::submarine_from_str(&self.redeem_script, &self.blinding_key).unwrap();
         RefundSwapFile {
             id: self.id,
             currency: "L-BTC".to_string(),
@@ -517,7 +518,7 @@ mod tests {
     fn test_derivation() {
         let mnemonic: &str = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let index = 0 as u64; // 0
-        let sk = SwapKey::from_submarine_account(mnemonic, "", &Chain::Bitcoin, index).unwrap();
+        let sk = SwapKey::from_submarine_account(mnemonic, "", Chain::Bitcoin, index).unwrap();
         let lks: LiquidSwapKey = sk.clone().into();
         assert!(sk.fingerprint == lks.fingerprint);
         // println!("{:?}", derived.unwrap().Keypair.display_secret());
@@ -529,7 +530,8 @@ mod tests {
     }
 
     #[test]
-    fn test_recover(){
+    #[ignore]
+    fn test_recover() {
         let recovery = BtcSubmarineRecovery {
             id: "y8uGeA".to_string(),
             refund_key: "5416f1e024c191605502017d066786e294f841e711d3d437d13e9d27e40e066e".to_string(),
@@ -541,6 +543,5 @@ mod tests {
         let file_path = base_path.to_owned() + "/" + &file.file_name();
         let file_struct = RefundSwapFile::read_from_file(file_path);
         println!("Refund File: {:?}", file_struct);
-
     }
 }

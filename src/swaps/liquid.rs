@@ -50,19 +50,19 @@ impl LBtcSwapScript {
     /// Create the struct from raw elements
     pub fn new(
         swap_type: SwapType,
-        hashlock: String,
-        reciever_pubkey: String,
+        hashlock: &str,
+        reciever_pubkey: &str,
         timelock: u32,
-        sender_pubkey: String,
-        blinding_key: ZKKeyPair,
+        sender_pubkey: &str,
+        blinding_key: &ZKKeyPair,
     ) -> Self {
         LBtcSwapScript {
-            swap_type,
-            hashlock,
-            reciever_pubkey,
-            timelock,
-            sender_pubkey,
-            blinding_key,
+            swap_type: swap_type,
+            hashlock: hashlock.to_string(),
+            reciever_pubkey: reciever_pubkey.to_string(),
+            timelock: timelock,
+            sender_pubkey: sender_pubkey.to_string(),
+            blinding_key: blinding_key.clone(),
         }
     }
     /// Create the struct from a submarine swap redeem_script string.
@@ -465,8 +465,7 @@ impl LBtcSwapTx {
         let electrum_client = network_config.clone().build_client()?;
         let address = self.swap_script.to_address(network_config.network())?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
-            self.swap_script
-                .to_script()?.to_v0_p2wsh().as_bytes(),
+            self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
         )) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
@@ -593,7 +592,7 @@ impl LBtcSwapTx {
                 "Claim transactions can only be constructed for Reverse swaps.",
             ));
         }
-        if self.kind == SwapTxKind::Refund{
+        if self.kind == SwapTxKind::Refund {
             return Err(S5Error::new(
                 ErrorKind::Script,
                 "Constructed transaction is a refund. Cannot claim.",
@@ -748,7 +747,7 @@ impl LBtcSwapTx {
                 "Refund transactions can only be constructed for Submarine swaps.",
             ));
         }
-        if self.kind == SwapTxKind::Claim{
+        if self.kind == SwapTxKind::Claim {
             return Err(S5Error::new(
                 ErrorKind::Script,
                 "Constructed transaction is a claim. Cannot refund.",

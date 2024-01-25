@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::transaction::Version;
 use bitcoin::Amount;
@@ -10,6 +9,7 @@ use bitcoin::{
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
 use electrum_client::ElectrumApi;
 use serde::Serialize;
+use std::str::FromStr;
 
 use crate::{
     network::{electrum::ElectrumConfig, Chain},
@@ -503,20 +503,16 @@ impl BtcSwapTx {
             hash_type,
         ) {
             Ok(result) => result,
-            Err(e) => {
-                return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e)))
-            }
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e))),
         };
         let sighash_message = match Message::from_digest_slice(&sighash[..]) {
             Ok(result) => result,
-            Err(e) => {
-                return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e)))
-
-            }
+            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e))),
         };
-        let signature = secp
-                .sign_ecdsa(&sighash_message, &keys.secret_key());
-        signature.verify(&sighash_message, &keys.public_key()).unwrap();
+        let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
+        signature
+            .verify(&sighash_message, &keys.public_key())
+            .unwrap();
         let ecdsa_signature = bitcoin::ecdsa::Signature::sighash_all(signature);
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();

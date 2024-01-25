@@ -7,7 +7,7 @@ use boltz_client::{
         liquid::{LBtcSwapScript, LBtcSwapTx},
     },
     util::secrets::{LBtcReverseRecovery, LiquidSwapKey, Preimage, SwapKey},
-    ZKKeyPair, Keypair
+    Keypair, ZKKeyPair,
 };
 pub mod test_utils;
 /// submarine swap integration
@@ -24,7 +24,7 @@ fn test_liquid_ssi() {
 
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
-    let keypair = SwapKey::from_submarine_account(&mnemonic, "", &Chain::LiquidTestnet, 1)
+    let keypair = SwapKey::from_submarine_account(&mnemonic, "", Chain::LiquidTestnet, 1)
         .unwrap()
         .keypair;
     println!("{:?}", keypair);
@@ -49,7 +49,9 @@ fn test_liquid_ssi() {
     println!("{:?}", response);
 
     let expected_amount = response.get_funding_amount().unwrap();
-    let boltz_script_elements = response.into_lbtc_sub_swap_script(&preimage, network_config.network()).unwrap();
+    let boltz_script_elements = response
+        .into_lbtc_sub_swap_script(&preimage, &keypair, network_config.network())
+        .unwrap();
     let funding_address = boltz_script_elements
         .to_address(network_config.network())
         .unwrap()
@@ -108,8 +110,14 @@ fn test_liquid_rsi() {
     let absolute_fees = 900;
     let network_config = ElectrumConfig::default_bitcoin();
 
-    let recovery = LBtcReverseRecovery::new(&id, &preimage, &keypair, &blinding_key, &response.get_redeem_script().unwrap());
-    println!("RECOVERY: {:#?}", recovery);    
+    let recovery = LBtcReverseRecovery::new(
+        &id,
+        &preimage,
+        &keypair,
+        &blinding_key,
+        &response.get_redeem_script().unwrap(),
+    );
+    println!("RECOVERY: {:#?}", recovery);
     println!("*******PAY********************");
     println!("*******LN*********************");
     println!("*******INVOICE****************");
@@ -157,7 +165,7 @@ fn test_liquid_rsi() {
 }
 
 #[test]
-fn test_recover_liquid_rsi(){
+fn test_recover_liquid_rsi() {
     const RETURN_ADDRESS: &str =
     "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7";
     let recovery = &LBtcReverseRecovery {
@@ -172,12 +180,11 @@ fn test_recover_liquid_rsi(){
     let network_config = ElectrumConfig::default_liquid();
     let _ = tx.fetch_utxo(&network_config).unwrap();
     let _keypair: Keypair = recovery.try_into().unwrap();
-    let _preimage : Preimage = recovery.try_into().unwrap();
+    let _preimage: Preimage = recovery.try_into().unwrap();
 
     // let signed_tx = tx
     // .drain(&_keypair, &_preimage, 1_000)
     // .unwrap();
     // let txid = tx.broadcast(signed_tx, &network_config).unwrap();
     // println!("{}", txid);
-
 }

@@ -29,7 +29,7 @@ fn test_bitcoin_ssi() {
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
 
     let keypair =
-        SwapKey::from_submarine_account(&mnemonic.to_string(), "", &Chain::BitcoinTestnet, 1)
+        SwapKey::from_submarine_account(&mnemonic.to_string(), "", Chain::BitcoinTestnet, 1)
             .unwrap()
             .keypair;
     println!(
@@ -60,10 +60,13 @@ fn test_bitcoin_ssi() {
 
     let _id = response.get_id();
     let funding_amount = response.get_funding_amount().unwrap();
-    let script = response.into_btc_sub_swap_script(&preimage, network_config.network()).unwrap();
+    let script = response
+        .into_btc_sub_swap_script(&preimage, &keypair,network_config.network())
+        .unwrap();
     let funding_address = script.to_address(network_config.network()).unwrap();
 
-    let recovery = BtcSubmarineRecovery::new(&_id, &keypair, &response.get_redeem_script().unwrap());
+    let recovery =
+        BtcSubmarineRecovery::new(&_id, &keypair, &response.get_redeem_script().unwrap());
     println!("RECOVERY: {:#?}", recovery);
     println!("*******FUND*********************");
     println!("*******SWAP*********************");
@@ -86,10 +89,9 @@ fn test_bitcoin_rsi() {
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
 
-    let keypair =
-        SwapKey::from_reverse_account(mnemonic, "", Chain::BitcoinTestnet, 1)
-            .unwrap()
-            .keypair;
+    let keypair = SwapKey::from_reverse_account(mnemonic, "", Chain::BitcoinTestnet, 1)
+        .unwrap()
+        .keypair;
     let preimage = Preimage::new();
     // SECRETS
     let network_config = ElectrumConfig::default_bitcoin();
@@ -115,7 +117,12 @@ fn test_bitcoin_rsi() {
     assert_eq!(script_balance.0, 0);
     assert_eq!(script_balance.1, 0);
 
-    let recovery = BtcReverseRecovery::new(&id, &preimage, &keypair, &response.get_redeem_script().unwrap());
+    let recovery = BtcReverseRecovery::new(
+        &id,
+        &preimage,
+        &keypair,
+        &response.get_redeem_script().unwrap(),
+    );
     println!("RECOVERY: {:#?}", recovery);
     println!("*******PAY********************");
     println!("*******LN*********************");
@@ -157,7 +164,9 @@ fn test_bitcoin_rsi() {
         network_config.network(),
     )
     .unwrap();
-    let _ = rv_claim_tx.fetch_utxo(response.get_lockup_amount().unwrap(), &network_config).unwrap();
+    let _ = rv_claim_tx
+        .fetch_utxo(response.get_lockup_amount().unwrap(), &network_config)
+        .unwrap();
     let signed_tx = rv_claim_tx
         .sign_claim(&keypair, &preimage, absolute_fees)
         .unwrap();
@@ -205,9 +214,7 @@ fn test_recover_bitcoin_rsi() {
     .unwrap();
 
     let _ = rev_swap_tx.fetch_utxo(out_amount, &network_config);
-    let signed_tx = rev_swap_tx
-        .sign_refund(&keypair, absolute_fees)
-        .unwrap();
+    let signed_tx = rev_swap_tx.sign_refund(&keypair, absolute_fees).unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
 }
