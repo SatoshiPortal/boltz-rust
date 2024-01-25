@@ -158,15 +158,12 @@ fn test_bitcoin_rsi() {
     }
 
     let absolute_fees = 300;
-    let mut rv_claim_tx = BtcSwapTx::new_claim(
+    let rv_claim_tx = BtcSwapTx::new_claim(
         boltz_rev_script,
         RETURN_ADDRESS.to_string(),
-        network_config.network(),
+        &network_config,
     )
     .unwrap();
-    let _ = rv_claim_tx
-        .fetch_utxo(response.get_lockup_amount().unwrap(), &network_config)
-        .unwrap();
     let signed_tx = rv_claim_tx
         .sign_claim(&keypair, &preimage, absolute_fees)
         .unwrap();
@@ -206,14 +203,13 @@ fn test_recover_bitcoin_rsi() {
     let absolute_fees = 1_200;
     let network_config = ElectrumConfig::default_bitcoin();
 
-    let mut rev_swap_tx = BtcSwapTx::new_claim(
+    let rev_swap_tx = BtcSwapTx::new_claim(
         BtcSwapScript::reverse_from_str(&redeem_script).unwrap(),
         RETURN_ADDRESS.to_string(),
-        network_config.network(),
+        &network_config,
     )
     .unwrap();
 
-    let _ = rev_swap_tx.fetch_utxo(out_amount, &network_config);
     let signed_tx = rev_swap_tx.sign_refund(&keypair, absolute_fees).unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
