@@ -1,6 +1,4 @@
-use core::time;
 use std::str::FromStr;
-
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::transaction::Version;
 use bitcoin::Amount;
@@ -448,21 +446,8 @@ impl BtcSwapTx {
         self.utxo.is_some() && self.utxo_value.is_some()
     }
 
-    /// Sweep the script utxo.
-    pub fn drain(
-        &mut self,
-        keys: &Keypair,
-        preimage: &Preimage,
-        absolute_fees: u64,
-    ) -> Result<Transaction, S5Error> {
-        match self.kind {
-            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
-            SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
-        }
-    }
-
     /// Sign a reverse swap claim transaction
-    fn sign_claim_tx(
+    pub fn sign_claim(
         &self,
         keys: &Keypair,
         preimage: &Preimage,
@@ -472,6 +457,12 @@ impl BtcSwapTx {
             return Err(S5Error::new(
                 ErrorKind::Script,
                 "Claim transactions can only be constructed for Reverse swaps.",
+            ));
+        }
+        if self.kind == SwapTxKind::Refund {
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Constructed transaction is for a refund. Cannot claim.",
             ));
         }
         if !self.has_utxo() {
@@ -549,7 +540,7 @@ impl BtcSwapTx {
     }
 
     /// Sign a submarine swap refund transaction
-    fn sign_refund_tx(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
+    pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
                 ErrorKind::Script,
@@ -559,7 +550,12 @@ impl BtcSwapTx {
         if !self.has_utxo() {
             return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
         }
-
+        if self.kind == SwapTxKind::Claim {
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Constructed transaction is for a claim. Cannot refund.",
+            ));
+        }
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
@@ -629,7 +625,7 @@ impl BtcSwapTx {
     pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, S5Error> {
         let dummy_abs_fee = 5_000;
         let tx = match self.kind {
-            _ => self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
+            _ => self.sign_claim(keys, preimage, dummy_abs_fee)?,
         };
         Ok(tx.vsize())
     }

@@ -150,7 +150,7 @@ fn test_liquid_rsi() {
     test_utils::pause_and_wait("Waiting....");
 
     let signed_tx = rev_swap_tx
-        .drain(&keypair, &preimage, absolute_fees)
+        .sign_claim(&keypair, &preimage, absolute_fees)
         .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);

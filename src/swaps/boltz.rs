@@ -53,7 +53,7 @@ use ureq::Error;
 pub const BOLTZ_TESTNET_URL: &str = "https://api.testnet.boltz.exchange";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SwapTxKind {
     Claim,
     Refund,

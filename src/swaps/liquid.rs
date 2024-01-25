@@ -459,18 +459,7 @@ impl LBtcSwapTx {
             txout_secrets: None,
         })
     }
-    /// Sweep the script utxo.
-    pub fn drain(
-        &mut self,
-        keys: &ZKKeyPair,
-        preimage: &Preimage,
-        absolute_fees: u64,
-    ) -> Result<Transaction, S5Error> {
-        match self.kind {
-            SwapTxKind::Claim => self.sign_claim_tx(keys, preimage, absolute_fees),
-            SwapTxKind::Refund => self.sign_refund_tx(keys, absolute_fees),
-        }
-    }
+
     /// Fetch utxo for the script
     pub fn fetch_utxo(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
         let electrum_client = network_config.clone().build_client()?;
@@ -592,7 +581,7 @@ impl LBtcSwapTx {
     }
 
     /// Sign a claim transaction for a reverse swap
-    fn sign_claim_tx(
+    pub fn sign_claim(
         &self,
         keys: &Keypair,
         preimage: &Preimage,
@@ -602,6 +591,12 @@ impl LBtcSwapTx {
             return Err(S5Error::new(
                 ErrorKind::Script,
                 "Claim transactions can only be constructed for Reverse swaps.",
+            ));
+        }
+        if self.kind == SwapTxKind::Refund{
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Constructed transaction is a refund. Cannot claim.",
             ));
         }
         let preimage_bytes = if preimage.bytes.is_some() {
@@ -746,11 +741,17 @@ impl LBtcSwapTx {
         Ok(signed_tx)
     }
     /// Sign a refund transaction for a submarine swap
-    fn sign_refund_tx(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
+    pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
                 ErrorKind::Script,
                 "Refund transactions can only be constructed for Submarine swaps.",
+            ));
+        }
+        if self.kind == SwapTxKind::Claim{
+            return Err(S5Error::new(
+                ErrorKind::Script,
+                "Constructed transaction is a claim. Cannot refund.",
             ));
         }
         if !self.has_utxo() {
@@ -901,7 +902,7 @@ impl LBtcSwapTx {
     pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, S5Error> {
         let dummy_abs_fee = 5_000;
         let tx = match self.kind {
-            _ => self.sign_claim_tx(keys, preimage, dummy_abs_fee)?,
+            _ => self.sign_claim(keys, preimage, dummy_abs_fee)?,
         };
         Ok(tx.size())
     }
@@ -1049,7 +1050,7 @@ mod tests {
         let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
         let final_tx = liquid_swap_tx
-            .drain(&my_key_pair, &preimage, 5_000)
+            .sign_claim(&my_key_pair, &preimage, 5_000)
             .unwrap();
         println!("FINALIZED TX SIZE: {:?}", final_tx.size());
         // let manifest_dir = env!("CARGO_MANIFEST_DIR");

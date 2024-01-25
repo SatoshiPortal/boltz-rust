@@ -530,11 +530,10 @@ mod tests {
 
     #[test]
     fn test_recover(){
-        let recovery = LBtcSubmarineRecovery {
-            id: "G5GDSN".to_string(),
-            refund_key: "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6".to_string(),
-            blinding_key: "b8ec3f5a97af0567a80246d0ed4f4c39106649797ced86a2085eaf2a5fd17d91".to_string(),
-            redeem_script: "8201208763a914756ec1797f685b2499638c5afbc69a418795073a882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c67750351d612b175210264db3a3b1c2a06a2a7ea5ccbb0d8e73d0605e4f9049c4b634ecd31c87880e1b668ac".to_string(),
+        let recovery = BtcSubmarineRecovery {
+            id: "y8uGeA".to_string(),
+            refund_key: "5416f1e024c191605502017d066786e294f841e711d3d437d13e9d27e40e066e".to_string(),
+            redeem_script: "a914046fabc17989627f6ca9c1846af8e470263e712d87632102c929edb654bc1da91001ec27d74d42b5d6a8cf8aef2fab7c55f2eb728eed0d1f6703634d27b1752102c530b4583640ab3df5c75c5ce381c4b747af6bdd6c618db7e5248cb0adcf3a1868ac".to_string(),
         };
         let file: RefundSwapFile = recovery.into();
         let base_path = "/tmp/boltz-rust";

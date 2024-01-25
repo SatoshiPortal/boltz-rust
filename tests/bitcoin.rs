@@ -159,7 +159,7 @@ fn test_bitcoin_rsi() {
     .unwrap();
     let _ = rv_claim_tx.fetch_utxo(response.get_lockup_amount().unwrap(), &network_config).unwrap();
     let signed_tx = rv_claim_tx
-        .drain(&keypair, &preimage, absolute_fees)
+        .sign_claim(&keypair, &preimage, absolute_fees)
         .unwrap();
     let txid = rv_claim_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
@@ -206,7 +206,7 @@ fn test_recover_bitcoin_rsi() {
 
     let _ = rev_swap_tx.fetch_utxo(out_amount, &network_config);
     let signed_tx = rev_swap_tx
-        .drain(&keypair, &preimage, absolute_fees)
+        .sign_refund(&keypair, absolute_fees)
         .unwrap();
     let txid = rev_swap_tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
