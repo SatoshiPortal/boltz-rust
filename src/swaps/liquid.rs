@@ -411,6 +411,34 @@ impl LBtcSwapScript {
         };
         Ok((balance.confirmed, balance.unconfirmed))
     }
+
+    /// Fetch utxo for script
+    pub fn fetch_utxo(&self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
+        let electrum_client = network_config.clone().build_client()?;
+        let _ = electrum_client
+            .script_subscribe(BitcoinScript::from_bytes(
+                self.to_address(network_config.network())?
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        let utxo = electrum_client
+            .script_list_unspent(BitcoinScript::from_bytes(
+                self.to_address(network_config.network())?
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        println!("UTXO: {:#?}", utxo);
+        let _ = electrum_client
+            .script_unsubscribe(BitcoinScript::from_bytes(
+                self.to_address(network_config.network())?
+                    .script_pubkey()
+                    .as_bytes(),
+            ))
+            .unwrap();
+        Ok(())
+    }
 }
 
 fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
@@ -504,97 +532,97 @@ impl LBtcSwapTx {
     }
 
     /// Fetch utxo for the script
-    pub fn fetch_utxo(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
-        let electrum_client = network_config.clone().build_client()?;
-        let address = self.swap_script.to_address(network_config.network())?;
-        let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
-            self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
-        )) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-        };
-        let bitcoin_txid = match history.last() {
-            Some(result) => result,
-            None => return Err(S5Error::new(ErrorKind::Input, "No Transaction History")),
-        }
-        .tx_hash;
-        println!("{}", bitcoin_txid);
-        let raw_tx = match electrum_client.transaction_get_raw(&bitcoin_txid) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-        };
-        let tx: Transaction = match elements::encode::deserialize(&raw_tx) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-        let mut vout = 0;
-        for output in tx.clone().output {
-            if output.script_pubkey == address.script_pubkey() {
-                let zksecp = Secp256k1::new();
-                let is_blinded = output.asset.is_confidential() && output.value.is_confidential();
-                if !is_blinded {
-                    let el_txid = tx.clone().txid();
-                    let outpoint_0 = OutPoint::new(el_txid, vout);
-                    self.utxo = Some(outpoint_0);
-                    self.utxo_value = output.value.explicit();
-                    self.utxo_confidential_value = None;
-                    self.txout_secrets = None;
-                    break;
-                } else {
-                    let unblinded =
-                        match output.unblind(&zksecp, self.swap_script.blinding_key.secret_key()) {
-                            Ok(result) => result,
-                            Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-                        };
-                    let el_txid = tx.clone().txid();
-                    let outpoint_0 = OutPoint::new(el_txid, vout);
-                    let utxo_value = unblinded.value;
+    // pub fn fetch_utxo(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
+    //     let electrum_client = network_config.clone().build_client()?;
+    //     let address = self.swap_script.to_address(network_config.network())?;
+    //     let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
+    //         self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
+    //     )) {
+    //         Ok(result) => result,
+    //         Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+    //     };
+    //     let bitcoin_txid = match history.last() {
+    //         Some(result) => result,
+    //         None => return Err(S5Error::new(ErrorKind::Input, "No Transaction History")),
+    //     }
+    //     .tx_hash;
+    //     println!("{}", bitcoin_txid);
+    //     let raw_tx = match electrum_client.transaction_get_raw(&bitcoin_txid) {
+    //         Ok(result) => result,
+    //         Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+    //     };
+    //     let tx: Transaction = match elements::encode::deserialize(&raw_tx) {
+    //         Ok(result) => result,
+    //         Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+    //     };
+    //     let mut vout = 0;
+    //     for output in tx.clone().output {
+    //         if output.script_pubkey == address.script_pubkey() {
+    //             let zksecp = Secp256k1::new();
+    //             let is_blinded = output.asset.is_confidential() && output.value.is_confidential();
+    //             if !is_blinded {
+    //                 let el_txid = tx.clone().txid();
+    //                 let outpoint_0 = OutPoint::new(el_txid, vout);
+    //                 self.utxo = Some(outpoint_0);
+    //                 self.utxo_value = output.value.explicit();
+    //                 self.utxo_confidential_value = None;
+    //                 self.txout_secrets = None;
+    //                 break;
+    //             } else {
+    //                 let unblinded =
+    //                     match output.unblind(&zksecp, self.swap_script.blinding_key.secret_key()) {
+    //                         Ok(result) => result,
+    //                         Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
+    //                     };
+    //                 let el_txid = tx.clone().txid();
+    //                 let outpoint_0 = OutPoint::new(el_txid, vout);
+    //                 let utxo_value = unblinded.value;
 
-                    self.utxo = Some(outpoint_0);
-                    self.utxo_value = Some(utxo_value);
-                    self.utxo_confidential_value = Some(output.value);
-                    self.txout_secrets = Some(unblinded);
-                    break;
-                }
-            }
-            vout += 1;
-        }
-        Ok(())
-    }
+    //                 self.utxo = Some(outpoint_0);
+    //                 self.utxo_value = Some(utxo_value);
+    //                 self.utxo_confidential_value = Some(output.value);
+    //                 self.txout_secrets = Some(unblinded);
+    //                 break;
+    //             }
+    //         }
+    //         vout += 1;
+    //     }
+    //     Ok(())
+    // }
 
     /// FIX ATTEMPT for Fetch utxo for the script
-    pub fn fetch_utxo_fix(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
-        let electrum_client = network_config.clone().build_client()?;
-        let _ = electrum_client
-            .script_subscribe(BitcoinScript::from_bytes(
-                &self
-                    .swap_script
-                    .to_address(network_config.network())?
-                    .script_pubkey()
-                    .as_bytes(),
-            ))
-            .unwrap();
-        let utxo = electrum_client
-            .script_list_unspent(BitcoinScript::from_bytes(
-                &self
-                    .swap_script
-                    .to_address(network_config.network())?
-                    .script_pubkey()
-                    .as_bytes(),
-            ))
-            .unwrap();
-        println!("UTXO: {:#?}", utxo);
-        let _ = electrum_client
-            .script_unsubscribe(BitcoinScript::from_bytes(
-                &self
-                    .swap_script
-                    .to_address(network_config.network())?
-                    .script_pubkey()
-                    .as_bytes(),
-            ))
-            .unwrap();
-        Ok(())
-    }
+    // pub fn fetch_utxo_fix(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
+    //     let electrum_client = network_config.clone().build_client()?;
+    //     let _ = electrum_client
+    //         .script_subscribe(BitcoinScript::from_bytes(
+    //             &self
+    //                 .swap_script
+    //                 .to_address(network_config.network())?
+    //                 .script_pubkey()
+    //                 .as_bytes(),
+    //         ))
+    //         .unwrap();
+    //     let utxo = electrum_client
+    //         .script_list_unspent(BitcoinScript::from_bytes(
+    //             &self
+    //                 .swap_script
+    //                 .to_address(network_config.network())?
+    //                 .script_pubkey()
+    //                 .as_bytes(),
+    //         ))
+    //         .unwrap();
+    //     println!("UTXO: {:#?}", utxo);
+    //     let _ = electrum_client
+    //         .script_unsubscribe(BitcoinScript::from_bytes(
+    //             &self
+    //                 .swap_script
+    //                 .to_address(network_config.network())?
+    //                 .script_pubkey()
+    //                 .as_bytes(),
+    //         ))
+    //         .unwrap();
+    //     Ok(())
+    // }
 
     // pub fn fetch_utxos(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
     //     let electrum_client = network_config.clone().build_client()?;
@@ -1120,7 +1148,7 @@ mod tests {
 
         let mut liquid_swap_tx =
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
-        let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
+        //let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
         let final_tx = liquid_swap_tx
             .sign_claim(&my_key_pair, &preimage, 5_000)
