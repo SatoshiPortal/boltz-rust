@@ -117,10 +117,7 @@ impl SwapKey {
         // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
         let derivation_path = format!(
             "m/{}h/{}h/{}h/0/{}",
-            purpose,
-            network_path,
-            REVERSE_SWAP_ACCOUNT,
-            index
+            purpose, network_path, REVERSE_SWAP_ACCOUNT, index
         );
         let path = match DerivationPath::from_str(&derivation_path) {
             Ok(hdpath) => hdpath,

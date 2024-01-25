@@ -61,7 +61,7 @@ fn test_bitcoin_ssi() {
     let _id = response.get_id();
     let funding_amount = response.get_funding_amount().unwrap();
     let script = response
-        .into_btc_sub_swap_script(&preimage, &keypair,network_config.network())
+        .into_btc_sub_swap_script(&preimage, &keypair, network_config.network())
         .unwrap();
     let funding_address = script.to_address(network_config.network()).unwrap();
 

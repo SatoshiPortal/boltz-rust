@@ -823,7 +823,7 @@ impl CreateSwapResponse {
         keypair: &Keypair,
         chain: Chain,
     ) -> Result<BtcSwapScript, S5Error> {
-        match self.validate_submarine(&preimage,&keypair, chain) {
+        match self.validate_submarine(&preimage, &keypair, chain) {
             Ok(()) => {
                 if self.redeem_script.is_none() {
                     return Err(S5Error::new(
@@ -845,7 +845,7 @@ impl CreateSwapResponse {
         keypair: &Keypair,
         chain: Chain,
     ) -> Result<LBtcSwapScript, S5Error> {
-        match self.validate_submarine(preimage,keypair, chain) {
+        match self.validate_submarine(preimage, keypair, chain) {
             Ok(()) => {
                 if self.redeem_script.is_none() {
                     return Err(S5Error::new(
