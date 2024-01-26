@@ -312,6 +312,7 @@ impl BtcSwapScript {
         Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
 
+    /// Fetch utxo for script
     pub fn fetch_utxo(&self, network_config: &ElectrumConfig) -> Result<(OutPoint, u64), S5Error> {
         let electrum_client = network_config.build_client()?;
 

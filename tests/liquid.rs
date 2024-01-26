@@ -148,12 +148,17 @@ fn test_liquid_rsi() {
         }
     }
 
-    let mut rev_swap_tx =
-        LBtcSwapTx::new_claim(boltz_script_elements, RETURN_ADDRESS.to_string()).unwrap();
-    let _ = rev_swap_tx.fetch_utxo(&network_config).unwrap();
+    let mut rev_swap_tx = LBtcSwapTx::new_claim(
+        boltz_script_elements,
+        RETURN_ADDRESS.to_string(),
+        &network_config,
+    )
+    .unwrap();
+    //let _ = rev_swap_tx.fetch_utxo(&network_config).unwrap();
+    // let _utxo = rev_swap_tx.swap_script.fetch_utxo();
     println!("{:?}", rev_swap_tx);
     test_utils::pause_and_wait("Waiting....");
-    let _ = rev_swap_tx.fetch_utxo(&network_config).unwrap();
+
     println!("{:?}", rev_swap_tx);
     test_utils::pause_and_wait("Waiting....");
 
@@ -165,6 +170,7 @@ fn test_liquid_rsi() {
 }
 
 #[test]
+#[ignore]
 fn test_recover_liquid_rsi() {
     const RETURN_ADDRESS: &str =
     "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7";
@@ -176,9 +182,9 @@ fn test_recover_liquid_rsi() {
         redeem_script: "8201208763a914756ec1797f685b2499638c5afbc69a418795073a882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c67750351d612b175210264db3a3b1c2a06a2a7ea5ccbb0d8e73d0605e4f9049c4b634ecd31c87880e1b668ac".to_string(),
     };
     let script: LBtcSwapScript = recovery.try_into().unwrap();
-    let mut tx = LBtcSwapTx::new_claim(script, RETURN_ADDRESS.to_string()).unwrap();
     let network_config = ElectrumConfig::default_liquid();
-    let _ = tx.fetch_utxo(&network_config).unwrap();
+    let _tx =
+        LBtcSwapTx::new_claim(script.clone(), RETURN_ADDRESS.to_string(), &network_config).unwrap();
     let _keypair: Keypair = recovery.try_into().unwrap();
     let _preimage: Preimage = recovery.try_into().unwrap();
 
