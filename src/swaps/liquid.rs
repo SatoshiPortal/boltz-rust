@@ -413,31 +413,59 @@ impl LBtcSwapScript {
     }
 
     /// Fetch utxo for script
-    pub fn fetch_utxo(&self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
+    pub fn fetch_utxo(
+        &self,
+        network_config: &ElectrumConfig,
+    ) -> Result<(OutPoint, u64, Option<Value>, Option<TxOutSecrets>), S5Error> {
         let electrum_client = network_config.clone().build_client()?;
-        let _ = electrum_client
-            .script_subscribe(BitcoinScript::from_bytes(
-                self.to_address(network_config.network())?
-                    .script_pubkey()
-                    .as_bytes(),
-            ))
-            .unwrap();
-        let utxo = electrum_client
-            .script_list_unspent(BitcoinScript::from_bytes(
-                self.to_address(network_config.network())?
-                    .script_pubkey()
-                    .as_bytes(),
-            ))
-            .unwrap();
-        println!("UTXO: {:#?}", utxo);
-        let _ = electrum_client
-            .script_unsubscribe(BitcoinScript::from_bytes(
-                self.to_address(network_config.network())?
-                    .script_pubkey()
-                    .as_bytes(),
-            ))
-            .unwrap();
-        Ok(())
+        let address = self.to_address(network_config.network())?;
+        let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
+            self.to_script()?.to_v0_p2wsh().as_bytes(),
+        )) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+        };
+        let bitcoin_txid = match history.last() {
+            Some(result) => result,
+            None => return Err(S5Error::new(ErrorKind::Input, "No Transaction History")),
+        }
+        .tx_hash;
+        println!("{}", bitcoin_txid);
+        let raw_tx = match electrum_client.transaction_get_raw(&bitcoin_txid) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+        };
+        let tx: Transaction = match elements::encode::deserialize(&raw_tx) {
+            Ok(result) => result,
+            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+        };
+        let mut vout = 0;
+        for output in tx.clone().output {
+            if output.script_pubkey == address.script_pubkey() {
+                let zksecp = Secp256k1::new();
+                let is_blinded = output.asset.is_confidential() && output.value.is_confidential();
+                if !is_blinded {
+                    let el_txid = tx.clone().txid();
+                    let outpoint_0 = OutPoint::new(el_txid, vout);
+                    return Ok((outpoint_0, output.value.explicit().unwrap(), None, None));
+                } else {
+                    let unblinded = match output.unblind(&zksecp, self.blinding_key.secret_key()) {
+                        Ok(result) => result,
+                        Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
+                    };
+                    let el_txid = tx.clone().txid();
+                    let outpoint_0 = OutPoint::new(el_txid, vout);
+                    let utxo_value = unblinded.value;
+
+                    return Ok((outpoint_0, utxo_value, Some(output.value), Some(unblinded)));
+                }
+            }
+            vout += 1;
+        }
+        return Err(S5Error::new(
+            ErrorKind::Script,
+            "Could not find utxos for script",
+        ));
     }
 }
 
@@ -472,8 +500,8 @@ pub struct LBtcSwapTx {
     kind: SwapTxKind,
     swap_script: LBtcSwapScript,
     output_address: Address,
-    utxo: Option<OutPoint>,
-    utxo_value: Option<u64>, // there should only ever be one outpoint in a swap
+    utxo: OutPoint,
+    utxo_value: u64, // there should only ever be one outpoint in a swap
     utxo_confidential_value: Option<elements::confidential::Value>,
     txout_secrets: Option<TxOutSecrets>,
 }
@@ -483,6 +511,7 @@ impl LBtcSwapTx {
     pub fn new_claim(
         swap_script: LBtcSwapScript,
         output_address: String,
+        network_config: &ElectrumConfig,
     ) -> Result<LBtcSwapTx, S5Error> {
         if swap_script.swap_type == SwapType::Submarine {
             return Err(S5Error::new(
@@ -494,20 +523,25 @@ impl LBtcSwapTx {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
+
+        let (utxo, utxo_value, utxo_confidential_value, txout_secrets) =
+            swap_script.fetch_utxo(network_config)?;
+
         Ok(LBtcSwapTx {
             kind: SwapTxKind::Claim,
             swap_script: swap_script,
             output_address: address,
-            utxo: None,
-            utxo_value: None,
-            utxo_confidential_value: None,
-            txout_secrets: None,
+            utxo,
+            utxo_value,
+            utxo_confidential_value,
+            txout_secrets,
         })
     }
     /// Required to claim submarine swaps only. This is never used for reverse swaps.
     pub fn new_refund(
         swap_script: LBtcSwapScript,
         output_address: String,
+        network_config: &ElectrumConfig,
     ) -> Result<LBtcSwapTx, S5Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(S5Error::new(
@@ -520,14 +554,17 @@ impl LBtcSwapTx {
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
 
+        let (utxo, utxo_value, utxo_confidential_value, txout_secrets) =
+            swap_script.fetch_utxo(network_config)?;
+
         Ok(LBtcSwapTx {
             kind: SwapTxKind::Refund,
             swap_script: swap_script,
             output_address: address,
-            utxo: None,
-            utxo_value: None,
-            utxo_confidential_value: None,
-            txout_secrets: None,
+            utxo,
+            utxo_value,
+            utxo_confidential_value,
+            txout_secrets,
         })
     }
 
@@ -637,46 +674,8 @@ impl LBtcSwapTx {
     //     Ok(())
     // }
     /// Internally used to check if utxos are present in the struct to build the transaction.
-    fn has_utxo(&self) -> bool {
-        // this will always return false if the utxo is Explicit
-        self.utxo.is_some()
-            && self.utxo_value.is_some()
-            && self.txout_secrets.is_some()
-            && self.utxo_confidential_value.is_some()
-    }
-
-    pub fn _check_utxo_value(&self, expected_value: u64) -> bool {
-        self.has_utxo() && self.utxo_value.unwrap() == expected_value
-    }
-
-    // Internally used to get utxos and value if present in the struct to build the transaction.
-    fn get_internal_utxo(&self) -> Result<(OutPoint, Value, u64), S5Error> {
-        if self.utxo.is_some()
-            && self.utxo_confidential_value.is_some()
-            && self.utxo_value.is_some()
-        {
-            Ok((
-                self.utxo.unwrap(),
-                self.utxo_confidential_value.unwrap(),
-                self.utxo_value.unwrap(),
-            ))
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Transaction,
-                "No Utxos & Value found",
-            ))
-        }
-    }
-    // Internally used to get tx out secrets if present in the struct to build the transaction.
-    fn get_internal_txout_secrets(&self) -> Result<TxOutSecrets, S5Error> {
-        if self.txout_secrets.is_some() {
-            Ok(self.txout_secrets.unwrap())
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Transaction,
-                "No Tx Out Secrets Found.",
-            ))
-        }
+    fn is_confidential(&self) -> bool {
+        self.txout_secrets.is_some() && self.utxo_confidential_value.is_some()
     }
 
     /// Sign a claim transaction for a reverse swap
@@ -704,11 +703,11 @@ impl LBtcSwapTx {
             return Err(S5Error::new(ErrorKind::Input, "No preimage provided"));
         };
         let redeem_script = self.swap_script.to_script()?;
-        let (utxo, utxo_blinded_value, utxo_value) = self.get_internal_utxo()?;
+
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
-            previous_output: utxo,
+            previous_output: self.utxo,
             script_sig: Script::new(),
             witness: TxInWitness::default(),
             is_pegin: false,
@@ -725,7 +724,7 @@ impl LBtcSwapTx {
         if is_explicit_utxo {
             todo!()
         }
-        let txout_secrets = self.get_internal_txout_secrets()?;
+        let txout_secrets = self.txout_secrets.unwrap();
         let asset_id = txout_secrets.asset;
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);
@@ -736,7 +735,7 @@ impl LBtcSwapTx {
                 Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
             };
 
-        let output_value = utxo_value - absolute_fees;
+        let output_value = self.utxo_value - absolute_fees;
 
         let final_vbf = ValueBlindingFactor::last(
             &secp,
@@ -798,7 +797,7 @@ impl LBtcSwapTx {
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
                 &redeem_script,
-                utxo_blinded_value,
+                self.utxo_confidential_value.unwrap(),
                 hash_type,
             )[..],
         ) {
@@ -823,7 +822,7 @@ impl LBtcSwapTx {
         };
 
         let signed_txin = TxIn {
-            previous_output: utxo,
+            previous_output: self.utxo,
             script_sig: Script::default(),
             sequence: sequence,
             witness: witness,
@@ -853,20 +852,12 @@ impl LBtcSwapTx {
                 "Constructed transaction is a claim. Cannot refund.",
             ));
         }
-        if !self.has_utxo() {
-            return Err(S5Error::new(
-                ErrorKind::Transaction,
-                "No utxos available yet",
-            ));
-        }
 
         let redeem_script = self.swap_script.to_script()?;
-        let (utxo, utxo_blinded_value, utxo_value) = self.get_internal_utxo()?;
-
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
-            previous_output: utxo,
+            previous_output: self.utxo,
             script_sig: Script::new(),
             witness: TxInWitness::default(),
             is_pegin: false,
@@ -883,7 +874,7 @@ impl LBtcSwapTx {
         if is_explicit_utxo {
             todo!()
         }
-        let txout_secrets = self.get_internal_txout_secrets()?;
+        let txout_secrets = self.txout_secrets.unwrap();
         let asset_id = txout_secrets.asset;
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);
@@ -894,7 +885,7 @@ impl LBtcSwapTx {
                 Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
             };
 
-        let output_value = utxo_value - absolute_fees;
+        let output_value = self.utxo_value - absolute_fees;
 
         let final_vbf = ValueBlindingFactor::last(
             &secp,
@@ -956,7 +947,7 @@ impl LBtcSwapTx {
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
                 &redeem_script,
-                utxo_blinded_value,
+                self.utxo_confidential_value.unwrap(),
                 hash_type,
             )[..],
         ) {
@@ -981,7 +972,7 @@ impl LBtcSwapTx {
         };
 
         let signed_txin = TxIn {
-            previous_output: utxo,
+            previous_output: self.utxo,
             script_sig: Script::default(),
             sequence: sequence,
             witness: witness,
@@ -1147,7 +1138,7 @@ mod tests {
         assert_eq!(address.to_string(), expected_address);
 
         let mut liquid_swap_tx =
-            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string()).unwrap();
+            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), network_config).unwrap();
         //let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
         let final_tx = liquid_swap_tx
