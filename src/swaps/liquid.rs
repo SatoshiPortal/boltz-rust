@@ -568,111 +568,6 @@ impl LBtcSwapTx {
         })
     }
 
-    /// Fetch utxo for the script
-    // pub fn fetch_utxo(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
-    //     let electrum_client = network_config.clone().build_client()?;
-    //     let address = self.swap_script.to_address(network_config.network())?;
-    //     let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
-    //         self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
-    //     )) {
-    //         Ok(result) => result,
-    //         Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-    //     };
-    //     let bitcoin_txid = match history.last() {
-    //         Some(result) => result,
-    //         None => return Err(S5Error::new(ErrorKind::Input, "No Transaction History")),
-    //     }
-    //     .tx_hash;
-    //     println!("{}", bitcoin_txid);
-    //     let raw_tx = match electrum_client.transaction_get_raw(&bitcoin_txid) {
-    //         Ok(result) => result,
-    //         Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-    //     };
-    //     let tx: Transaction = match elements::encode::deserialize(&raw_tx) {
-    //         Ok(result) => result,
-    //         Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-    //     };
-    //     let mut vout = 0;
-    //     for output in tx.clone().output {
-    //         if output.script_pubkey == address.script_pubkey() {
-    //             let zksecp = Secp256k1::new();
-    //             let is_blinded = output.asset.is_confidential() && output.value.is_confidential();
-    //             if !is_blinded {
-    //                 let el_txid = tx.clone().txid();
-    //                 let outpoint_0 = OutPoint::new(el_txid, vout);
-    //                 self.utxo = Some(outpoint_0);
-    //                 self.utxo_value = output.value.explicit();
-    //                 self.utxo_confidential_value = None;
-    //                 self.txout_secrets = None;
-    //                 break;
-    //             } else {
-    //                 let unblinded =
-    //                     match output.unblind(&zksecp, self.swap_script.blinding_key.secret_key()) {
-    //                         Ok(result) => result,
-    //                         Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-    //                     };
-    //                 let el_txid = tx.clone().txid();
-    //                 let outpoint_0 = OutPoint::new(el_txid, vout);
-    //                 let utxo_value = unblinded.value;
-
-    //                 self.utxo = Some(outpoint_0);
-    //                 self.utxo_value = Some(utxo_value);
-    //                 self.utxo_confidential_value = Some(output.value);
-    //                 self.txout_secrets = Some(unblinded);
-    //                 break;
-    //             }
-    //         }
-    //         vout += 1;
-    //     }
-    //     Ok(())
-    // }
-
-    /// FIX ATTEMPT for Fetch utxo for the script
-    // pub fn fetch_utxo_fix(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
-    //     let electrum_client = network_config.clone().build_client()?;
-    //     let _ = electrum_client
-    //         .script_subscribe(BitcoinScript::from_bytes(
-    //             &self
-    //                 .swap_script
-    //                 .to_address(network_config.network())?
-    //                 .script_pubkey()
-    //                 .as_bytes(),
-    //         ))
-    //         .unwrap();
-    //     let utxo = electrum_client
-    //         .script_list_unspent(BitcoinScript::from_bytes(
-    //             &self
-    //                 .swap_script
-    //                 .to_address(network_config.network())?
-    //                 .script_pubkey()
-    //                 .as_bytes(),
-    //         ))
-    //         .unwrap();
-    //     println!("UTXO: {:#?}", utxo);
-    //     let _ = electrum_client
-    //         .script_unsubscribe(BitcoinScript::from_bytes(
-    //             &self
-    //                 .swap_script
-    //                 .to_address(network_config.network())?
-    //                 .script_pubkey()
-    //                 .as_bytes(),
-    //         ))
-    //         .unwrap();
-    //     Ok(())
-    // }
-
-    // pub fn fetch_utxos(&mut self, network_config: &ElectrumConfig) -> Result<(), S5Error> {
-    //     let electrum_client = network_config.clone().build_client()?;
-    //     // let address = self.swap_script.to_address(network_config.network())?;
-    //     let utxos = match electrum_client.script_get_history(BitcoinScript::from_bytes(
-    //         self.swap_script.to_script()?.to_v0_p2wsh().as_bytes(),
-    //     )) {
-    //         Ok(result) => result,
-    //         Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-    //     };
-    //     println!("UTXOS: {:?}",utxos);
-    //     Ok(())
-    // }
     /// Internally used to check if utxos are present in the struct to build the transaction.
     fn is_confidential(&self) -> bool {
         self.txout_secrets.is_some() && self.utxo_confidential_value.is_some()
@@ -724,7 +619,15 @@ impl LBtcSwapTx {
         if is_explicit_utxo {
             todo!()
         }
-        let txout_secrets = self.txout_secrets.unwrap();
+        let txout_secrets = if let Some(value) = self.txout_secrets {
+            value
+        } else {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "No txout_secrets in script.",
+            ));
+        };
+
         let asset_id = txout_secrets.asset;
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);
@@ -759,10 +662,15 @@ impl LBtcSwapTx {
         };
         let ephemeral_sk = SecretKey::new(&mut rng);
         // assuming we always use a blinded address that has an extractable blinding pub
+        let blinding_key = if let Some(value) = self.output_address.blinding_pubkey {
+            value
+        } else {
+            return Err(S5Error::new(ErrorKind::Input, "No blinding key in tx."));
+        };
         let (blinded_value, nonce, rangeproof) = match explicit_value.blind(
             &secp,
             final_vbf,
-            self.output_address.blinding_pubkey.unwrap(),
+            blinding_key,
             ephemeral_sk,
             &self.output_address.script_pubkey(),
             &msg,
@@ -791,13 +699,22 @@ impl LBtcSwapTx {
             output: vec![payment_output.clone(), fee_output.clone()],
         };
 
+        let utxo_confidential_value = if let Some(value) = self.utxo_confidential_value {
+            value
+        } else {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "No utxo confidential value in tx.",
+            ));
+        };
+
         // SIGN TRANSACTION
         let hash_type = elements::EcdsaSighashType::All;
         let sighash = match Message::from_digest_slice(
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
                 &redeem_script,
-                self.utxo_confidential_value.unwrap(),
+                utxo_confidential_value,
                 hash_type,
             )[..],
         ) {
@@ -874,7 +791,14 @@ impl LBtcSwapTx {
         if is_explicit_utxo {
             todo!()
         }
-        let txout_secrets = self.txout_secrets.unwrap();
+        let txout_secrets = if let Some(value) = self.txout_secrets {
+            value
+        } else {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "No txout_secrets in script.",
+            ));
+        };
         let asset_id = txout_secrets.asset;
         let out_abf = AssetBlindingFactor::new(&mut rng);
         let exp_asset = confidential::Asset::Explicit(asset_id);
@@ -909,10 +833,15 @@ impl LBtcSwapTx {
         };
         let ephemeral_sk = SecretKey::new(&mut rng);
         // assuming we always use a blinded address that has an extractable blinding pub
+        let blinding_key = if let Some(value) = self.output_address.blinding_pubkey {
+            value
+        } else {
+            return Err(S5Error::new(ErrorKind::Input, "No blinding key in tx."));
+        };
         let (blinded_value, nonce, rangeproof) = match explicit_value.blind(
             &secp,
             final_vbf,
-            self.output_address.blinding_pubkey.unwrap(),
+            blinding_key,
             ephemeral_sk,
             &self.output_address.script_pubkey(),
             &msg,
@@ -940,14 +869,21 @@ impl LBtcSwapTx {
             input: vec![unsigned_input],
             output: vec![payment_output.clone(), fee_output.clone()],
         };
-
+        let utxo_confidential_value = if let Some(value) = self.utxo_confidential_value {
+            value
+        } else {
+            return Err(S5Error::new(
+                ErrorKind::Input,
+                "No utxo confidential value in tx.",
+            ));
+        };
         // SIGN TRANSACTION
         let hash_type = elements::EcdsaSighashType::All;
         let sighash = match Message::from_digest_slice(
             &SighashCache::new(&unsigned_tx).segwitv0_sighash(
                 0,
                 &redeem_script,
-                self.utxo_confidential_value.unwrap(),
+                utxo_confidential_value,
                 hash_type,
             )[..],
         ) {
