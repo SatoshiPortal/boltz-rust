@@ -195,6 +195,8 @@ If boltz funds the swap script with Explicit values, the library will error. It 
 
 ## Acknowledgement
 
+This library is developped and maintained by Bull Bitcoin (www.bullbitcoin.com).
+
 Special thanks to:
 
 - [michael1011](https://github.com/michael1011) for guidance on implementation and swaps
