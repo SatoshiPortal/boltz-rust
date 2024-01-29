@@ -79,7 +79,14 @@ fn test_liquid_rsi() {
     // SECRETS
     let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon".to_string();
     let swap_key = SwapKey::from_reverse_account(&mnemonic, "", Chain::LiquidTestnet, 1).unwrap();
-    let lsk: LiquidSwapKey = swap_key.into();
+    //let lsk: LiquidSwapKey = swap_key.into();
+    let lsk: LiquidSwapKey = match LiquidSwapKey::try_from(swap_key) {
+        Ok(t) => t,
+        Err(e) => {
+            // Conversion failed, handle the error
+            return println!("Error converting to LiquidSwapKey: {:?}", e);
+        }
+    };
     let keypair = lsk.keypair;
 
     let preimage = Preimage::new();
