@@ -405,7 +405,7 @@ impl BtcReverseRecovery {
 impl TryInto<BtcSwapScript> for &BtcReverseRecovery {
     type Error = S5Error;
     fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
-        Ok(BtcSwapScript::reverse_from_str(&self.redeem_script).unwrap())
+        Ok(BtcSwapScript::reverse_from_str(&self.redeem_script)?)
     }
 }
 
@@ -413,13 +413,13 @@ impl TryInto<Keypair> for &BtcReverseRecovery {
     type Error = S5Error;
     fn try_into(self) -> Result<Keypair, Self::Error> {
         let secp = Secp256k1::new();
-        Ok(Keypair::from_seckey_str(&secp, &self.claim_key).unwrap())
+        Ok(Keypair::from_seckey_str(&secp, &self.claim_key)?)
     }
 }
 impl TryInto<Preimage> for &BtcReverseRecovery {
     type Error = S5Error;
     fn try_into(self) -> Result<Preimage, Self::Error> {
-        Ok(Preimage::from_str(&self.preimage).unwrap())
+        Ok(Preimage::from_str(&self.preimage)?)
     }
 }
 
