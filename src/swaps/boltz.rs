@@ -34,7 +34,6 @@
 
 //! ```
 use crate::network::Chain;
-use bitcoin::hashes::hash160;
 use bitcoin::secp256k1::Keypair;
 use elements::secp256k1_zkp::Keypair as ZKKeyPair;
 use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;

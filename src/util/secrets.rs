@@ -292,7 +292,7 @@ impl Preimage {
 }
 use serde_json;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Boltz standard JSON refund swap file. Can be used to create a file that can be uploaded to boltz.exchange
@@ -507,7 +507,6 @@ impl TryInto<Preimage> for &LBtcReverseRecovery {
 }
 #[cfg(test)]
 mod tests {
-    use std::{cell::Ref, path};
 
     use super::*;
 

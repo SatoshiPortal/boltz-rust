@@ -1,4 +1,3 @@
-use bitcoin::psbt::Output;
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::transaction::Version;
 use bitcoin::Amount;
@@ -9,7 +8,6 @@ use bitcoin::{
 };
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
 use electrum_client::ElectrumApi;
-use serde::Serialize;
 use std::str::FromStr;
 
 use crate::{

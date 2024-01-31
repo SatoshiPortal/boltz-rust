@@ -1,4 +1,4 @@
-use std::{os::unix::net, str::FromStr};
+use std::str::FromStr;
 
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},

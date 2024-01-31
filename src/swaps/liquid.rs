@@ -5,7 +5,6 @@ use bitcoin::{script::Script as BitcoinScript, secp256k1::Keypair, Witness};
 use elements::{
     confidential::{self, AssetBlindingFactor, Value, ValueBlindingFactor},
     hashes::hash160,
-    hex::FromHex,
     secp256k1_zkp::{self, Secp256k1, SecretKey},
     sighash::SighashCache,
     Address, AssetIssuance, OutPoint, Script, Sequence, Transaction, TxIn, TxInWitness, TxOut,
@@ -569,7 +568,7 @@ impl LBtcSwapTx {
     }
 
     /// Internally used to check if utxos are present in the struct to build the transaction.
-    fn is_confidential(&self) -> bool {
+    fn _is_confidential(&self) -> bool {
         self.txout_secrets.is_some() && self.utxo_confidential_value.is_some()
     }
 
@@ -674,7 +673,7 @@ impl LBtcSwapTx {
             ephemeral_sk,
             &self.output_address.script_pubkey(),
             &msg,
-        ) {
+        ){
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
         };
