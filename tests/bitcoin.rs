@@ -20,7 +20,7 @@ pub mod test_utils;
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice_str = "lntb1m1pjmzjlepp5a3nqd49gqpr0mfcxpu7usx4n67lhup5ql9qhh89mngu8rtccjx9sdq8x9j8xvsxqyjw5qcqp2sp5p7jm5trdls4qv82rm4f6zxdqpkxzvydp66ccmkjzr96zg3wqv8vqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssq2a94xtph8w65dyt6ds0g0hc32qm407xkutuanltluecj3k4r8t3ym84d8wcc6zaqcdvl7026jluadzk5z67vw0xjqcxuexe5azcylwqqhp8u9l";
+    let invoice_str = "lntb1m1pjmk5s4pp5k08klmmjz0clrlf3n8q86fvtyyc6m4sac95tg4yc2a8n0cf5e8mqdq8w368gaqxqyjw5qcqp2sp5cra55mpzuprfkde2022g42vm0xlr0tra4k9s9jhht7l84vs3m0sqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssq09alveaq5g7ajkszwmg7v2xyzqqqz0795phppppu3t0qf9tlmna5w9ptr9y2jc79hz7f04ct5w3625gyarfhhgj92tdc9v8ll09806spqhu4qg";
 
     let invoice = Bolt11Invoice::from_str(invoice_str).unwrap();
     let out_amount = invoice.amount_milli_satoshis().unwrap() / 1000;

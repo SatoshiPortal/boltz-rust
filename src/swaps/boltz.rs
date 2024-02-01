@@ -930,17 +930,17 @@ impl CreateSwapResponse {
     ) -> Result<(), S5Error> {
         match chain {
             Chain::Bitcoin | Chain::BitcoinTestnet => {
-                let boltz_rev_script = BtcSwapScript::reverse_from_str(&self.get_redeem_script()?)?;
+                let boltz_sub_script = BtcSwapScript::submarine_from_str(&self.get_redeem_script()?)?;
 
-                let constructed_rev_script = BtcSwapScript::new(
-                    SwapType::ReverseSubmarine,
+                let constructed_sub_script = BtcSwapScript::new(
+                    SwapType::Submarine,
                     &preimage.hash160.to_string(),
-                    &keypair.public_key().to_string(),
+                    &boltz_sub_script.reciever_pubkey,
                     &(self.get_timeout()?),
-                    &boltz_rev_script.sender_pubkey,
+                    &keypair.public_key().to_string(),
                 );
-                let address = constructed_rev_script.to_address(chain)?;
-                if constructed_rev_script == boltz_rev_script
+                let address = constructed_sub_script.to_address(chain)?;
+                if constructed_sub_script == boltz_sub_script
                     && address.to_string() == self.get_funding_address()?
                 {
                     Ok(())
@@ -953,31 +953,33 @@ impl CreateSwapResponse {
             }
             Chain::Liquid | Chain::LiquidTestnet => {
                 let blinding_key = self.get_blinding_key()?;
-                let boltz_rev_script = LBtcSwapScript::submarine_from_str(
+                let boltz_sub_script = LBtcSwapScript::submarine_from_str(
                     &self.get_redeem_script()?,
                     &blinding_key.clone(),
                 )?;
-                if &boltz_rev_script.hashlock != &preimage.hash160.to_string() {
+                if &boltz_sub_script.hashlock != &preimage.hash160.to_string() {
                     return Err(S5Error::new(
                         ErrorKind::BoltzApi,
                         &format!(
                             "Hash160 mismatch: {},{}",
-                            boltz_rev_script.hashlock,
+                            boltz_sub_script.hashlock,
                             preimage.hash160.to_string()
                         ),
                     ));
                 }
                 let secp = ZKSecp256k1::new();
                 let script = LBtcSwapScript::new(
-                    SwapType::ReverseSubmarine,
+                    SwapType::Submarine,
                     &preimage.hash160.to_string(),
-                    &keypair.public_key().to_string(),
+                    &boltz_sub_script.reciever_pubkey,
                     self.get_timeout()?,
-                    &boltz_rev_script.sender_pubkey,
+                    &keypair.public_key().to_string(),
                     &ZKKeyPair::from_seckey_str(&secp, &blinding_key)?.into(),
                 );
+               
                 let address = script.to_address(chain)?;
-                if script == boltz_rev_script
+                println!("-----\n{:?}\n{}\n{}\n{}-------",chain, address.to_string(), self.get_funding_address()?, script == boltz_sub_script);
+                if script == boltz_sub_script
                     && address.to_string() == self.get_funding_address()?
                 {
                     Ok(())
