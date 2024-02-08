@@ -148,19 +148,12 @@ fn test_liquid_rsi() {
         }
     }
 
-    let mut rev_swap_tx = LBtcSwapTx::new_claim(
+    let rev_swap_tx = LBtcSwapTx::new_claim(
         boltz_script_elements,
         RETURN_ADDRESS.to_string(),
         &network_config,
     )
     .unwrap();
-    //let _ = rev_swap_tx.fetch_utxo(&network_config).unwrap();
-    // let _utxo = rev_swap_tx.swap_script.fetch_utxo();
-    println!("{:?}", rev_swap_tx);
-    test_utils::pause_and_wait("Waiting....");
-
-    println!("{:?}", rev_swap_tx);
-    test_utils::pause_and_wait("Waiting....");
 
     let signed_tx = rev_swap_tx
         .sign_claim(&keypair, &preimage, absolute_fees)
@@ -175,22 +168,24 @@ fn test_recover_liquid_rsi() {
     const RETURN_ADDRESS: &str =
     "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7";
     let recovery = &LBtcReverseRecovery {
-        id: "G5GDSN".to_string(),
-        preimage: "76878e58c6bfedc5e961b1c09fc5fad03bcbfce3237b586266b8288cdf70391f".to_string(),
+        id: "aSdpTM".to_string(),
+        preimage: "0d8b705906f96911e86962dae9c683bf520beb8d01031d60ee277a21f18b23c4".to_string(),
         claim_key: "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6".to_string(),
-        blinding_key: "b8ec3f5a97af0567a80246d0ed4f4c39106649797ced86a2085eaf2a5fd17d91".to_string(),
-        redeem_script: "8201208763a914756ec1797f685b2499638c5afbc69a418795073a882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c67750351d612b175210264db3a3b1c2a06a2a7ea5ccbb0d8e73d0605e4f9049c4b634ecd31c87880e1b668ac".to_string(),
+        blinding_key: "095272a241171abbf879e99e2b5cc4aa3e2d1c85cd5213a2aff0986b35b04786".to_string(),
+        redeem_script: "8201208763a9142c03a91289ea61c1abc8cb98e1ced8cb4481387d882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c677503922b13b1752103f0f75e9b3d6748b8492a24a0be06b19a0e7629ba8451aae901cca4b0d87b97b768ac".to_string(),
     };
     let script: LBtcSwapScript = recovery.try_into().unwrap();
     let network_config = ElectrumConfig::default_liquid();
-    let _tx =
+    println!("{:?}", script.fetch_utxo(&network_config));
+
+    let tx =
         LBtcSwapTx::new_claim(script.clone(), RETURN_ADDRESS.to_string(), &network_config).unwrap();
     let _keypair: Keypair = recovery.try_into().unwrap();
     let _preimage: Preimage = recovery.try_into().unwrap();
 
-    // let signed_tx = tx
-    // .drain(&_keypair, &_preimage, 1_000)
-    // .unwrap();
-    // let txid = tx.broadcast(signed_tx, &network_config).unwrap();
-    // println!("{}", txid);
+    let signed_tx = tx
+    .sign_claim(&_keypair, &_preimage, 1_000)
+    .unwrap();
+    let txid = tx.broadcast(signed_tx, &network_config).unwrap();
+    println!("{}", txid);
 }

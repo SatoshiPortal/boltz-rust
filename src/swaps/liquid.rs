@@ -323,7 +323,7 @@ impl LBtcSwapScript {
         };
 
         match self.swap_type {
-            SwapType::Submarine => Ok(EAddress::p2wsh(
+            SwapType::Submarine => Ok(EAddress::p2shwsh(
                 &script,
                 Some(self.blinding_key.public_key()),
                 address_params,
@@ -417,14 +417,17 @@ impl LBtcSwapScript {
         let electrum_client = network_config.clone().build_client()?;
         let address = self.to_address(network_config.network())?;
         let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
-            self.to_script()?.to_v0_p2wsh().as_bytes(),
+            self.to_address(network_config.network())?.to_unconfidential().script_pubkey().as_bytes(),
         )) {
             Ok(result) => result,
             Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
         };
+        if history.is_empty() {
+            return Err(S5Error::new(ErrorKind::Input, "No Transaction History"))
+        }
         let bitcoin_txid = match history.last() {
             Some(result) => result,
-            None => return Err(S5Error::new(ErrorKind::Input, "No Transaction History")),
+            None => return Err(S5Error::new(ErrorKind::Input, "No last element in history")),
         }
         .tx_hash;
         println!("{}", bitcoin_txid);
@@ -934,7 +937,7 @@ impl LBtcSwapTx {
 
     /// Broadcast transaction to the network
     pub fn broadcast(
-        &mut self,
+        &self,
         signed_tx: Transaction,
         network_config: &ElectrumConfig,
     ) -> Result<String, S5Error> {
