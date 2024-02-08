@@ -1,4 +1,4 @@
-use boltz_client::{
+use rust_elements_wrapper::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         bitcoin::{BtcSwapScript, BtcSwapTx},

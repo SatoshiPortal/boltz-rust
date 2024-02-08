@@ -1,16 +1,15 @@
 [package]
-name = "boltz-client"
+name = "rust_elements_wrapper"
 description = "a boltz client for swaps between BTC/LBTC & LN"
-authors = ["i5hi <ishi@satoshiportal.com>"]
-version = "0.1.2"
+version = "0.1.1"
 edition = "2021"
 license="MIT"
 
 [lib]
-name = "boltz_client"
+name = "rust_elements_wrapper"
 path = "src/lib.rs"
 doctest = false
-crate-type = ["lib"] 
+crate-type = ["staticlib", "cdylib"]
 
 [profile.release]
 strip = true

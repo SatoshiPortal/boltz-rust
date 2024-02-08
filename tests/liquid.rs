@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use boltz_client::{
+use rust_elements_wrapper::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
