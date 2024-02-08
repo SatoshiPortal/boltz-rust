@@ -326,7 +326,7 @@ impl LBtcSwapScript {
         };
 
         match self.swap_type {
-            SwapType::Submarine => Ok(EAddress::p2wsh(
+            SwapType::Submarine => Ok(EAddress::p2shwsh(
                 &script,
                 Some(self.blinding_key.public_key()),
                 address_params,
@@ -430,22 +430,26 @@ impl LBtcSwapScript {
         let raw_tx = if let Some(tx) = raw_tx {
             tx
         } else {
-            let history = electrum_client
-                .script_get_history(BitcoinScript::from_bytes(
-                    self.to_script()?.to_v0_p2wsh().as_bytes(),
-                ))
-                .map_err(|e| S5Error::new(ErrorKind::Network, &e.to_string()))?;
-
-            println!("fetch_utxo - History count: {}", history.len());
-
-            let bitcoin_txid = history
-                .last()
-                .ok_or_else(|| S5Error::new(ErrorKind::Input, "No Transaction History"))?
-                .tx_hash;
-
-            electrum_client
-                .transaction_get_raw(&bitcoin_txid)
-                .map_err(|e| S5Error::new(ErrorKind::Network, &e.to_string()))?
+            let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
+                self.to_address(network_config.network())?.to_unconfidential().script_pubkey().as_bytes(),
+            )) {
+                Ok(result) => result,
+                Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
+            };
+            if history.is_empty() {
+                return Err(S5Error::new(ErrorKind::Input, "No Transaction History"))
+            }
+            let bitcoin_txid = match history.last() {
+                Some(result) => result,
+                None => return Err(S5Error::new(ErrorKind::Input, "No last element in history")),
+            }
+            .tx_hash;
+            println!("{}", bitcoin_txid);
+            let raw_tx = match electrum_client.transaction_get_raw(&bitcoin_txid) {
+                Ok(result) => result,
+                Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string()))
+            };
+            raw_tx
         };
 
         let tx: Transaction = match elements::encode::deserialize(&raw_tx) {
@@ -1004,7 +1008,7 @@ impl LBtcSwapTx {
 
     /// Broadcast transaction to the network
     pub fn broadcast(
-        &mut self,
+        &self,
         signed_tx: Transaction,
         network_config: &ElectrumConfig,
     ) -> Result<String, S5Error> {
