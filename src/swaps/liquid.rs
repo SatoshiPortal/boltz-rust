@@ -429,15 +429,18 @@ impl LBtcSwapScript {
         // Only fetch transaction history and raw_tx from Electrum if raw_tx is not provided
         let raw_tx = if let Some(tx) = raw_tx {
             tx
-        } else {
+        } else {    
             let history = match electrum_client.script_get_history(BitcoinScript::from_bytes(
-                self.to_address(network_config.network())?.to_unconfidential().script_pubkey().as_bytes(),
+                self.to_address(network_config.network())?
+                    .to_unconfidential()
+                    .script_pubkey()
+                    .as_bytes(),
             )) {
                 Ok(result) => result,
                 Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
             };
             if history.is_empty() {
-                return Err(S5Error::new(ErrorKind::Input, "No Transaction History"))
+                return Err(S5Error::new(ErrorKind::Input, "No Transaction History"));
             }
             let bitcoin_txid = match history.last() {
                 Some(result) => result,
@@ -447,7 +450,7 @@ impl LBtcSwapScript {
             println!("{}", bitcoin_txid);
             let raw_tx = match electrum_client.transaction_get_raw(&bitcoin_txid) {
                 Ok(result) => result,
-                Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string()))
+                Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
             };
             raw_tx
         };
@@ -1102,7 +1105,8 @@ mod tests {
     fn test_script_address() {
         let rs = "a91430dd7bf6e97514be2ec0d1368790f763184b7f848763210301798770066e9d93803ced62f169d06567683d26a180f87be736e1af00eaba116703fa0113b1752102c530b4583640ab3df5c75c5ce381c4b747af6bdd6c618db7e5248cb0adcf3a1868ac";
         let blinder = "89b7b9e32cb141787ae187f0d7db784eb114ea7e69da7be9bebafee3f3dbb64e";
-        let exp_addr = "tlq1qqdtkt2czrht3mjy7kwtauq0swtvr5tfxysvcekmrzraayu025wjl8537am2epmhzl40e27mpuxr2cp36emmmtudjquf5lruld437rz0tkqxu72j38yjz";
+        let exp_addr =
+            "vjU48EMUcaiFDvJxSdFoc9s7c94czG7cvawBkn82vt5gkE2Tjq9hXKqi3UyvPgrDgN1vi7V8mRvneTtT";
         let script = LBtcSwapScript::submarine_from_str(rs, blinder).unwrap();
         assert_eq!(
             script.to_address(Chain::LiquidTestnet).unwrap().to_string(),

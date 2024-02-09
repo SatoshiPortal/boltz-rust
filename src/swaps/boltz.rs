@@ -930,7 +930,8 @@ impl CreateSwapResponse {
     ) -> Result<(), S5Error> {
         match chain {
             Chain::Bitcoin | Chain::BitcoinTestnet => {
-                let boltz_sub_script = BtcSwapScript::submarine_from_str(&self.get_redeem_script()?)?;
+                let boltz_sub_script =
+                    BtcSwapScript::submarine_from_str(&self.get_redeem_script()?)?;
 
                 let constructed_sub_script = BtcSwapScript::new(
                     SwapType::Submarine,
@@ -976,9 +977,15 @@ impl CreateSwapResponse {
                     &keypair.public_key().to_string(),
                     &ZKKeyPair::from_seckey_str(&secp, &blinding_key)?.into(),
                 );
-               
+
                 let address = script.to_address(chain)?;
-                println!("-----\n{:?}\n{}\n{}\n{}-------",chain, address.to_string(), self.get_funding_address()?, script == boltz_sub_script);
+                println!(
+                    "-----\n{:?}\n{}\n{}\n{}-------",
+                    chain,
+                    address.to_string(),
+                    self.get_funding_address()?,
+                    script == boltz_sub_script
+                );
                 if script == boltz_sub_script
                     && address.to_string() == self.get_funding_address()?
                 {

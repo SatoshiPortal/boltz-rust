@@ -183,9 +183,7 @@ fn test_recover_liquid_rsi() {
     let _keypair: Keypair = recovery.try_into().unwrap();
     let _preimage: Preimage = recovery.try_into().unwrap();
 
-    let signed_tx = tx
-    .sign_claim(&_keypair, &_preimage, 1_000)
-    .unwrap();
+    let signed_tx = tx.sign_claim(&_keypair, &_preimage, 1_000).unwrap();
     let txid = tx.broadcast(signed_tx, &network_config).unwrap();
     println!("{}", txid);
 }
