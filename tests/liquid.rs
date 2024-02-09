@@ -108,7 +108,6 @@ fn test_liquid_rsi() {
         .unwrap();
 
     let absolute_fees = 900;
-    let network_config = ElectrumConfig::default_bitcoin();
 
     let recovery = LBtcReverseRecovery::new(
         &id,
@@ -169,10 +168,10 @@ fn test_recover_liquid_rsi() {
     "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7";
     let recovery = &LBtcReverseRecovery {
         id: "aSdpTM".to_string(),
-        preimage: "0d8b705906f96911e86962dae9c683bf520beb8d01031d60ee277a21f18b23c4".to_string(),
+        preimage: "0ce4d443977cbe07525afad157ef4ba58f1a99379f3b8272f9e95679b3fb930b".to_string(),
         claim_key: "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6".to_string(),
-        blinding_key: "095272a241171abbf879e99e2b5cc4aa3e2d1c85cd5213a2aff0986b35b04786".to_string(),
-        redeem_script: "8201208763a9142c03a91289ea61c1abc8cb98e1ced8cb4481387d882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c677503922b13b1752103f0f75e9b3d6748b8492a24a0be06b19a0e7629ba8451aae901cca4b0d87b97b768ac".to_string(),
+        blinding_key: "a0fb6b9a35b6e3aae715ca17528117643cff06efeaa214c9b086ade906e6b306".to_string(),
+        redeem_script: "8201208763a914e8d81e2486862df348f4a4174ea802ce907b2b09882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c677503d32e13b17521031ac3709775ccdbffc87f32e1a8c6d28359558e2d2c094575ae74f0ff3ab6978768ac".to_string(),
     };
     let script: LBtcSwapScript = recovery.try_into().unwrap();
     let network_config = ElectrumConfig::default_liquid();
