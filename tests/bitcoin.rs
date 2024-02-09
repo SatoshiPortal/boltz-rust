@@ -4,11 +4,11 @@ use rust_elements_wrapper::{
         bitcoin::{BtcSwapScript, BtcSwapTx},
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
     },
-    util::secrets::{BtcReverseRecovery, BtcSubmarineRecovery, Preimage, SwapKey},
+    util::secrets::{BtcReverseRecovery, BtcSubmarineRecovery, Preimage, RefundSwapFile, SwapKey},
     Bolt11Invoice, Keypair, Secp256k1,
 };
 
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 pub mod test_utils;
 
 /// submarine swap integration
@@ -18,7 +18,7 @@ pub mod test_utils;
 #[test]
 #[ignore]
 fn test_bitcoin_ssi() {
-    let invoice_str = "lntb590u1pjux859pp5nkt4r8u63w9sqyx7mp68jgdyaxc8cu07nm5s3sh97mn5d0mcehxsdq8wdj8xeqxqyjw5qcqp2sp5fvgvmafvzdp8gspa09we4tv9acpszvd5hlvle46ktmr64va5hejqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssqhe7vxfmyp3rrgj0ak8dgccfq28re8x79mrs64f3s9ea6khy0gt43gctl9uw6qj2vc4nf2tuufrljtf5xufhxueqk2dsv5ghnhqjjhhsqg63eq6";
+    let invoice_str = "lntb650u1pjut6cfpp5h7dgn6wghmsm8dfky9cjzrlyf5c2xaszk2lxamfqm2w4eurevpwqdq8d3skk6qxqyjw5qcqp2sp5nyk5mtwjf250uv0uf2l2trhyycefndu868dya04zlrvw5gvaev2srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssqva5tvj5gxfsdmc84hvreme8djgwj3rqr37kwtsa6qttgwzhe7s0yfy482afyje45ppualmatfwnmlmk2py7wc7l3l849jl7vdpa86aqqxmqmws";
 
     let invoice = Bolt11Invoice::from_str(invoice_str).unwrap();
     let out_amount = invoice.amount_milli_satoshis().unwrap() / 1000;
@@ -65,6 +65,11 @@ fn test_bitcoin_ssi() {
 
     let recovery =
         BtcSubmarineRecovery::new(&_id, &keypair, &response.get_redeem_script().unwrap());
+    let refund_file: RefundSwapFile = recovery.clone().into();
+    let cargo_manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let refund_path = PathBuf::from(cargo_manifest_dir);
+    println!("path: {:?}", refund_path);
+    let _ = refund_file.write_to_file(refund_path);
     println!("RECOVERY: {:#?}", recovery);
     println!("*******FUND*********************");
     println!("*******SWAP*********************");

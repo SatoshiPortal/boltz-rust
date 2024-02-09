@@ -326,7 +326,7 @@ impl LBtcSwapScript {
         };
 
         match self.swap_type {
-            SwapType::Submarine => Ok(EAddress::p2shwsh(
+            SwapType::Submarine => Ok(EAddress::p2wsh(
                 &script,
                 Some(self.blinding_key.public_key()),
                 address_params,
