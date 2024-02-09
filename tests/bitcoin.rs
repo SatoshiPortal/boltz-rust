@@ -2,9 +2,7 @@ use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         bitcoin::{BtcSwapScript, BtcSwapTx},
-        boltz::{
-            BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL,
-        },
+        boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
     },
     util::secrets::{BtcReverseRecovery, BtcSubmarineRecovery, Preimage, SwapKey},
     Bolt11Invoice, Keypair, Secp256k1,
