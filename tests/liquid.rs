@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
@@ -6,8 +6,11 @@ use boltz_client::{
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
         liquid::{LBtcSwapScript, LBtcSwapTx},
     },
-    util::secrets::{LBtcReverseRecovery, LiquidSwapKey, Preimage, SwapKey},
-    Keypair, ZKKeyPair,
+    util::secrets::{
+        LBtcReverseRecovery, LBtcSubmarineRecovery, LiquidSwapKey, Preimage, RefundSwapFile,
+        SwapKey,
+    },
+    Keypair, Secp256k1, ZKKeyPair,
 };
 pub mod test_utils;
 /// submarine swap integration
@@ -16,7 +19,7 @@ pub mod test_utils;
 #[ignore]
 fn test_liquid_ssi() {
     // https://liquidtestnet.com/faucet
-    let invoice_str = "lntb1m1pjmkkzmpp5kqrh7ywfqjkhdvh4v0dcq6next5qu94cu26y8zwfttpdpw4uyzhqdq8w368gaqxqyjw5qcqp2sp5v2vdtjuw09dc7zum2duz7d3kkh2jqneds5gpf4zmm7pdrf42ce7qrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssqhvms3j2378ykhhhv4m2yg8dwtakjxwtyvskzyhw5uej6e9de2j2heg402dgvdayaxkec6ela6syumjdq2v6lgqsaus3muv6uc6d2uegqcwscaf";
+    let invoice_str = "lntb650u1pjut6hupp57akjrewzj59g4sm0lp57euzul3dw2ep55um98nh73ruy0w4vcrzqdq8d3skk6qxqyjw5qcqp2sp5ugurque8z76czwqdkxl2ae7ddydka9xymfnhgzdyalfzcslxzjnqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssqpl8p6yqhfpc4t03nmczqp9vrc25qf36zzyglqt685ncvqyx8z48rmetst6v8t3vt35z3pxvjfa7pu3kgc0ltqy8jvtql4ap37wtevpsqh7m6en";
 
     let preimage = Preimage::from_invoice_str(invoice_str).unwrap();
 
@@ -57,7 +60,20 @@ fn test_liquid_ssi() {
         .unwrap()
         .to_string();
 
-    println!("{:?}", boltz_script_elements);
+    let blinding_key = ZKKeyPair::from_str(&response.get_blinding_key().unwrap()).unwrap();
+
+    let recovery = LBtcSubmarineRecovery::new(
+        &_id,
+        &keypair,
+        &blinding_key,
+        &response.get_redeem_script().unwrap(),
+    );
+    let refund_file: RefundSwapFile = recovery.clone().into();
+    let cargo_manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let refund_path = PathBuf::from(cargo_manifest_dir);
+    println!("path: {:?}", refund_path);
+    let _ = refund_file.write_to_file(refund_path);
+    println!("RECOVERY: {:#?}", recovery);
 
     println!("*******FUND*********************");
     println!("*******SWAP*********************");
@@ -121,6 +137,8 @@ fn test_liquid_rsi() {
     println!("*******LN*********************");
     println!("*******INVOICE****************");
     println!("{}", invoice.to_string());
+    println!("timeoutBlockHeight: {}", response.get_timeout().unwrap());
+    println!("nLocktime: {}", boltz_script_elements.timelock);
     println!("");
     println!("Once you have paid the invoice, press enter to continue the tests.");
     println!("******************************");
