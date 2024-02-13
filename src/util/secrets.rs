@@ -535,7 +535,7 @@ mod tests {
         };
         let file: RefundSwapFile = recovery.into();
         let base_path = "/tmp/boltz-rust";
-        file.write_to_file(base_path);
+        file.write_to_file(base_path).unwrap();
         let file_path = base_path.to_owned() + "/" + &file.file_name();
         let file_struct = RefundSwapFile::read_from_file(file_path);
         println!("Refund File: {:?}", file_struct);

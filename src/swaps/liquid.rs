@@ -1035,7 +1035,7 @@ mod tests {
         let rs = "a91430dd7bf6e97514be2ec0d1368790f763184b7f848763210301798770066e9d93803ced62f169d06567683d26a180f87be736e1af00eaba116703fa0113b1752102c530b4583640ab3df5c75c5ce381c4b747af6bdd6c618db7e5248cb0adcf3a1868ac";
         let blinder = "89b7b9e32cb141787ae187f0d7db784eb114ea7e69da7be9bebafee3f3dbb64e";
         let exp_addr =
-            "vjU48EMUcaiFDvJxSdFoc9s7c94czG7cvawBkn82vt5gkE2Tjq9hXKqi3UyvPgrDgN1vi7V8mRvneTtT";
+            "tlq1qqdtkt2czrht3mjy7kwtauq0swtvr5tfxysvcekmrzraayu025wjl8537am2epmhzl40e27mpuxr2cp36emmmtudjquf5lruld437rz0tkqxu72j38yjz";
         let script = LBtcSwapScript::submarine_from_str(rs, blinder).unwrap();
         assert_eq!(
             script.to_address(Chain::LiquidTestnet).unwrap().to_string(),
@@ -1088,7 +1088,7 @@ mod tests {
 
         assert_eq!(address.to_string(), expected_address);
 
-        let mut liquid_swap_tx =
+        let liquid_swap_tx =
             LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), network_config).unwrap();
         //let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
