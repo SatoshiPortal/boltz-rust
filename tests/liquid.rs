@@ -10,7 +10,7 @@ use boltz_client::{
         LBtcReverseRecovery, LBtcSubmarineRecovery, LiquidSwapKey, Preimage, RefundSwapFile,
         SwapKey,
     },
-    Keypair, Secp256k1, ZKKeyPair,
+    Keypair, ZKKeyPair,
 };
 pub mod test_utils;
 /// submarine swap integration
