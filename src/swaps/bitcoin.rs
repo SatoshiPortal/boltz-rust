@@ -90,27 +90,24 @@ impl BtcSwapScript {
             }
         }
 
-        if hashlock.is_some()
-            && sender_pubkey.is_some()
-            && timelock.is_some()
-            && sender_pubkey.is_some()
-        {
-            Ok(BtcSwapScript {
-                swap_type: SwapType::Submarine,
-                hashlock: hashlock.unwrap(),
-                reciever_pubkey: reciever_pubkey.unwrap(),
-                timelock: timelock.unwrap(),
-                sender_pubkey: sender_pubkey.unwrap(),
-            })
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                &format!(
-                    "Could not extract all elements: {:?} {:?} {:?} {:?}",
-                    hashlock, reciever_pubkey, timelock, sender_pubkey
-                ),
-            ))
-        }
+        let hashlock =
+            hashlock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No hashlock provided"))?;
+
+        let sender_pubkey = sender_pubkey
+            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No sender_pubkey provided"))?;
+
+        let timelock =
+            timelock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No timelock provided"))?;
+
+        let reciever_pubkey = reciever_pubkey
+            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No receiver_pubkey provided"))?;
+        Ok(BtcSwapScript {
+            swap_type: SwapType::Submarine,
+            hashlock: hashlock,
+            reciever_pubkey: reciever_pubkey,
+            timelock: timelock,
+            sender_pubkey: sender_pubkey,
+        })
     }
 
     /// Create the struct from a reverse swap redeem_script string.
@@ -153,27 +150,25 @@ impl BtcSwapScript {
                 _ => (),
             }
         }
+        let hashlock =
+            hashlock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No hashlock provided"))?;
 
-        if hashlock.is_some()
-            && sender_pubkey.is_some()
-            && timelock.is_some()
-            && sender_pubkey.is_some()
-        {
-            Ok(BtcSwapScript {
-                swap_type: SwapType::ReverseSubmarine,
-                hashlock: hashlock.unwrap(),
-                reciever_pubkey: reciever_pubkey.unwrap(),
-                timelock: timelock.unwrap(),
-                sender_pubkey: sender_pubkey.unwrap(),
-            })
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                &format!(
-                    "Could not extract all script elements. Check your redeem script and swap_type."
-                ),
-            ))
-        }
+        let sender_pubkey = sender_pubkey
+            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No sender_pubkey provided"))?;
+
+        let timelock =
+            timelock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No timelock provided"))?;
+
+        let reciever_pubkey = reciever_pubkey
+            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No receiver_pubkey provided"))?;
+
+        Ok(BtcSwapScript {
+            swap_type: SwapType::ReverseSubmarine,
+            hashlock: hashlock,
+            reciever_pubkey: reciever_pubkey,
+            timelock: timelock,
+            sender_pubkey: sender_pubkey,
+        })
     }
 
     /// Internally used to convert struct into a bitcoin::Script type
