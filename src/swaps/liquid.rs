@@ -742,9 +742,19 @@ impl LBtcSwapTx {
         };
         let fee_output: TxOut = TxOut::new_fee(absolute_fees, asset_id);
 
+        let lock_time_result = LockTime::from_height(self.swap_script.timelock);
+        let lock_time = match lock_time_result {
+            Ok(lt) => lt,
+            Err(e) => {
+                panic!("Failed to create LockTime from height: {:?}", e);
+            }
+        };
+
+        log_message(&format!("[Rust] sign - locktime value: {:?}", lock_time));
+
         let unsigned_tx = Transaction {
             version: 2,
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: lock_time,
             input: vec![unsigned_input],
             output: vec![payment_output.clone(), fee_output.clone()],
         };
@@ -844,7 +854,7 @@ impl LBtcSwapTx {
         }
 
         let redeem_script = self.swap_script.to_script()?;
-        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+        let sequence = Sequence::from_consensus(0xFFFFFFFD);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo,
