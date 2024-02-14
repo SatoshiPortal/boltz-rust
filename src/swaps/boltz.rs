@@ -719,7 +719,7 @@ impl CreateSwapResponse {
         keypair: &Keypair,
         chain: Chain,
     ) -> Result<BtcSwapScript, Error> {
-        self.validate_submarine(&preimage, &keypair, chain)?;
+        self.validate_reverse(&preimage, &keypair, chain)?;
         Ok(BtcSwapScript::reverse_from_str(&self.get_redeem_script()?)?)
     }
     /// Get a LbtcSwapScript of the a lbtc reverse swap response

@@ -38,14 +38,14 @@ impl BtcSwapScript {
     pub fn new(
         swap_type: SwapType,
         hashlock: &str,
-        reciever_pubkey: &str,
+        receiver_pubkey: &str,
         timelock: &u32,
         sender_pubkey: &str,
     ) -> Self {
         BtcSwapScript {
             swap_type: swap_type.clone(),
             hashlock: hashlock.to_string(),
-            receiver_pubkey: reciever_pubkey.to_string(),
+            receiver_pubkey: receiver_pubkey.to_string(),
             timelock: timelock.clone(),
             sender_pubkey: sender_pubkey.to_string(),
         }
@@ -87,24 +87,25 @@ impl BtcSwapScript {
             }
         }
 
-        if hashlock.is_some()
-            && sender_pubkey.is_some()
-            && timelock.is_some()
-            && sender_pubkey.is_some()
-        {
-            Ok(BtcSwapScript {
-                swap_type: SwapType::Submarine,
-                hashlock: hashlock.expect("not none"),
-                receiver_pubkey: reciever_pubkey.expect("not none"),
-                timelock: timelock.expect("not none"),
-                sender_pubkey: sender_pubkey.expect("not none"),
-            })
-        } else {
-            Err(Error::Protocol(format!(
-                "Could not extract all elements from swap redeemscript: {:?} {:?} {:?} {:?}",
-                hashlock, reciever_pubkey, timelock, sender_pubkey
-            )))
-        }
+        let hashlock =
+            hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
+
+        let sender_pubkey = sender_pubkey
+            .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
+
+        let timelock =
+            timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+
+        let receiver_pubkey = reciever_pubkey
+            .ok_or_else(|| Error::Protocol("No receiver_pubkey provided".to_string()))?;
+
+        Ok(BtcSwapScript {
+            swap_type: SwapType::Submarine,
+            hashlock: hashlock,
+            receiver_pubkey: receiver_pubkey,
+            timelock: timelock,
+            sender_pubkey: sender_pubkey,
+        })
     }
 
     /// Create the struct from a reverse swap redeem_script string.
@@ -116,7 +117,7 @@ impl BtcSwapScript {
         let instructions = script.instructions();
         let mut last_op = OP_0;
         let mut hashlock = None;
-        let mut reciever_pubkey = None;
+        let mut receiver_pubkey = None;
         let mut timelock = None;
         let mut sender_pubkey = None;
 
@@ -131,7 +132,7 @@ impl BtcSwapScript {
                         hashlock = Some(hex::encode(bytes.as_bytes()));
                     }
                     if last_op == OP_EQUALVERIFY {
-                        reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
+                        receiver_pubkey = Some(hex::encode(bytes.as_bytes()));
                     }
                     if last_op == OP_DROP {
                         if bytes.len() == 3 as usize {
@@ -145,26 +146,25 @@ impl BtcSwapScript {
             }
         }
 
-        if hashlock.is_some()
-            && sender_pubkey.is_some()
-            && timelock.is_some()
-            && sender_pubkey.is_some()
-        {
-            Ok(BtcSwapScript {
-                swap_type: SwapType::ReverseSubmarine,
-                hashlock: hashlock.expect("not none"),
-                receiver_pubkey: reciever_pubkey.expect("not none"),
-                timelock: timelock.expect("not none"),
-                sender_pubkey: sender_pubkey.expect("not none"),
-            })
-        } else {
-            Err(Error::Protocol(
-                format!(
-                    "Could not extract all elements from reverse-swap redeemscript: {:?} {:?} {:?} {:?}",
-                    hashlock, reciever_pubkey, timelock, sender_pubkey
-                ),
-            ))
-        }
+        let hashlock =
+        hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
+
+        let sender_pubkey = sender_pubkey
+            .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
+
+        let timelock =
+            timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+
+        let receiver_pubkey = receiver_pubkey
+            .ok_or_else(|| Error::Protocol("No receiver_pubkey provided".to_string()))?;
+
+        Ok(BtcSwapScript {
+            swap_type: SwapType::ReverseSubmarine,
+            hashlock: hashlock,
+            receiver_pubkey: receiver_pubkey,
+            timelock: timelock,
+            sender_pubkey: sender_pubkey,
+        })
     }
 
     /// Internally used to convert struct into a bitcoin::Script type
