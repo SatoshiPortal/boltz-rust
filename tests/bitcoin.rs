@@ -43,8 +43,8 @@ fn test_bitcoin_ssi() {
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_btc_pair = boltz_pairs.get_btc_pair().unwrap();
-    let fees = boltz_btc_pair.fees.submarine_boltz(out_amount).unwrap()
-        + boltz_btc_pair.fees.submarine_claim().unwrap();
+    let fees =
+        boltz_btc_pair.fees.submarine_boltz(out_amount) + boltz_btc_pair.fees.submarine_claim();
     println!("TOTAL FEES: {}", fees);
     let request = CreateSwapRequest::new_btc_submarine(
         &boltz_btc_pair.hash,
@@ -166,6 +166,7 @@ fn test_bitcoin_rsi() {
         RETURN_ADDRESS.to_string(),
         &network_config,
     )
+    .unwrap()
     .unwrap();
     let signed_tx = rv_claim_tx
         .sign_claim(&keypair, &preimage, absolute_fees)
@@ -211,6 +212,7 @@ fn test_recover_bitcoin_rsi() {
         RETURN_ADDRESS.to_string(),
         &network_config,
     )
+    .unwrap()
     .unwrap();
 
     let signed_tx = rev_swap_tx.sign_refund(&keypair, absolute_fees).unwrap();

@@ -1,9 +1,10 @@
+use crate::error::Error;
 use crate::network::Chain;
 use crate::swaps::bitcoin::BtcSwapScript;
 use crate::swaps::liquid::LBtcSwapScript;
-use crate::util::error::{ErrorKind, S5Error};
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
+use bitcoin::hex::FromHex;
 use bitcoin::secp256k1::{Keypair, Secp256k1};
 use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 
@@ -42,20 +43,11 @@ impl SwapKey {
         passphrase: &str,
         network: Chain,
         index: u64,
-    ) -> Result<SwapKey, S5Error> {
+    ) -> Result<SwapKey, Error> {
         let secp = Secp256k1::new();
-        let mnemonic_struct = match Mnemonic::from_str(&mnemonic) {
-            Ok(t) => Ok(t),
-            Err(e) => Err(S5Error::new(
-                ErrorKind::Key,
-                &format!("Error parsing mnemonic from str: {}", e.to_string()),
-            )),
-        }?;
+        let mnemonic_struct = Mnemonic::from_str(&mnemonic)?;
         let seed = mnemonic_struct.to_seed(passphrase);
-        let root = match Xpriv::new_master(bitcoin::Network::Testnet, &seed) {
-            Ok(xprv) => xprv,
-            Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
-        };
+        let root = Xpriv::new_master(bitcoin::Network::Testnet, &seed)?;
         let fingerprint = root.fingerprint(&secp);
         let purpose = DerivationPurpose::Compatible;
         let network_path = match network {
@@ -70,27 +62,11 @@ impl SwapKey {
             SUBMARINE_SWAP_ACCOUNT,
             index
         );
-        let path = match DerivationPath::from_str(&derivation_path) {
-            Ok(hdpath) => hdpath,
-            Err(_) => {
-                return Err(S5Error::new(
-                    ErrorKind::Key,
-                    "Invalid purpose or account in derivation path.",
-                ))
-            }
-        };
-        let child_xprv = match root.derive_priv(&secp, &path) {
-            Ok(xprv) => xprv,
-            Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-        };
+        let path = DerivationPath::from_str(&derivation_path)?;
+        let child_xprv = root.derive_priv(&secp, &path)?;
 
-        let key_pair = match Keypair::from_seckey_str(
-            &secp,
-            &hex::encode(child_xprv.private_key.secret_bytes()),
-        ) {
-            Ok(kp) => kp,
-            Err(_) => return Err(S5Error::new(ErrorKind::Key, "BAD SECKEY STRING")),
-        };
+        let key_pair =
+            Keypair::from_seckey_str(&secp, &hex::encode(child_xprv.private_key.secret_bytes()))?;
 
         Ok(SwapKey {
             fingerprint: fingerprint,
@@ -105,21 +81,12 @@ impl SwapKey {
         passphrase: &str,
         network: Chain,
         index: u64,
-    ) -> Result<SwapKey, S5Error> {
+    ) -> Result<SwapKey, Error> {
         let secp = Secp256k1::new();
-        let mnemonic_struct = match Mnemonic::from_str(&mnemonic) {
-            Ok(t) => Ok(t),
-            Err(e) => Err(S5Error::new(
-                ErrorKind::Key,
-                &format!("Error parsing mnemonic from str: {}", e.to_string()),
-            )),
-        }?;
+        let mnemonic_struct = Mnemonic::from_str(&mnemonic)?;
 
         let seed = mnemonic_struct.to_seed(passphrase);
-        let root = match Xpriv::new_master(bitcoin::Network::Testnet, &seed) {
-            Ok(xprv) => xprv,
-            Err(_) => return Err(S5Error::new(ErrorKind::Key, "Invalid Master Key.")),
-        };
+        let root = Xpriv::new_master(bitcoin::Network::Testnet, &seed)?;
         let fingerprint = root.fingerprint(&secp);
         let purpose = DerivationPurpose::Native;
         let network_path = match network {
@@ -132,27 +99,11 @@ impl SwapKey {
             "m/{}h/{}h/{}h/0/{}",
             purpose, network_path, REVERSE_SWAP_ACCOUNT, index
         );
-        let path = match DerivationPath::from_str(&derivation_path) {
-            Ok(hdpath) => hdpath,
-            Err(_) => {
-                return Err(S5Error::new(
-                    ErrorKind::Key,
-                    "Invalid purpose or account in derivation path.",
-                ))
-            }
-        };
-        let child_xprv = match root.derive_priv(&secp, &path) {
-            Ok(xprv) => xprv,
-            Err(e) => return Err(S5Error::new(ErrorKind::Key, &e.to_string())),
-        };
+        let path = DerivationPath::from_str(&derivation_path)?;
+        let child_xprv = root.derive_priv(&secp, &path)?;
 
-        let key_pair = match Keypair::from_seckey_str(
-            &secp,
-            &hex::encode(child_xprv.private_key.secret_bytes()),
-        ) {
-            Ok(kp) => kp,
-            Err(_) => return Err(S5Error::new(ErrorKind::Key, "BAD SECKEY STRING")),
-        };
+        let key_pair =
+            Keypair::from_seckey_str(&secp, &hex::encode(child_xprv.private_key.secret_bytes()))?;
 
         Ok(SwapKey {
             fingerprint: fingerprint,
@@ -174,19 +125,11 @@ pub struct LiquidSwapKey {
     pub keypair: ZKKeyPair,
 }
 impl TryFrom<SwapKey> for LiquidSwapKey {
-    type Error = S5Error;
+    type Error = Error;
     fn try_from(swapkey: SwapKey) -> Result<Self, Self::Error> {
         let secp = ZKSecp256k1::new();
-        let liquid_keypair = match ZKKeyPair::from_seckey_str(
-            &secp,
-            &swapkey.keypair.display_secret().to_string(),
-        ) {
-            Ok(t) => Ok(t),
-            Err(e) => Err(S5Error::new(
-                ErrorKind::Key,
-                &format!("Error parsing display secret to str:{}", e.to_string()),
-            )),
-        }?;
+        let liquid_keypair =
+            ZKKeyPair::from_seckey_str(&secp, &swapkey.keypair.display_secret().to_string())?;
 
         Ok(LiquidSwapKey {
             fingerprint: swapkey.fingerprint,
@@ -242,25 +185,15 @@ impl Preimage {
     }
 
     /// Creates a struct from a preimage string.
-    pub fn from_str(preimage: &str) -> Result<Preimage, S5Error> {
-        let decoded = match hex::decode(preimage) {
-            Ok(decoded) => decoded,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
+    pub fn from_str(preimage: &str) -> Result<Preimage, Error> {
         // Ensure the decoded bytes are exactly 32 bytes long
-        let preimage_bytes: [u8; 32] = match decoded.try_into() {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                return Err(S5Error::new(
-                    ErrorKind::Input,
-                    "Decoded Preimage input is not 32 bytes",
-                ))
-            }
-        };
-        let sha256 = sha256::Hash::hash(&preimage_bytes);
-        let hash160 = hash160::Hash::hash(&preimage_bytes);
+        let preimage: [u8; 32] = Vec::from_hex(preimage)?
+            .try_into()
+            .map_err(|_| Error::Protocol("Decoded Preimage input is not 32 bytes".to_string()))?;
+        let sha256 = sha256::Hash::hash(&preimage);
+        let hash160 = hash160::Hash::hash(&preimage);
         Ok(Preimage {
-            bytes: Some(preimage_bytes),
+            bytes: Some(preimage),
             sha256: sha256,
             hash160: hash160,
         })
@@ -268,15 +201,11 @@ impl Preimage {
 
     /// Creates a Preimage struct without a value and only a hash
     /// Used only in submarine swaps where we do not know the preimage, only the hash
-    pub fn from_sha256_str(preimage_sha256: &str) -> Result<Preimage, S5Error> {
-        let sha256 = match sha256::Hash::from_str(preimage_sha256) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
+    pub fn from_sha256_str(preimage_sha256: &str) -> Result<Preimage, Error> {
+        let sha256 = sha256::Hash::from_str(preimage_sha256)?;
         let hash160 = hash160::Hash::from_slice(
             ripemd160::Hash::hash(sha256.as_byte_array()).as_byte_array(),
-        )
-        .unwrap();
+        )?;
         // will never fail as long as sha256 is a valid sha256::Hash
         Ok(Preimage {
             bytes: None,
@@ -287,17 +216,8 @@ impl Preimage {
 
     /// Extracts the preimage sha256 hash from a lightning invoice
     /// Creates a Preimage struct without a value and only a hash
-    pub fn from_invoice_str(invoice_str: &str) -> Result<Preimage, S5Error> {
-        let invoice = match Bolt11Invoice::from_str(&invoice_str) {
-            Ok(invoice) => invoice,
-            Err(e) => {
-                println!("{:?}", e);
-                return Err(S5Error::new(
-                    ErrorKind::Input,
-                    "Could not parse invoice string.",
-                ));
-            }
-        };
+    pub fn from_invoice_str(invoice_str: &str) -> Result<Preimage, Error> {
+        let invoice = Bolt11Invoice::from_str(&invoice_str)?;
         Ok(Preimage::from_sha256_str(
             &invoice.payment_hash().to_string(),
         )?)
@@ -329,35 +249,19 @@ impl RefundSwapFile {
     pub fn file_name(&self) -> String {
         format!("boltz-{}.json", self.id)
     }
-    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), S5Error> {
+    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         let mut full_path = PathBuf::from(path.as_ref());
         full_path.push(self.file_name());
-        let mut file = match File::create(&full_path) {
-            Ok(f) => f,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-        let json = match serde_json::to_string_pretty(self) {
-            Ok(j) => j,
-            Err(e) => return Err(S5Error::new(ErrorKind::Script, &e.to_string())),
-        };
-        if let Err(e) = writeln!(file, "{}", json) {
-            return Err(S5Error::new(ErrorKind::Input, &e.to_string()));
-        }
+        let mut file = File::create(&full_path)?;
+        let json = serde_json::to_string_pretty(self)?;
+        writeln!(file, "{}", json)?;
         Ok(())
     }
-    pub fn read_from_file<P: AsRef<Path>>(path: P) -> Result<Self, S5Error> {
-        let mut file = match File::open(path) {
-            Ok(f) => f,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
+    pub fn read_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let mut file = File::open(path)?;
         let mut contents = String::new();
-        if let Err(e) = file.read_to_string(&mut contents) {
-            return Err(S5Error::new(ErrorKind::Input, &e.to_string()));
-        }
-        match serde_json::from_str(&contents) {
-            Ok(refund_swap_file) => Ok(refund_swap_file),
-            Err(e) => Err(S5Error::new(ErrorKind::Script, &e.to_string())),
-        }
+        file.read_to_string(&mut contents)?;
+        Ok(serde_json::from_str(&contents)?)
     }
 }
 
@@ -378,7 +282,7 @@ impl BtcSubmarineRecovery {
     }
 }
 impl TryInto<RefundSwapFile> for BtcSubmarineRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<RefundSwapFile, Self::Error> {
         let script = BtcSwapScript::submarine_from_str(&self.redeem_script)?;
 
@@ -393,14 +297,14 @@ impl TryInto<RefundSwapFile> for BtcSubmarineRecovery {
 }
 
 impl TryInto<BtcSwapScript> for &BtcSubmarineRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
         Ok(BtcSwapScript::submarine_from_str(&self.redeem_script)?)
     }
 }
 
 impl TryInto<Keypair> for &BtcSubmarineRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<Keypair, Self::Error> {
         let secp = Secp256k1::new();
         Ok(Keypair::from_seckey_str(&secp, &self.refund_key)?)
@@ -421,35 +325,35 @@ impl BtcReverseRecovery {
         preimage: &Preimage,
         claim_key: &Keypair,
         redeem_script: &str,
-    ) -> Result<Self, S5Error> {
+    ) -> Result<Self, Error> {
         let preimage = preimage
             .to_string()
-            .ok_or_else(|| S5Error::new(ErrorKind::Input, "Error parsing preimage to string"));
+            .ok_or_else(|| Error::Protocol("Error parsing preimage to string".to_string()))?;
 
         Ok(BtcReverseRecovery {
             id: id.to_string(),
             claim_key: claim_key.display_secret().to_string(),
-            preimage: preimage?,
+            preimage,
             redeem_script: redeem_script.to_string(),
         })
     }
 }
 impl TryInto<BtcSwapScript> for &BtcReverseRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
         Ok(BtcSwapScript::reverse_from_str(&self.redeem_script)?)
     }
 }
 
 impl TryInto<Keypair> for &BtcReverseRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<Keypair, Self::Error> {
         let secp = Secp256k1::new();
         Ok(Keypair::from_seckey_str(&secp, &self.claim_key)?)
     }
 }
 impl TryInto<Preimage> for &BtcReverseRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<Preimage, Self::Error> {
         Ok(Preimage::from_str(&self.preimage)?)
     }
@@ -479,13 +383,9 @@ impl LBtcSubmarineRecovery {
     }
 }
 impl TryInto<RefundSwapFile> for LBtcSubmarineRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<RefundSwapFile, Self::Error> {
-        let script =
-            match LBtcSwapScript::submarine_from_str(&self.redeem_script, &self.blinding_key) {
-                Ok(t) => t,
-                Err(e) => return Err(S5Error::new(ErrorKind::Input, &format!("{:?}", e))),
-            };
+        let script = LBtcSwapScript::submarine_from_str(&self.redeem_script, &self.blinding_key)?;
         Ok(RefundSwapFile {
             id: self.id,
             currency: "L-BTC".to_string(),
@@ -511,22 +411,22 @@ impl LBtcReverseRecovery {
         claim_key: &Keypair,
         blinding_key: &ZKKeyPair,
         redeem_script: &str,
-    ) -> Result<Self, S5Error> {
+    ) -> Result<Self, Error> {
         let preimage = preimage
             .to_string()
-            .ok_or_else(|| S5Error::new(ErrorKind::Input, "Error parsing preimage to string"));
+            .ok_or_else(|| Error::Protocol("Error parsing preimage to string".to_string()))?;
 
         Ok(LBtcReverseRecovery {
             id: id.to_string(),
             claim_key: claim_key.display_secret().to_string(),
             blinding_key: blinding_key.display_secret().to_string(),
-            preimage: preimage?,
+            preimage,
             redeem_script: redeem_script.to_string(),
         })
     }
 }
 impl TryInto<LBtcSwapScript> for &LBtcReverseRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<LBtcSwapScript, Self::Error> {
         Ok(LBtcSwapScript::reverse_from_str(
             &self.redeem_script,
@@ -536,14 +436,14 @@ impl TryInto<LBtcSwapScript> for &LBtcReverseRecovery {
 }
 
 impl TryInto<Keypair> for &LBtcReverseRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<Keypair, Self::Error> {
         let secp = Secp256k1::new();
         Ok(Keypair::from_seckey_str(&secp, &self.claim_key)?)
     }
 }
 impl TryInto<Preimage> for &LBtcReverseRecovery {
-    type Error = S5Error;
+    type Error = Error;
     fn try_into(self) -> Result<Preimage, Self::Error> {
         Ok(Preimage::from_str(&self.preimage)?)
     }

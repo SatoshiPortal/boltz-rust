@@ -1,22 +1,22 @@
+use bitcoin::ecdsa::Signature;
+use bitcoin::hex::FromHex;
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::transaction::Version;
-use bitcoin::Amount;
 use bitcoin::{
     blockdata::script::{Builder, Instruction, Script, ScriptBuf},
     opcodes::{all::*, OP_0},
     Address, OutPoint, PublicKey,
 };
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
+use bitcoin::{Amount, Txid};
 use electrum_client::ElectrumApi;
 use std::str::FromStr;
 
 use crate::{
+    error::Error,
     network::{electrum::ElectrumConfig, Chain},
     swaps::boltz::SwapTxKind,
-    util::{
-        error::{ErrorKind, S5Error},
-        secrets::Preimage,
-    },
+    util::secrets::Preimage,
 };
 
 use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160::Hash};
@@ -28,7 +28,7 @@ use super::boltz::SwapType;
 pub struct BtcSwapScript {
     pub swap_type: SwapType,
     pub hashlock: String,
-    pub reciever_pubkey: String,
+    pub receiver_pubkey: String,
     pub timelock: u32,
     pub sender_pubkey: String,
 }
@@ -45,18 +45,15 @@ impl BtcSwapScript {
         BtcSwapScript {
             swap_type: swap_type.clone(),
             hashlock: hashlock.to_string(),
-            reciever_pubkey: reciever_pubkey.to_string(),
+            receiver_pubkey: reciever_pubkey.to_string(),
             timelock: timelock.clone(),
             sender_pubkey: sender_pubkey.to_string(),
         }
     }
     /// Create the struct from a submarine swap redeem_script string.
     /// Usually created from the string provided by boltz api response.
-    pub fn submarine_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
-        let script_bytes = match hex::decode(redeem_script_str) {
-            Ok(result) => result.to_owned(),
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
+    pub fn submarine_from_str(redeem_script_str: &str) -> Result<Self, Error> {
+        let script_bytes = Vec::from_hex(redeem_script_str)?;
         let script = Script::from_bytes(&script_bytes);
 
         let instructions = script.instructions();
@@ -90,33 +87,30 @@ impl BtcSwapScript {
             }
         }
 
-        let hashlock =
-            hashlock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No hashlock provided"))?;
-
-        let sender_pubkey = sender_pubkey
-            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No sender_pubkey provided"))?;
-
-        let timelock =
-            timelock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No timelock provided"))?;
-
-        let reciever_pubkey = reciever_pubkey
-            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No receiver_pubkey provided"))?;
-        Ok(BtcSwapScript {
-            swap_type: SwapType::Submarine,
-            hashlock: hashlock,
-            reciever_pubkey: reciever_pubkey,
-            timelock: timelock,
-            sender_pubkey: sender_pubkey,
-        })
+        if hashlock.is_some()
+            && sender_pubkey.is_some()
+            && timelock.is_some()
+            && sender_pubkey.is_some()
+        {
+            Ok(BtcSwapScript {
+                swap_type: SwapType::Submarine,
+                hashlock: hashlock.expect("not none"),
+                receiver_pubkey: reciever_pubkey.expect("not none"),
+                timelock: timelock.expect("not none"),
+                sender_pubkey: sender_pubkey.expect("not none"),
+            })
+        } else {
+            Err(Error::Protocol(format!(
+                "Could not extract all elements from swap redeemscript: {:?} {:?} {:?} {:?}",
+                hashlock, reciever_pubkey, timelock, sender_pubkey
+            )))
+        }
     }
 
     /// Create the struct from a reverse swap redeem_script string.
     /// Usually created from the string provided by boltz api response.
-    pub fn reverse_from_str(redeem_script_str: &str) -> Result<Self, S5Error> {
-        let script_bytes = match hex::decode(redeem_script_str) {
-            Ok(result) => result.to_owned(),
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
+    pub fn reverse_from_str(redeem_script_str: &str) -> Result<Self, Error> {
+        let script_bytes = Vec::from_hex(redeem_script_str)?;
         let script = Script::from_bytes(&script_bytes);
 
         let instructions = script.instructions();
@@ -150,29 +144,31 @@ impl BtcSwapScript {
                 _ => (),
             }
         }
-        let hashlock =
-            hashlock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No hashlock provided"))?;
 
-        let sender_pubkey = sender_pubkey
-            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No sender_pubkey provided"))?;
-
-        let timelock =
-            timelock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No timelock provided"))?;
-
-        let reciever_pubkey = reciever_pubkey
-            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No receiver_pubkey provided"))?;
-
-        Ok(BtcSwapScript {
-            swap_type: SwapType::ReverseSubmarine,
-            hashlock: hashlock,
-            reciever_pubkey: reciever_pubkey,
-            timelock: timelock,
-            sender_pubkey: sender_pubkey,
-        })
+        if hashlock.is_some()
+            && sender_pubkey.is_some()
+            && timelock.is_some()
+            && sender_pubkey.is_some()
+        {
+            Ok(BtcSwapScript {
+                swap_type: SwapType::ReverseSubmarine,
+                hashlock: hashlock.expect("not none"),
+                receiver_pubkey: reciever_pubkey.expect("not none"),
+                timelock: timelock.expect("not none"),
+                sender_pubkey: sender_pubkey.expect("not none"),
+            })
+        } else {
+            Err(Error::Protocol(
+                format!(
+                    "Could not extract all elements from reverse-swap redeemscript: {:?} {:?} {:?} {:?}",
+                    hashlock, reciever_pubkey, timelock, sender_pubkey
+                ),
+            ))
+        }
     }
 
     /// Internally used to convert struct into a bitcoin::Script type
-    fn to_script(&self) -> Result<ScriptBuf, S5Error> {
+    fn to_script(&self) -> Result<ScriptBuf, Error> {
         match self.swap_type {
             SwapType::Submarine => {
                 /*
@@ -185,23 +181,10 @@ impl BtcSwapScript {
                     ENDIF
                     CHECKSIG
                 */
-                let reciever_pubkey = match PublicKey::from_str(&self.reciever_pubkey) {
-                    Ok(result) => result,
-                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-                };
-
-                let sender_pubkey = match PublicKey::from_str(&self.sender_pubkey) {
-                    Ok(result) => result,
-                    Err(e) => {
-                        // do more stuff
-                        return Err(S5Error::new(ErrorKind::Input, &e.to_string()));
-                    }
-                };
+                let receiver_pubkey = PublicKey::from_str(&self.receiver_pubkey)?;
+                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey)?;
                 let locktime = LockTime::from_consensus(self.timelock);
-                let hashvalue = match Hash::from_str(&self.hashlock) {
-                    Ok(result) => result,
-                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-                };
+                let hashvalue = Hash::from_str(&self.hashlock)?;
                 let hashbytes: [u8; 20] = *hashvalue.as_ref();
 
                 let script = Builder::new()
@@ -209,7 +192,7 @@ impl BtcSwapScript {
                     .push_slice(hashbytes)
                     .push_opcode(OP_EQUAL)
                     .push_opcode(OP_IF)
-                    .push_key(&reciever_pubkey)
+                    .push_key(&receiver_pubkey)
                     .push_opcode(OP_ELSE)
                     .push_lock_time(locktime)
                     .push_opcode(OP_CLTV)
@@ -236,19 +219,10 @@ impl BtcSwapScript {
                     OP_ENDIF
                     OP_CHECKSIG
                 */
-                let reciever_pubkey = match PublicKey::from_str(&self.reciever_pubkey) {
-                    Ok(result) => result.to_owned(),
-                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-                };
-                let sender_pubkey = match PublicKey::from_str(&self.sender_pubkey) {
-                    Ok(result) => result.to_owned(),
-                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-                };
+                let reciever_pubkey = PublicKey::from_str(&self.receiver_pubkey)?;
+                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey)?;
                 let locktime = LockTime::from_consensus(self.timelock);
-                let hashvalue = match Hash::from_str(&self.hashlock) {
-                    Ok(result) => result.to_owned(),
-                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-                };
+                let hashvalue = Hash::from_str(&self.hashlock)?;
                 let hashbytes: [u8; 20] = *hashvalue.as_ref();
 
                 let script = Builder::new()
@@ -277,7 +251,7 @@ impl BtcSwapScript {
 
     /// Get address for the swap script.
     /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
-    pub fn to_address(&self, network: Chain) -> Result<Address, S5Error> {
+    pub fn to_address(&self, network: Chain) -> Result<Address, Error> {
         let script = self.to_script()?;
         let network = match network {
             Chain::Bitcoin => Network::Bitcoin,
@@ -289,50 +263,33 @@ impl BtcSwapScript {
         }
     }
     /// Get the balance of the script
-    pub fn get_balance(&self, network_config: &ElectrumConfig) -> Result<(u64, i64), S5Error> {
+    pub fn get_balance(&self, network_config: &ElectrumConfig) -> Result<(u64, i64), Error> {
         let electrum_client = network_config.build_client()?;
-
-        let script_balance =
-            match electrum_client.script_get_balance(electrum_client::bitcoin::Script::from_bytes(
-                &self
-                    .to_address(network_config.network())?
-                    .script_pubkey()
-                    .as_bytes(),
-            )) {
-                Ok(result) => result,
-                Err(e) => return Err(S5Error::new(ErrorKind::Script, &e.to_string())),
-            };
+        let spk = self.to_address(network_config.network())?.script_pubkey();
+        let script_balance = electrum_client.script_get_balance(spk.as_script())?;
         Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
 
-    /// Fetch utxo for script
-    pub fn fetch_utxo(&self, network_config: &ElectrumConfig) -> Result<(OutPoint, u64), S5Error> {
+    /// Fetch (utxo,amount) pair for the script_pubkey of this swap.
+    /// Returns None if no utxo for the script_pubkey is found.
+    pub fn fetch_utxo(
+        &self,
+        network_config: &ElectrumConfig,
+    ) -> Result<Option<(OutPoint, u64)>, Error> {
         let electrum_client = network_config.build_client()?;
+        let spk = self.to_address(network_config.network())?.script_pubkey();
+        let utxos = electrum_client.script_list_unspent(spk.as_script())?;
 
-        let utxos =
-            match electrum_client.script_list_unspent(electrum_client::bitcoin::Script::from_bytes(
-                self.to_address(network_config.network())?
-                    .script_pubkey()
-                    .as_bytes(),
-            )) {
-                Ok(result) => result,
-                Err(e) => return Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-            };
         if utxos.len() == 0 {
-            return Err(S5Error::new(
-                ErrorKind::Transaction,
-                &format!("0 utxos found for this script",),
-            ));
+            // No utxo found. Return None.
+            return Ok(None);
         } else {
-            let txid = match bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()) {
-                Ok(result) => result,
-                Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-            };
+            let txid = Txid::from_str(&utxos[0].tx_hash.to_string())?;
 
             let outpoint_0 = OutPoint::new(txid, utxos[0].tx_pos as u32);
             let utxo_value = utxos[0].value;
 
-            Ok((outpoint_0, utxo_value))
+            Ok(Some((outpoint_0, utxo_value)))
         }
     }
 }
@@ -345,7 +302,7 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
     result
 }
 
-/// Bitcoin swap transaction helper.
+/// A structure representing either a Claim or a Refund Tx.
 pub struct BtcSwapTx {
     kind: SwapTxKind,
     swap_script: BtcSwapScript,
@@ -354,100 +311,93 @@ pub struct BtcSwapTx {
     utxo_value: u64, // there should only ever be one outpoint in a swap
 }
 impl BtcSwapTx {
+    /// Craft a new ClaimTx. Only works for Reverse Swaps.
+    /// Returns None, if the HTLC utxo doesn't exist for the swap.
     pub fn new_claim(
         swap_script: BtcSwapScript,
         output_address: String,
         network_config: &ElectrumConfig,
-    ) -> Result<BtcSwapTx, S5Error> {
-        if swap_script.swap_type == SwapType::Submarine {
-            return Err(S5Error::new(
-                ErrorKind::Script,
-                "Claim transactions can only be constructed for Reverse swaps.",
-            ));
-        }
+    ) -> Result<Option<BtcSwapTx>, Error> {
+        debug_assert!(
+            swap_script.swap_type != SwapType::Submarine,
+            "Claim transactions can only be constructed for Reverse swaps."
+        );
         let network = if network_config.network() == Chain::Bitcoin {
             Network::Bitcoin
         } else {
             Network::Testnet
         };
-        let address = match Address::from_str(&output_address) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
+        let address = Address::from_str(&output_address)?;
 
         address.is_valid_for_network(network);
 
-        let (utxo, utxo_value) = swap_script.fetch_utxo(network_config)?;
-        Ok(BtcSwapTx {
-            kind: SwapTxKind::Claim,
-            swap_script,
-            output_address: address.assume_checked(),
-            utxo: utxo,
-            utxo_value: utxo_value,
-        })
+        let utxo_info = swap_script.fetch_utxo(network_config)?;
+        if let Some((utxo, utxo_value)) = utxo_info {
+            Ok(Some(BtcSwapTx {
+                kind: SwapTxKind::Claim,
+                swap_script,
+                output_address: address.assume_checked(),
+                utxo,
+                utxo_value,
+            }))
+        } else {
+            Ok(None)
+        }
     }
-    /// Required to claim submarine swaps only. Cannot be used for reverse swaps.
+    /// Construct a RefundTX corresponding to the swap_script. Only works for Normal Swaps.
+    /// Returns None, if the HTLC UTXO for the swap doesn't exist in blockhcian.
     pub fn new_refund(
         swap_script: BtcSwapScript,
         output_address: String,
         network_config: &ElectrumConfig,
-    ) -> Result<BtcSwapTx, S5Error> {
-        if swap_script.swap_type == SwapType::ReverseSubmarine {
-            return Err(S5Error::new(
-                ErrorKind::Script,
-                "Refund transactions can only be constructed for Submarine swaps.",
-            ));
-        }
+    ) -> Result<Option<BtcSwapTx>, Error> {
+        debug_assert!(
+            swap_script.swap_type != SwapType::ReverseSubmarine,
+            "Refund Txs can only be constructed for Normal Swaps"
+        );
         let network = if network_config.network() == Chain::Bitcoin {
             Network::Bitcoin
         } else {
             Network::Testnet
         };
 
-        let address = match Address::from_str(&output_address) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
+        let address = Address::from_str(&output_address)?;
         address.is_valid_for_network(network);
 
-        let (utxo, utxo_value) = swap_script.fetch_utxo(network_config)?;
-        Ok(BtcSwapTx {
-            kind: SwapTxKind::Refund,
-            swap_script,
-            output_address: address.assume_checked(),
-            utxo: utxo,
-            utxo_value: utxo_value,
-        })
+        let utxo_info = swap_script.fetch_utxo(network_config)?;
+        if let Some((utxo, utxo_value)) = utxo_info {
+            Ok(Some(BtcSwapTx {
+                kind: SwapTxKind::Refund,
+                swap_script,
+                output_address: address.assume_checked(),
+                utxo: utxo,
+                utxo_value: utxo_value,
+            }))
+        } else {
+            Ok(None)
+        }
     }
     /// Fetch utxo for the script
 
-    /// Sign a reverse swap claim transaction
+    /// Sign a reverse swap claim transaction.
+    /// Panics if called on a Normal Swap or Refund Tx.
     pub fn sign_claim(
         &self,
         keys: &Keypair,
         preimage: &Preimage,
         absolute_fees: u64,
-    ) -> Result<Transaction, S5Error> {
-        if self.swap_script.swap_type == SwapType::Submarine {
-            return Err(S5Error::new(
-                ErrorKind::Script,
-                "Claim transactions can only be constructed for Reverse swaps.",
-            ));
-        }
-        if self.kind == SwapTxKind::Refund {
-            return Err(S5Error::new(
-                ErrorKind::Script,
-                "Constructed transaction is for a refund. Cannot claim.",
-            ));
-        }
+    ) -> Result<Transaction, Error> {
+        debug_assert!(
+            self.swap_script.swap_type != SwapType::Submarine && self.kind != SwapTxKind::Refund,
+            "Cannot sign claim tx, for a normal-swap, refund-type"
+        );
 
         let preimage_bytes = if let Some(value) = preimage.bytes {
             value
         } else {
-            return Err(S5Error::new(
-                ErrorKind::Transaction,
-                "No preimage provided.",
-            ));
+            return Err(Error::Protocol(format!(
+                "No preimage provided while signing."
+            )));
         };
 
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
@@ -472,22 +422,16 @@ impl BtcSwapTx {
         let redeem_script = self.swap_script.to_script()?;
         let secp = Secp256k1::new();
         let hash_type = bitcoin::sighash::EcdsaSighashType::All;
-        let sighash = match SighashCache::new(unsigned_tx.clone()).p2wsh_signature_hash(
+        let sighash = SighashCache::new(unsigned_tx.clone()).p2wsh_signature_hash(
             0,
             &redeem_script,
             Amount::from_sat(self.utxo_value),
             hash_type,
-        ) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e))),
-        };
-        let sighash_message = match Message::from_digest_slice(&sighash[..]) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &format!("{:#?}", e))),
-        };
+        )?;
+        let sighash_message = Message::from_digest_slice(&sighash[..])?;
         let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
         signature.verify(&sighash_message, &keys.public_key())?;
-        let ecdsa_signature = bitcoin::ecdsa::Signature::sighash_all(signature);
+        let ecdsa_signature = Signature::sighash_all(signature);
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
         witness.push_ecdsa_signature(&ecdsa_signature);
@@ -509,24 +453,14 @@ impl BtcSwapTx {
         Ok(signed_tx)
     }
 
-    /// Sign a submarine swap refund transaction
-    pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, S5Error> {
-        if self.swap_script.swap_type == SwapType::ReverseSubmarine {
-            return Err(S5Error::new(
-                ErrorKind::Script,
-                "Refund transactions can only be constructed for Submarine swaps.",
-            ));
-        }
-        // if !self.has_utxo() {
-        //     return Err(S5Error::new(ErrorKind::Transaction, "No Utxos Found."));
-        // }
+    /// Sign a submarine swap refund transaction.
+    /// Panics if called on Reverse Swap, Claim type.
+    pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, Error> {
+        debug_assert!(
+            self.swap_script.swap_type != SwapType::Submarine && self.kind != SwapTxKind::Refund,
+            "Cannot sign refund tx, for a reverse-swap, claim-type"
+        );
 
-        if self.kind == SwapTxKind::Claim {
-            return Err(S5Error::new(
-                ErrorKind::Script,
-                "Constructed transaction is for a claim. Cannot refund.",
-            ));
-        }
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
@@ -549,30 +483,19 @@ impl BtcSwapTx {
         let redeem_script = self.swap_script.to_script()?;
         let secp = Secp256k1::new();
         let hash_type = bitcoin::sighash::EcdsaSighashType::All;
-        let sighash = match SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
+        let sighash = SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
             0,
             &redeem_script,
             Amount::from_sat(self.utxo_value),
             hash_type,
-        ) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
-        };
-        let sighash_message = match Message::from_digest_slice(&sighash[..]) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
-        };
-        let signature = match bitcoin::ecdsa::Signature::from_str(
-            &secp
-                .sign_ecdsa(&sighash_message, &keys.secret_key())
-                .to_string(),
-        ) {
-            Ok(result) => result,
-            Err(e) => return Err(S5Error::new(ErrorKind::Transaction, &e.to_string())),
-        };
+        )?;
+        let sighash_message = Message::from_digest_slice(&sighash[..])?;
+        let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
+        let ecdsa_signature = Signature::sighash_all(signature);
+
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
-        witness.push_ecdsa_signature(&signature);
+        witness.push_ecdsa_signature(&ecdsa_signature);
         witness.push([0]);
         witness.push(redeem_script.as_bytes());
 
@@ -590,10 +513,11 @@ impl BtcSwapTx {
         };
         Ok(signed_tx)
     }
+
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
-    pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, S5Error> {
+    pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, Error> {
         let dummy_abs_fee = 5_000;
         let tx = match self.kind {
             _ => self.sign_claim(keys, preimage, dummy_abs_fee)?,
@@ -605,12 +529,10 @@ impl BtcSwapTx {
         &self,
         signed_tx: Transaction,
         network_config: &ElectrumConfig,
-    ) -> Result<String, S5Error> {
-        let electrum_client = network_config.build_client()?;
-        match electrum_client.transaction_broadcast(&signed_tx) {
-            Ok(txid) => Ok(txid.to_string()),
-            Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-        }
+    ) -> Result<Txid, Error> {
+        Ok(network_config
+            .build_client()?
+            .transaction_broadcast(&signed_tx)?)
     }
 }
 
@@ -745,7 +667,7 @@ mod tests {
         let encoded = BtcSwapScript {
             swap_type: SwapType::Submarine,
             hashlock: decoded.hashlock,
-            reciever_pubkey: decoded.reciever_pubkey,
+            receiver_pubkey: decoded.receiver_pubkey,
             sender_pubkey: decoded.sender_pubkey,
             timelock: decoded.timelock,
         }

@@ -2,6 +2,10 @@
 //! Refer to tests/ folder for usage
 //! THIS LIBRARY IS IN EARLY ALPHA. TEST AND REVIEW BEFORE USING IN PRODUCTION.
 
+#![allow(unused)]
+/// Error Module
+mod error;
+/// Blockchain Network module. Currently only contains electrum interface.
 pub mod network;
 /// core swap logic
 pub mod swaps;
