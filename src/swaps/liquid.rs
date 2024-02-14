@@ -107,33 +107,31 @@ impl LBtcSwapScript {
             }
         }
 
-        if hashlock.is_some()
-            && sender_pubkey.is_some()
-            && timelock.is_some()
-            && sender_pubkey.is_some()
-        {
-            let zksecp = Secp256k1::new();
+        let hashlock =
+            hashlock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No hashlock provided"))?;
 
-            Ok(LBtcSwapScript {
-                swap_type: SwapType::Submarine,
-                hashlock: hashlock.unwrap(),
-                reciever_pubkey: reciever_pubkey.unwrap(),
-                timelock: timelock.unwrap(),
-                sender_pubkey: sender_pubkey.unwrap(),
-                blinding_key: match ZKKeyPair::from_seckey_str(&zksecp, &blinding_str) {
-                    Ok(result) => result,
-                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-                },
-            })
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                &format!(
-                    "Could not extract all elements: {:?} {:?} {:?} {:?}",
-                    hashlock, reciever_pubkey, timelock, sender_pubkey
-                ),
-            ))
-        }
+        let sender_pubkey = sender_pubkey
+            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No sender_pubkey provided"))?;
+
+        let timelock =
+            timelock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No timelock provided"))?;
+
+        let reciever_pubkey = reciever_pubkey
+            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No receiver_pubkey provided"))?;
+
+        let zksecp = Secp256k1::new();
+
+        Ok(LBtcSwapScript {
+            swap_type: SwapType::Submarine,
+            hashlock: hashlock,
+            reciever_pubkey: reciever_pubkey,
+            timelock: timelock,
+            sender_pubkey: sender_pubkey,
+            blinding_key: match ZKKeyPair::from_seckey_str(&zksecp, &blinding_str) {
+                Ok(result) => result,
+                Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+            },
+        })
     }
 
     /// Create the struct from a reverse swap redeem_script string.
@@ -176,33 +174,31 @@ impl LBtcSwapScript {
             }
         }
 
-        if hashlock.is_some()
-            && sender_pubkey.is_some()
-            && timelock.is_some()
-            && sender_pubkey.is_some()
-        {
-            let zksecp = Secp256k1::new();
+        let hashlock =
+            hashlock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No hashlock provided"))?;
 
-            Ok(LBtcSwapScript {
-                swap_type: SwapType::ReverseSubmarine,
-                hashlock: hashlock.unwrap(),
-                reciever_pubkey: reciever_pubkey.unwrap(),
-                timelock: timelock.unwrap(),
-                sender_pubkey: sender_pubkey.unwrap(),
-                blinding_key: match ZKKeyPair::from_seckey_str(&zksecp, &blinding_str) {
-                    Ok(result) => result,
-                    Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-                },
-            })
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                &format!(
-                    "Could not extract all elements: {:?} {:?} {:?} {:?}",
-                    hashlock, reciever_pubkey, timelock, sender_pubkey
-                ),
-            ))
-        }
+        let sender_pubkey = sender_pubkey
+            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No sender_pubkey provided"))?;
+
+        let timelock =
+            timelock.ok_or_else(|| S5Error::new(ErrorKind::Input, "No timelock provided"))?;
+
+        let reciever_pubkey = reciever_pubkey
+            .ok_or_else(|| S5Error::new(ErrorKind::Input, "No receiver_pubkey provided"))?;
+
+        let zksecp = Secp256k1::new();
+
+        Ok(LBtcSwapScript {
+            swap_type: SwapType::ReverseSubmarine,
+            hashlock: hashlock,
+            reciever_pubkey: reciever_pubkey,
+            timelock: timelock,
+            sender_pubkey: sender_pubkey,
+            blinding_key: match ZKKeyPair::from_seckey_str(&zksecp, &blinding_str) {
+                Ok(result) => result,
+                Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
+            },
+        })
     }
 
     /// Internally used to convert struct into a bitcoin::Script type
@@ -472,7 +468,10 @@ impl LBtcSwapScript {
                 if !is_blinded {
                     let el_txid = tx.clone().txid();
                     let outpoint_0 = OutPoint::new(el_txid, vout);
-                    return Ok((outpoint_0, output.value.explicit().unwrap(), None, None));
+                    let output_explicit = output.value.explicit().ok_or_else(|| {
+                        S5Error::new(ErrorKind::Input, "No sender_pubkey provided")
+                    })?;
+                    return Ok((outpoint_0, output_explicit, None, None));
                 } else {
                     let unblinded = match output.unblind(&zksecp, self.blinding_key.secret_key()) {
                         Ok(result) => result,

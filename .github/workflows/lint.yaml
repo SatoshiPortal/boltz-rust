@@ -1,0 +1,31 @@
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+
+name: lint
+
+jobs:
+
+  fmt:
+    name: rust fmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set default toolchain
+        run: rustup default nightly
+      - name: Set profile
+        run: rustup set profile minimal
+      - name: Add rustfmt
+        run: rustup component add rustfmt
+      - name: Add clippy
+        run: rustup component add clippy
+      - name: Update toolchain
+        run: rustup update
+      - name: Check fmt
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        #TODO: enable clippy when all clippy warnings are fixed.
+        #run: cargo clippy --all-targets --all-features -- -D warnings

@@ -1,12 +1,12 @@
 [package]
-name = "rust_elements_wrapper"
+name = "boltz-rust"
 description = "a boltz client for swaps between BTC/LBTC & LN"
 version = "0.1.1"
 edition = "2021"
 license="MIT"
 
 [lib]
-name = "rust_elements_wrapper"
+name = "boltz_rust"
 path = "src/lib.rs"
 doctest = false
 crate-type = ["staticlib", "cdylib"]
@@ -17,9 +17,6 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 panic = "abort"
-
-[build]
-profiler = true
 
 [dependencies]
 hex = "0.4.3"
@@ -32,3 +29,7 @@ electrum-client = "0.19.0"
 bitcoin = {version = "0.31.1", features = ["rand", "base64", "rand-std"]}
 elements = { version = "0.24.0", features = ["serde"] }
 lightning-invoice = "0.26.0"
+
+#Empty default feature set, (helpful to generalise in github actions)
+[features]
+default = []

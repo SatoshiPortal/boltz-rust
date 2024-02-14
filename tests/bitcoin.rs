@@ -1,4 +1,4 @@
-use rust_elements_wrapper::{
+use boltz_rust::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         bitcoin::{BtcSwapScript, BtcSwapTx},
@@ -65,7 +65,7 @@ fn test_bitcoin_ssi() {
 
     let recovery =
         BtcSubmarineRecovery::new(&_id, &keypair, &response.get_redeem_script().unwrap());
-    let refund_file: RefundSwapFile = recovery.clone().into();
+    let refund_file: RefundSwapFile = recovery.clone().try_into().unwrap();
     let cargo_manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let refund_path = PathBuf::from(cargo_manifest_dir);
     println!("path: {:?}", refund_path);
