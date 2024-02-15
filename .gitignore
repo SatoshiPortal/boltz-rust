@@ -2,3 +2,4 @@ target/
 Cargo.lock
 /.idea
 boltz-*json
+/boltz-rust
