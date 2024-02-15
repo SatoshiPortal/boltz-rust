@@ -10,25 +10,29 @@ pub mod swaps;
 /// utilities (key, preimage, error)
 pub mod util;
 
-pub use bitcoin::secp256k1::{Keypair, Secp256k1};
+use bitcoin::secp256k1::rand::thread_rng;
+// use bitcoin::key;
+pub use bitcoin::secp256k1::{Keypair, Message, Secp256k1, XOnlyPublicKey};
 pub use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 pub use lightning_invoice::Bolt11Invoice;
+use serde::Serialize;
 
+use crate::util::secrets::Preimage;
+use bitcoin::secp256k1::hashes::{sha256, Hash};
+use bitcoin::secp256k1::schnorr::Signature;
 use elements::bitcoin::hashes::ripemd160;
 use elements::encode::Encodable;
-use elements::hashes::Hash;
 use elements::hex::{FromHex, ToHex};
 use elements::opcodes;
 use elements::opcodes::Ordinary::OP_IF;
 use elements::script::Builder;
 use elements::secp256k1_zkp::PublicKey;
 use hex::decode;
+use network::electrum::ElectrumConfig;
 use std::cell::RefCell;
 use std::ffi::{c_char, CStr, CString};
+use std::ptr;
 use std::str::FromStr;
-
-use crate::util::secrets::Preimage;
-use network::electrum::ElectrumConfig;
 use swaps::liquid::LBtcSwapScript;
 use swaps::liquid::LBtcSwapTx;
 
@@ -276,6 +280,93 @@ fn create_and_sign_transaction(
 }
 
 #[no_mangle]
+pub extern "C" fn get_key_pair() -> *mut c_char {
+    let secp = Secp256k1::new();
+    let (secret_key, public_key) = secp.generate_keypair(&mut thread_rng());
+
+    let secret_key_hex = hex::encode(secret_key.as_ref());
+    let public_key_hex = hex::encode(public_key.serialize());
+
+    let combined_string = format!("{};{}", secret_key_hex, public_key_hex);
+
+    match CString::new(combined_string) {
+        Ok(c_str_combined) => c_str_combined.into_raw(),
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn sign_message_schnorr(
+    message: *const c_char,
+    private_key: *const c_char,
+) -> *mut c_char {
+    let message_str = unsafe { CStr::from_ptr(message).to_str().unwrap().trim() };
+    let private_key_str = unsafe { CStr::from_ptr(private_key).to_str().unwrap().trim() };
+
+    let message_hash = sha256::Hash::hash(message_str.as_bytes());
+    let msg = match Message::from_digest_slice(message_hash.as_ref()) {
+        Ok(m) => m,
+        Err(e) => {
+            log_message(&format!("[Rust] Sign schnorr - Error: {:?}", e));
+            return ptr::null_mut();
+        }
+    };
+
+    let keypair = match Keypair::from_str(private_key_str) {
+        Ok(k) => k,
+        Err(e) => {
+            log_message(&format!("[Rust] Sign schnorr - Error: {:?}", e));
+            return ptr::null_mut();
+        }
+    };
+
+    let sig = keypair.sign_schnorr(msg);
+    let sig_hex = hex::encode(sig.serialize());
+    let c_sig = CString::new(sig_hex).unwrap();
+    c_sig.into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn verify_signature_schnorr(
+    signature: *const c_char,
+    message: *const c_char,
+    public_key: *const c_char,
+) -> i32 {
+    let message_str = unsafe { CStr::from_ptr(message).to_str().unwrap().trim() };
+    let signature_str = unsafe { CStr::from_ptr(signature).to_str().unwrap().trim() };
+    let public_key_str = unsafe { CStr::from_ptr(public_key).to_str().unwrap().trim() };
+
+    let message_hash = sha256::Hash::hash(message_str.as_bytes());
+    let msg = match Message::from_digest_slice(message_hash.as_ref()) {
+        Ok(m) => m,
+        Err(_) => return 0,
+    };
+
+    let sig_bytes = match hex::decode(signature_str) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+
+    let sig = match Signature::from_slice(&sig_bytes) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+
+    let publicKey = match PublicKey::from_str(public_key_str) {
+        Ok(p) => p,
+        Err(_) => return 0,
+    };
+
+    let x_only_pub_key = XOnlyPublicKey::from(publicKey);
+
+    let secp = Secp256k1::new();
+    match secp.verify_schnorr(&sig, &msg, &x_only_pub_key) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn rust_cstr_free(s: *mut c_char) {
     unsafe {
         if s.is_null() {
@@ -326,4 +417,56 @@ pub extern "C" fn get_last_error() -> *const c_char {
             .as_ref()
             .map_or(std::ptr::null(), |message| message.as_ptr())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::secp256k1;
+    use secp256k1::rand::thread_rng;
+    use secp256k1::Secp256k1;
+    use std::ffi::CString;
+
+    // Helper function to convert Rust string to C string pointer
+    fn to_c_str(s: &str) -> *const c_char {
+        CString::new(s).unwrap().into_raw() as *const c_char
+    }
+
+    // Helper function to convert C string pointer back to Rust String
+    fn from_c_str(c_str: *mut c_char) -> String {
+        unsafe { CString::from_raw(c_str).to_string_lossy().into_owned() }
+    }
+
+    #[test]
+    fn test_sign_and_verify_schnorr() {
+        let secp = Secp256k1::new();
+        let (secret_key, public_key) = secp.generate_keypair(&mut thread_rng());
+
+        let message = "test message";
+        let private_key_hex = hex::encode(secret_key.secret_bytes());
+        let public_key_hex = hex::encode(public_key.serialize());
+
+        // Convert test data to C strings
+        let message_c_str = to_c_str(message);
+        let private_key_c_str = to_c_str(&private_key_hex);
+        let public_key_c_str = to_c_str(&public_key_hex);
+
+        println!("2 - publicKey len: {}", public_key_hex.len());
+
+        let signature_c_str = sign_message_schnorr(message_c_str, private_key_c_str);
+        assert!(!signature_c_str.is_null(), "Signature should not be null");
+
+        let signature_str = from_c_str(signature_c_str);
+
+        let verify_result =
+            verify_signature_schnorr(to_c_str(&signature_str), message_c_str, public_key_c_str);
+
+        assert_eq!(verify_result, 1, "Signature verification failed");
+
+        unsafe {
+            CString::from_raw(message_c_str as *mut c_char);
+            CString::from_raw(private_key_c_str as *mut c_char);
+            CString::from_raw(public_key_c_str as *mut c_char);
+        }
+    }
 }

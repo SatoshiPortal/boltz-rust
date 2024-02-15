@@ -46,9 +46,9 @@ init:
 all: ios android bindings
 
 ## ios: Compile the iOS universal library
-ios: target/universal/release/librust_elements_wrapper.a
+ios: target/universal/release/libboltz_rust.a
 
-target/universal/release/librust_elements_wrapper.a: $(SOURCES) ndk-home
+target/universal/release/libboltz_rust.a: $(SOURCES) ndk-home
 	@if [ $$(uname) == "Darwin" ] ; then \
 		cargo lipo --release ; \
 		else echo "Skipping iOS compilation on $$(uname)" ; \
@@ -56,16 +56,16 @@ target/universal/release/librust_elements_wrapper.a: $(SOURCES) ndk-home
 	@echo "[DONE] $@"
 
 ## macos: Compile the macOS libraries
-macos: target/x86_64-apple-darwin/release/librust_elements_wrapper.dylib target/aarch64-apple-darwin/release/librust_elements_wrapper.dylib
+macos: target/x86_64-apple-darwin/release/libboltz_rust.dylib target/aarch64-apple-darwin/release/libboltz_rust.dylib
 
-target/x86_64-apple-darwin/release/librust_elements_wrapper.dylib: $(SOURCES)
+target/x86_64-apple-darwin/release/libboltz_rust.dylib: $(SOURCES)
 	@if [ $$(uname) == "Darwin" ] ; then \
 		cargo lipo --release --targets x86_64-apple-darwin ; \
 		else echo "Skipping macOS compilation on $$(uname)" ; \
 	fi
 	@echo "[DONE] $@"
 
-target/aarch64-apple-darwin/release/librust_elements_wrapper.dylib: $(SOURCES)
+target/aarch64-apple-darwin/release/libboltz_rust.dylib: $(SOURCES)
 	@if [ $$(uname) == "Darwin" ] ; then \
 		cargo lipo --release --targets aarch64-apple-darwin ; \
 		else echo "Skipping macOS compilation on $$(uname)" ; \
@@ -73,27 +73,27 @@ target/aarch64-apple-darwin/release/librust_elements_wrapper.dylib: $(SOURCES)
 	@echo "[DONE] $@"
 
 ## android: Compile the android targets (arm64, armv7 and i686)
-android: target/aarch64-linux-android/release/librust_elements_wrapper.so target/armv7-linux-androideabi/release/librust_elements_wrapper.so target/i686-linux-android/release/librust_elements_wrapper.so target/x86_64-linux-android/release/librust_elements_wrapper.so
+android: target/aarch64-linux-android/release/libboltz_rust.so target/armv7-linux-androideabi/release/libboltz_rust.so target/i686-linux-android/release/libboltz_rust.so target/x86_64-linux-android/release/libboltz_rust.so
 
-target/aarch64-linux-android/release/librust_elements_wrapper.so: $(SOURCES) ndk-home
+target/aarch64-linux-android/release/libboltz_rust.so: $(SOURCES) ndk-home
 	CC_aarch64_linux_android=$(ANDROID_AARCH64_LINKER) \
 	CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$(ANDROID_AARCH64_LINKER) \
 		AR=llvm-ar cargo build --target aarch64-linux-android --release
 	@echo "[DONE] $@"
 
-target/armv7-linux-androideabi/release/librust_elements_wrapper.so: $(SOURCES) ndk-home
+target/armv7-linux-androideabi/release/libboltz_rust.so: $(SOURCES) ndk-home
 	CC_armv7_linux_androideabi=$(ANDROID_ARMV7_LINKER) \
 	CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=$(ANDROID_ARMV7_LINKER) \
 		AR=llvm-ar cargo build --target armv7-linux-androideabi --release
 	@echo "[DONE] $@"
 
-target/i686-linux-android/release/librust_elements_wrapper.so: $(SOURCES) ndk-home
+target/i686-linux-android/release/libboltz_rust.so: $(SOURCES) ndk-home
 	CC_i686_linux_android=$(ANDROID_I686_LINKER) \
 	CARGO_TARGET_I686_LINUX_ANDROID_LINKER=$(ANDROID_I686_LINKER) \
 		AR=llvm-ar cargo  build --target i686-linux-android --release
 	@echo "[DONE] $@"
 
-target/x86_64-linux-android/release/librust_elements_wrapper.so: $(SOURCES) ndk-home
+target/x86_64-linux-android/release/libboltz_rust.so: $(SOURCES) ndk-home
 	CC_x86_64_linux_android=$(ANDROID_X86_64_LINKER) \
 	CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$(ANDROID_X86_64_LINKER) \
 		AR=llvm-ar cargo build --target x86_64-linux-android --release
@@ -114,19 +114,18 @@ target/bindings.h: $(SOURCES)
 	@echo "[DONE] $@"
 
 copy: 
-	rm -rf rust-elements-wrapper
-	rm rust-elements-wrapper.tar.gz
-	mkdir -p rust-elements-wrapper/android/app/src/main/jniLibs/arm64-v8a/ rust-elements-wrapper/android/app/src/main/jniLibs/armeabi-v7a/ rust-elements-wrapper/android/app/src/main/jniLibs/x86/ rust-elements-wrapper/android/app/src/main/jniLibs/x86_64/ rust-elements-wrapper/ios
+	rm -rf boltz-rust
+	mkdir -p boltz-rust/android/app/src/main/jniLibs/arm64-v8a/ boltz-rust/android/app/src/main/jniLibs/armeabi-v7a/ boltz-rust/android/app/src/main/jniLibs/x86/ boltz-rust/android/app/src/main/jniLibs/x86_64/ boltz-rust/ios
 
-	cp target/aarch64-linux-android/release/librust_elements_wrapper.so rust-elements-wrapper/android/app/src/main/jniLibs/arm64-v8a/
-	cp target/armv7-linux-androideabi/release/librust_elements_wrapper.so rust-elements-wrapper/android/app/src/main/jniLibs/armeabi-v7a/
-	cp target/i686-linux-android/release/librust_elements_wrapper.so rust-elements-wrapper/android/app/src/main/jniLibs/x86/
-	cp target/x86_64-linux-android/release/librust_elements_wrapper.so rust-elements-wrapper/android/app/src/main/jniLibs/x86_64/
-	cp target/bindings.h rust-elements-wrapper/
-	cp target/universal/release/librust_elements_wrapper.a rust-elements-wrapper/ios
-	tar -cvzf rust-elements-wrapper.tar.gz rust-elements-wrapper
+	cp target/aarch64-linux-android/release/libboltz_rust.so boltz-rust/android/app/src/main/jniLibs/arm64-v8a/
+	cp target/armv7-linux-androideabi/release/libboltz_rust.so boltz-rust/android/app/src/main/jniLibs/armeabi-v7a/
+	cp target/i686-linux-android/release/libboltz_rust.so boltz-rust/android/app/src/main/jniLibs/x86/
+	cp target/x86_64-linux-android/release/libboltz_rust.so boltz-rust/android/app/src/main/jniLibs/x86_64/
+	cp target/bindings.h boltz-rust/
+	cp target/universal/release/libboltz_rust.a boltz-rust/ios
+	tar -cvzf boltz-rust.tar.gz boltz-rust
 
-	mv rust-elements-wrapper.tar.gz rust-elements-wrapper-0.0.2.tar.gz
+	mv boltz-rust.tar.gz boltz-rust-0.0.2.tar.gz
 
 ## :
 

@@ -450,7 +450,7 @@ impl BtcSwapTx {
             ));
         };
 
-        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+        let sequence = Sequence::from_consensus(0xFFFFFFFD);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo,

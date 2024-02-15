@@ -1,5 +1,5 @@
 [package]
-name = "boltz-rust"
+name = "boltz_rust"
 description = "a boltz client for swaps between BTC/LBTC & LN"
 version = "0.1.1"
 edition = "2021"
