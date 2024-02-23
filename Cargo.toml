@@ -20,10 +20,8 @@ codegen-units = 1
 panic = "abort"
 
 [dependencies]
-hex = "0.4.3"
 serde = { version = "1.0.0", features = ["derive"] }
 serde_json = "1.0.0"
-rand_core = {version = "0.6.4", features = ["getrandom"]}
 ureq = {version = "2.8.0", features = ["json"]}
 bip39 = "2.0.0"
 electrum-client = "0.19.0"

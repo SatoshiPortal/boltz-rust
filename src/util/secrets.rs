@@ -4,15 +4,15 @@ use crate::swaps::bitcoin::BtcSwapScript;
 use crate::swaps::liquid::LBtcSwapScript;
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
-use bitcoin::hex::FromHex;
+use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::secp256k1::{Keypair, Secp256k1};
+use bitcoin::ScriptBuf;
 use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 
 use bitcoin::secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
 use lightning_invoice::Bolt11Invoice;
 
-use bitcoin::secp256k1::rand::rngs::OsRng;
-use rand_core::RngCore;
+use bitcoin::key::rand::{rngs::OsRng, RngCore};
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -65,8 +65,7 @@ impl SwapKey {
         let path = DerivationPath::from_str(&derivation_path)?;
         let child_xprv = root.derive_priv(&secp, &path)?;
 
-        let key_pair =
-            Keypair::from_seckey_str(&secp, &hex::encode(child_xprv.private_key.secret_bytes()))?;
+        let key_pair = Keypair::from_secret_key(&secp, &child_xprv.private_key);
 
         Ok(SwapKey {
             fingerprint: fingerprint,
@@ -102,8 +101,7 @@ impl SwapKey {
         let path = DerivationPath::from_str(&derivation_path)?;
         let child_xprv = root.derive_priv(&secp, &path)?;
 
-        let key_pair =
-            Keypair::from_seckey_str(&secp, &hex::encode(child_xprv.private_key.secret_bytes()))?;
+        let key_pair = Keypair::from_secret_key(&secp, &child_xprv.private_key);
 
         Ok(SwapKey {
             fingerprint: fingerprint,
@@ -226,7 +224,7 @@ impl Preimage {
     /// Converts the preimage value bytes to String
     pub fn to_string(&self) -> Option<String> {
         match self.bytes {
-            Some(result) => Some(hex::encode(result)),
+            Some(result) => Some(result.to_lower_hex_string()),
             None => None,
         }
     }
@@ -243,7 +241,7 @@ pub struct RefundSwapFile {
     pub currency: String,
     pub redeem_script: String,
     pub private_key: String,
-    pub timeout_block_height: u64,
+    pub timeout_block_height: u32,
 }
 impl RefundSwapFile {
     pub fn file_name(&self) -> String {
@@ -291,7 +289,7 @@ impl TryInto<RefundSwapFile> for BtcSubmarineRecovery {
             currency: "BTC".to_string(),
             redeem_script: self.redeem_script,
             private_key: self.refund_key,
-            timeout_block_height: script.timelock as u64,
+            timeout_block_height: script.locktime.to_consensus_u32(),
         })
     }
 }
@@ -391,7 +389,7 @@ impl TryInto<RefundSwapFile> for LBtcSubmarineRecovery {
             currency: "L-BTC".to_string(),
             redeem_script: self.redeem_script,
             private_key: self.refund_key,
-            timeout_block_height: script.timelock as u64,
+            timeout_block_height: script.locktime.to_consensus_u32(),
         })
     }
 }

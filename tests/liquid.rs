@@ -145,7 +145,7 @@ fn test_liquid_rsi() {
     println!("*******INVOICE****************");
     println!("{}", invoice.to_string());
     println!("timeoutBlockHeight: {}", response.get_timeout().unwrap());
-    println!("nLocktime: {}", boltz_script_elements.timelock);
+    println!("nLocktime: {}", boltz_script_elements.locktime);
     println!("");
     println!("Once you have paid the invoice, press enter to continue the tests.");
     println!("******************************");

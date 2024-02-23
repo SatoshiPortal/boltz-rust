@@ -1,14 +1,19 @@
 use electrum_client::ElectrumApi;
-use std::str::FromStr;
+use std::{hash, str::FromStr};
 
-use bitcoin::{hashes::Hash, script::Script as BitcoinScript, secp256k1::Keypair, Witness};
+use bitcoin::{
+    hashes::{hash160, Hash},
+    script::Script as BitcoinScript,
+    secp256k1::Keypair,
+    Witness,
+};
 use elements::{
     confidential::{self, AssetBlindingFactor, Value, ValueBlindingFactor},
-    hashes::hash160,
+    hex::ToHex,
     secp256k1_zkp::{self, Secp256k1, SecretKey},
     sighash::SighashCache,
-    Address, AssetIssuance, OutPoint, Script, Sequence, Transaction, TxIn, TxInWitness, TxOut,
-    TxOutSecrets, TxOutWitness,
+    Address, AssetIssuance, LockTime, OutPoint, Script, Sequence, Transaction, TxIn, TxInWitness,
+    TxOut, TxOutSecrets, TxOutWitness,
 };
 
 use elements::encode::serialize;
@@ -28,7 +33,7 @@ use elements::{
     address::Address as EAddress,
     opcodes::all::*,
     script::{Builder as EBuilder, Instruction, Script as EScript},
-    AddressParams, LockTime,
+    AddressParams,
 };
 
 use super::boltz::SwapType;
@@ -36,33 +41,15 @@ use super::boltz::SwapType;
 /// Liquid swap script helper.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LBtcSwapScript {
-    swap_type: SwapType,
-    pub hashlock: String,
-    pub reciever_pubkey: String,
-    pub timelock: u32,
-    pub sender_pubkey: String,
+    pub swap_type: SwapType,
+    pub hashlock: hash160::Hash,
+    pub reciever_pubkey: PublicKey,
+    pub locktime: LockTime,
+    pub sender_pubkey: PublicKey,
     pub blinding_key: ZKKeyPair,
 }
 
 impl LBtcSwapScript {
-    /// Create the struct from raw elements
-    pub fn new(
-        swap_type: SwapType,
-        hashlock: &str,
-        reciever_pubkey: &str,
-        timelock: u32,
-        sender_pubkey: &str,
-        blinding_key: &ZKKeyPair,
-    ) -> Self {
-        LBtcSwapScript {
-            swap_type: swap_type,
-            hashlock: hashlock.to_string(),
-            reciever_pubkey: reciever_pubkey.to_string(),
-            timelock: timelock,
-            sender_pubkey: sender_pubkey.to_string(),
-            blinding_key: blinding_key.clone(),
-        }
-    }
     /// Create the struct from a submarine swap redeem_script string.
     ///Usually created from the string provided by boltz api response.
     pub fn submarine_from_str(redeem_script_str: &str, blinding_str: &str) -> Result<Self, Error> {
@@ -83,16 +70,17 @@ impl LBtcSwapScript {
 
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_HASH160 {
-                        hashlock = Some(hex::encode(bytes));
+                        hashlock = Some(hash160::Hash::from_slice(bytes)?);
                     }
                     if last_op == OP_IF {
-                        reciever_pubkey = Some(hex::encode(bytes));
+                        reciever_pubkey = Some(PublicKey::from_slice(&bytes)?);
                     }
                     if last_op == OP_ELSE {
-                        timelock = Some(bytes_to_u32_little_endian(&bytes));
+                        timelock =
+                            Some(LockTime::from_consensus(bytes_to_u32_little_endian(&bytes)));
                     }
                     if last_op == OP_DROP {
-                        sender_pubkey = Some(hex::encode(bytes));
+                        sender_pubkey = Some(PublicKey::from_slice(&bytes)?);
                     }
                 }
                 _ => (),
@@ -108,7 +96,7 @@ impl LBtcSwapScript {
                 swap_type: SwapType::Submarine,
                 hashlock: hashlock.expect("Not none"),
                 reciever_pubkey: reciever_pubkey.expect("Not none"),
-                timelock: timelock.expect("Not none"),
+                locktime: timelock.expect("Not none"),
                 sender_pubkey: sender_pubkey.expect("Not none"),
                 blinding_key: ZKKeyPair::from_seckey_str(&zksecp, &blinding_str)?,
             })
@@ -140,16 +128,17 @@ impl LBtcSwapScript {
 
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_HASH160 {
-                        hashlock = Some(hex::encode(bytes));
+                        hashlock = Some(hash160::Hash::from_slice(bytes)?);
                     }
                     if last_op == OP_EQUALVERIFY {
-                        reciever_pubkey = Some(hex::encode(bytes));
+                        reciever_pubkey = Some(PublicKey::from_slice(bytes)?);
                     }
                     if last_op == OP_DROP {
                         if bytes.len() == 3 as usize {
-                            timelock = Some(bytes_to_u32_little_endian(&bytes));
+                            timelock =
+                                Some(LockTime::from_consensus(bytes_to_u32_little_endian(&bytes)));
                         } else {
-                            sender_pubkey = Some(hex::encode(bytes));
+                            sender_pubkey = Some(PublicKey::from_slice(bytes)?);
                         }
                     }
                 }
@@ -166,7 +155,7 @@ impl LBtcSwapScript {
                 swap_type: SwapType::ReverseSubmarine,
                 hashlock: hashlock.expect("Not None"),
                 reciever_pubkey: reciever_pubkey.expect("Not None"),
-                timelock: timelock.expect("Not None"),
+                locktime: timelock.expect("Not None"),
                 sender_pubkey: sender_pubkey.expect("Not None"),
                 blinding_key: ZKKeyPair::from_seckey_str(&zksecp, &blinding_str)?,
             })
@@ -192,22 +181,17 @@ impl LBtcSwapScript {
         */
         match self.swap_type {
             SwapType::Submarine => {
-                let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey)?;
-                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey)?;
-                let locktime = LockTime::from_consensus(self.timelock);
-                let hashvalue = hash160::Hash::from_str(&self.hashlock)?;
-
                 let script = EBuilder::new()
                     .push_opcode(OP_HASH160)
-                    .push_slice(hashvalue.as_byte_array())
+                    .push_slice(self.hashlock.as_byte_array())
                     .push_opcode(OP_EQUAL)
                     .push_opcode(OP_IF)
-                    .push_key(&reciever_pubkey)
+                    .push_key(&self.reciever_pubkey)
                     .push_opcode(OP_ELSE)
-                    .push_int(locktime.to_consensus_u32() as i64)
+                    .push_int(self.locktime.to_consensus_u32() as i64)
                     .push_opcode(OP_CLTV)
                     .push_opcode(OP_DROP)
-                    .push_key(&sender_pubkey)
+                    .push_key(&self.sender_pubkey)
                     .push_opcode(OP_ENDIF)
                     .push_opcode(OP_CHECKSIG)
                     .into_script();
@@ -229,26 +213,21 @@ impl LBtcSwapScript {
                     OP_ENDIF
                     OP_CHECKSIG
                 */
-                let reciever_pubkey = PublicKey::from_str(&self.reciever_pubkey)?;
-                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey)?;
-                let locktime = LockTime::from_consensus(self.timelock);
-                let hashvalue = hash160::Hash::from_str(&self.hashlock)?;
-
                 let script = EBuilder::new()
                     .push_opcode(OP_SIZE)
                     .push_slice(&[32])
                     .push_opcode(OP_EQUAL)
                     .push_opcode(OP_IF)
                     .push_opcode(OP_HASH160)
-                    .push_slice(hashvalue.as_byte_array())
+                    .push_slice(self.hashlock.as_byte_array())
                     .push_opcode(OP_EQUALVERIFY)
-                    .push_key(&reciever_pubkey)
+                    .push_key(&self.reciever_pubkey)
                     .push_opcode(OP_ELSE)
                     .push_opcode(OP_DROP)
-                    .push_int(locktime.to_consensus_u32() as i64)
+                    .push_int(self.locktime.to_consensus_u32() as i64)
                     .push_opcode(OP_CLTV)
                     .push_opcode(OP_DROP)
-                    .push_key(&sender_pubkey)
+                    .push_key(&self.sender_pubkey)
                     .push_opcode(OP_ENDIF)
                     .push_opcode(OP_CHECKSIG)
                     .into_script();
@@ -583,7 +562,7 @@ impl LBtcSwapTx {
 
         let unsigned_tx = Transaction {
             version: 2,
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: self.swap_script.locktime,
             input: vec![unsigned_input],
             output: vec![payment_output.clone(), fee_output.clone()],
         };
@@ -630,7 +609,7 @@ impl LBtcSwapTx {
 
         let signed_tx = Transaction {
             version: 2,
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: self.swap_script.locktime,
             input: vec![signed_txin],
             output: vec![payment_output, fee_output],
         };
@@ -731,7 +710,7 @@ impl LBtcSwapTx {
 
         let unsigned_tx = Transaction {
             version: 2,
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: self.swap_script.locktime,
             input: vec![unsigned_input],
             output: vec![payment_output.clone(), fee_output.clone()],
         };
@@ -777,7 +756,7 @@ impl LBtcSwapTx {
 
         let signed_tx = Transaction {
             version: 2,
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: self.swap_script.locktime,
             input: vec![signed_txin],
             output: vec![payment_output, fee_output],
         };
@@ -923,17 +902,14 @@ mod tests {
             LBtcSwapScript::reverse_from_str(&redeem_script_str.clone(), boltz_blinding_str)
                 .unwrap();
         // println!("{:?}", decoded);
-        assert_eq!(
-            decoded.reciever_pubkey,
-            my_key_pair.public_key().to_string()
-        );
-        assert_eq!(decoded.timelock, expected_timeout);
+        assert_eq!(decoded.reciever_pubkey.inner, my_key_pair.public_key());
+        assert_eq!(decoded.locktime.to_consensus_u32(), expected_timeout);
 
         let el_script = LBtcSwapScript {
             hashlock: decoded.hashlock,
             reciever_pubkey: decoded.reciever_pubkey,
             sender_pubkey: decoded.sender_pubkey,
-            timelock: decoded.timelock,
+            locktime: decoded.locktime,
             swap_type: SwapType::ReverseSubmarine,
             blinding_key: boltz_blinding_key,
         };
