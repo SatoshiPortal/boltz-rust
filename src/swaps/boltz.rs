@@ -732,7 +732,7 @@ impl CreateSwapResponse {
         keypair: &ZKKeyPair,
         chain: Chain,
     ) -> Result<LBtcSwapScript, Error> {
-        self.validate_submarine(&preimage, &keypair, chain)?;
+        self.validate_reverse(&preimage, &keypair, chain)?;
         Ok(LBtcSwapScript::reverse_from_str(
             &self.get_redeem_script()?,
             &self.get_blinding_key()?,
