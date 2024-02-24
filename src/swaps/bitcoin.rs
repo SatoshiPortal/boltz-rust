@@ -1,5 +1,7 @@
+use bitcoin::consensus::Decodable;
 use bitcoin::ecdsa::Signature;
-use bitcoin::hex::FromHex;
+use bitcoin::hashes::Hash;
+use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::transaction::Version;
 use bitcoin::{
@@ -10,6 +12,7 @@ use bitcoin::{
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
 use bitcoin::{Amount, Txid};
 use electrum_client::ElectrumApi;
+use std::ops::Add;
 use std::str::FromStr;
 
 use crate::{
@@ -19,7 +22,7 @@ use crate::{
     util::secrets::Preimage,
 };
 
-use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160::Hash};
+use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160};
 
 use super::boltz::SwapType;
 
@@ -27,34 +30,17 @@ use super::boltz::SwapType;
 #[derive(Debug, PartialEq, Clone)]
 pub struct BtcSwapScript {
     pub swap_type: SwapType,
-    pub hashlock: String,
-    pub receiver_pubkey: String,
-    pub timelock: u32,
-    pub sender_pubkey: String,
+    pub hashlock: hash160::Hash,
+    pub receiver_pubkey: PublicKey,
+    pub locktime: LockTime,
+    pub sender_pubkey: PublicKey,
 }
 
 impl BtcSwapScript {
-    /// Create the struct from raw elements
-    pub fn new(
-        swap_type: SwapType,
-        hashlock: &str,
-        receiver_pubkey: &str,
-        timelock: &u32,
-        sender_pubkey: &str,
-    ) -> Self {
-        BtcSwapScript {
-            swap_type: swap_type.clone(),
-            hashlock: hashlock.to_string(),
-            receiver_pubkey: receiver_pubkey.to_string(),
-            timelock: timelock.clone(),
-            sender_pubkey: sender_pubkey.to_string(),
-        }
-    }
     /// Create the struct from a submarine swap redeem_script string.
     /// Usually created from the string provided by boltz api response.
     pub fn submarine_from_str(redeem_script_str: &str) -> Result<Self, Error> {
-        let script_bytes = Vec::from_hex(redeem_script_str)?;
-        let script = Script::from_bytes(&script_bytes);
+        let script = ScriptBuf::from_hex(redeem_script_str)?;
 
         let instructions = script.instructions();
         let mut last_op = OP_0;
@@ -71,16 +57,18 @@ impl BtcSwapScript {
 
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_HASH160 {
-                        hashlock = Some(hex::encode(bytes.as_bytes()));
+                        hashlock = Some(hash160::Hash::from_slice(bytes.as_bytes())?);
                     }
                     if last_op == OP_IF {
-                        reciever_pubkey = Some(hex::encode(bytes.as_bytes()));
+                        reciever_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
                     }
                     if last_op == OP_ELSE {
-                        timelock = Some(bytes_to_u32_little_endian(&bytes.as_bytes()));
+                        timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
+                            &bytes.as_bytes(),
+                        )));
                     }
                     if last_op == OP_DROP {
-                        sender_pubkey = Some(hex::encode(bytes.as_bytes()));
+                        sender_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
                     }
                 }
                 _ => (),
@@ -103,7 +91,7 @@ impl BtcSwapScript {
             swap_type: SwapType::Submarine,
             hashlock: hashlock,
             receiver_pubkey: receiver_pubkey,
-            timelock: timelock,
+            locktime: timelock,
             sender_pubkey: sender_pubkey,
         })
     }
@@ -129,16 +117,18 @@ impl BtcSwapScript {
 
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_HASH160 {
-                        hashlock = Some(hex::encode(bytes.as_bytes()));
+                        hashlock = Some(hash160::Hash::from_slice(bytes.as_bytes())?);
                     }
                     if last_op == OP_EQUALVERIFY {
-                        receiver_pubkey = Some(hex::encode(bytes.as_bytes()));
+                        receiver_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
                     }
                     if last_op == OP_DROP {
                         if bytes.len() == 3 as usize {
-                            timelock = Some(bytes_to_u32_little_endian(&bytes.as_bytes()));
+                            timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
+                                &bytes.as_bytes(),
+                            )));
                         } else {
-                            sender_pubkey = Some(hex::encode(bytes.as_bytes()));
+                            sender_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
                         }
                     }
                 }
@@ -147,7 +137,7 @@ impl BtcSwapScript {
         }
 
         let hashlock =
-        hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
+            hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
 
         let sender_pubkey = sender_pubkey
             .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
@@ -162,7 +152,7 @@ impl BtcSwapScript {
             swap_type: SwapType::ReverseSubmarine,
             hashlock: hashlock,
             receiver_pubkey: receiver_pubkey,
-            timelock: timelock,
+            locktime: timelock,
             sender_pubkey: sender_pubkey,
         })
     }
@@ -181,23 +171,18 @@ impl BtcSwapScript {
                     ENDIF
                     CHECKSIG
                 */
-                let receiver_pubkey = PublicKey::from_str(&self.receiver_pubkey)?;
-                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey)?;
-                let locktime = LockTime::from_consensus(self.timelock);
-                let hashvalue = Hash::from_str(&self.hashlock)?;
-                let hashbytes: [u8; 20] = *hashvalue.as_ref();
 
                 let script = Builder::new()
                     .push_opcode(OP_HASH160)
-                    .push_slice(hashbytes)
+                    .push_slice(self.hashlock.to_byte_array())
                     .push_opcode(OP_EQUAL)
                     .push_opcode(OP_IF)
-                    .push_key(&receiver_pubkey)
+                    .push_key(&self.receiver_pubkey)
                     .push_opcode(OP_ELSE)
-                    .push_lock_time(locktime)
+                    .push_lock_time(self.locktime)
                     .push_opcode(OP_CLTV)
                     .push_opcode(OP_DROP)
-                    .push_key(&sender_pubkey)
+                    .push_key(&self.sender_pubkey)
                     .push_opcode(OP_ENDIF)
                     .push_opcode(OP_CHECKSIG)
                     .into_script();
@@ -219,11 +204,6 @@ impl BtcSwapScript {
                     OP_ENDIF
                     OP_CHECKSIG
                 */
-                let reciever_pubkey = PublicKey::from_str(&self.receiver_pubkey)?;
-                let sender_pubkey = PublicKey::from_str(&self.sender_pubkey)?;
-                let locktime = LockTime::from_consensus(self.timelock);
-                let hashvalue = Hash::from_str(&self.hashlock)?;
-                let hashbytes: [u8; 20] = *hashvalue.as_ref();
 
                 let script = Builder::new()
                     .push_opcode(OP_SIZE)
@@ -231,15 +211,15 @@ impl BtcSwapScript {
                     .push_opcode(OP_EQUAL)
                     .push_opcode(OP_IF)
                     .push_opcode(OP_HASH160)
-                    .push_slice(hashbytes)
+                    .push_slice(self.hashlock.to_byte_array())
                     .push_opcode(OP_EQUALVERIFY)
-                    .push_key(&reciever_pubkey)
+                    .push_key(&self.receiver_pubkey)
                     .push_opcode(OP_ELSE)
                     .push_opcode(OP_DROP)
-                    .push_lock_time(locktime)
+                    .push_lock_time(self.locktime)
                     .push_opcode(OP_CLTV)
                     .push_opcode(OP_DROP)
-                    .push_key(&sender_pubkey)
+                    .push_key(&self.sender_pubkey)
                     .push_opcode(OP_ENDIF)
                     .push_opcode(OP_CHECKSIG)
                     .into_script();
@@ -303,12 +283,13 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 }
 
 /// A structure representing either a Claim or a Refund Tx.
+/// This Tx spends from the HTLC.
 pub struct BtcSwapTx {
     kind: SwapTxKind,
     swap_script: BtcSwapScript,
     output_address: Address,
-    utxo: OutPoint,
-    utxo_value: u64, // there should only ever be one outpoint in a swap
+    // The HTLC utxo in (Outpoint, Amount) Pair
+    utxo: (OutPoint, u64),
 }
 impl BtcSwapTx {
     /// Craft a new ClaimTx. Only works for Reverse Swaps.
@@ -332,13 +313,12 @@ impl BtcSwapTx {
         address.is_valid_for_network(network);
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
-        if let Some((utxo, utxo_value)) = utxo_info {
+        if let Some(utxo) = utxo_info {
             Ok(Some(BtcSwapTx {
                 kind: SwapTxKind::Claim,
                 swap_script,
                 output_address: address.assume_checked(),
                 utxo,
-                utxo_value,
             }))
         } else {
             Ok(None)
@@ -365,13 +345,12 @@ impl BtcSwapTx {
         address.is_valid_for_network(network);
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
-        if let Some((utxo, utxo_value)) = utxo_info {
+        if let Some(utxo) = utxo_info {
             Ok(Some(BtcSwapTx {
                 kind: SwapTxKind::Refund,
                 swap_script,
                 output_address: address.assume_checked(),
-                utxo: utxo,
-                utxo_value: utxo_value,
+                utxo,
             }))
         } else {
             Ok(None)
@@ -403,18 +382,18 @@ impl BtcSwapTx {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
-            previous_output: self.utxo,
+            previous_output: self.utxo.0,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-        let output_amount: Amount = Amount::from_sat(self.utxo_value - absolute_fees);
+        let output_amount: Amount = Amount::from_sat(self.utxo.1 - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
         };
         let unsigned_tx = Transaction {
             version: Version(1),
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: self.swap_script.locktime,
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
@@ -425,7 +404,7 @@ impl BtcSwapTx {
         let sighash = SighashCache::new(unsigned_tx.clone()).p2wsh_signature_hash(
             0,
             &redeem_script,
-            Amount::from_sat(self.utxo_value),
+            Amount::from_sat(self.utxo.1),
             hash_type,
         )?;
         let sighash_message = Message::from_digest_slice(&sighash[..])?;
@@ -439,14 +418,14 @@ impl BtcSwapTx {
         witness.push(redeem_script.as_bytes());
 
         let signed_txin = TxIn {
-            previous_output: self.utxo,
+            previous_output: self.utxo.0,
             script_sig: ScriptBuf::new(),
             sequence: sequence,
             witness: witness,
         };
         let signed_tx = Transaction {
             version: Version(1),
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: self.swap_script.locktime,
             input: vec![signed_txin],
             output: vec![output.clone()],
         };
@@ -464,18 +443,18 @@ impl BtcSwapTx {
         let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
-            previous_output: self.utxo,
+            previous_output: self.utxo.0,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-        let output_amount: Amount = Amount::from_sat(self.utxo_value - absolute_fees);
+        let output_amount: Amount = Amount::from_sat(self.utxo.1 - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
         };
         let unsigned_tx = Transaction {
             version: Version(1),
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: self.swap_script.locktime,
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
@@ -486,7 +465,7 @@ impl BtcSwapTx {
         let sighash = SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
             0,
             &redeem_script,
-            Amount::from_sat(self.utxo_value),
+            Amount::from_sat(self.utxo.1),
             hash_type,
         )?;
         let sighash_message = Message::from_digest_slice(&sighash[..])?;
@@ -500,14 +479,14 @@ impl BtcSwapTx {
         witness.push(redeem_script.as_bytes());
 
         let signed_txin = TxIn {
-            previous_output: self.utxo,
+            previous_output: self.utxo.0,
             script_sig: ScriptBuf::new(),
             sequence: sequence,
             witness: witness,
         };
         let signed_tx = Transaction {
             version: Version(1),
-            lock_time: LockTime::from_consensus(self.swap_script.timelock),
+            lock_time: self.swap_script.locktime,
             input: vec![signed_txin],
             output: vec![output.clone()],
         };
@@ -565,7 +544,7 @@ mod tests {
     #[ignore]
     fn test_transaction() {
         let preimage = "a45380303a1b87ec9d0de25f5eba4f6bfbf79b0396e15b72df4914fdb1124634";
-        let preimage_bytes = hex::decode(preimage).unwrap();
+        let preimage_bytes = Vec::from_hex(preimage).unwrap();
         let preimage_hash = hash160::Hash::hash(&preimage_bytes);
         let hashbytes: [u8; 20] = *preimage_hash.as_ref();
 
@@ -651,30 +630,30 @@ mod tests {
     #[test]
     fn test_decode_encode_swap_redeem_script() {
         let secp = Secp256k1::new();
-        let redeem_script_str = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac".to_string();
+        let redeem_script = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac";
         let expected_address = "2MxkD9NtLhU4iRAUw8G6B83SiHxDESGfDac";
-        let expected_timeout = 2542048;
+        let expected_timeout = LockTime::from_consensus(2542048);
         let sender_key_pair = Keypair::from_seckey_str(
             &secp,
             "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
         )
         .unwrap();
-        let decoded = BtcSwapScript::submarine_from_str(&redeem_script_str.clone()).unwrap();
+        let decoded = BtcSwapScript::submarine_from_str(&redeem_script).unwrap();
         println!("{:?}", decoded);
-        assert!(decoded.sender_pubkey == sender_key_pair.public_key().to_string());
-        assert!(decoded.timelock == expected_timeout);
+        assert!(decoded.sender_pubkey.inner == sender_key_pair.public_key());
+        assert!(decoded.locktime == expected_timeout);
 
         let encoded = BtcSwapScript {
             swap_type: SwapType::Submarine,
             hashlock: decoded.hashlock,
             receiver_pubkey: decoded.receiver_pubkey,
             sender_pubkey: decoded.sender_pubkey,
-            timelock: decoded.timelock,
+            locktime: decoded.locktime,
         }
         .to_script()
         .unwrap();
         let script_hash = encoded.script_hash();
-        let sh_str = hex::encode(script_hash.to_raw_hash().to_string());
+        let sh_str = script_hash.as_byte_array().to_lower_hex_string();
         println!("ENCODED SCRIPT HASH: {}", sh_str);
         println!("ENCODED HEX: {}", encoded.to_hex_string());
         let address = Address::p2shwsh(&encoded, bitcoin::Network::Testnet);

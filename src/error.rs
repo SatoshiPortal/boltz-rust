@@ -18,6 +18,7 @@ pub enum Error {
     BIP32(bitcoin::bip32::Error),
     BIP39(bip39::Error),
     Hash(bitcoin::hashes::FromSliceError),
+    Locktime(String),
 }
 
 impl From<electrum_client::Error> for Error {
@@ -137,5 +138,17 @@ impl From<bitcoin::hashes::FromSliceError> for Error {
 impl From<bip39::Error> for Error {
     fn from(value: bip39::Error) -> Self {
         Self::BIP39(value)
+    }
+}
+
+impl From<bitcoin::absolute::Error> for Error {
+    fn from(value: bitcoin::absolute::Error) -> Self {
+        Self::Locktime(value.to_string())
+    }
+}
+
+impl From<elements::locktime::Error> for Error {
+    fn from(value: elements::locktime::Error) -> Self {
+        Self::Locktime(value.to_string())
     }
 }

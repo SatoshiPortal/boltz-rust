@@ -35,7 +35,10 @@
 //! ```
 use crate::error::Error;
 use crate::network::Chain;
+use bitcoin::absolute::LockTime;
 use bitcoin::secp256k1::Keypair;
+use bitcoin::PublicKey;
+use bitcoin::ScriptBuf;
 use elements::secp256k1_zkp::Keypair as ZKKeyPair;
 use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;
 use lightning_invoice::Bolt11Invoice;
@@ -729,7 +732,7 @@ impl CreateSwapResponse {
         keypair: &ZKKeyPair,
         chain: Chain,
     ) -> Result<LBtcSwapScript, Error> {
-        self.validate_submarine(&preimage, &keypair, chain)?;
+        self.validate_reverse(&preimage, &keypair, chain)?;
         Ok(LBtcSwapScript::reverse_from_str(
             &self.get_redeem_script()?,
             &self.get_blinding_key()?,
@@ -747,13 +750,16 @@ impl CreateSwapResponse {
                 let boltz_sub_script =
                     BtcSwapScript::submarine_from_str(&self.get_redeem_script()?)?;
 
-                let constructed_sub_script = BtcSwapScript::new(
-                    SwapType::Submarine,
-                    &preimage.hash160.to_string(),
-                    &boltz_sub_script.receiver_pubkey,
-                    &self.get_timeout()?,
-                    &keypair.public_key().to_string(),
-                );
+                let constructed_sub_script = BtcSwapScript {
+                    swap_type: SwapType::Submarine,
+                    hashlock: preimage.hash160,
+                    receiver_pubkey: boltz_sub_script.receiver_pubkey,
+                    locktime: LockTime::from_height(self.get_timeout()?)?,
+                    sender_pubkey: bitcoin::PublicKey {
+                        compressed: true,
+                        inner: keypair.public_key(),
+                    },
+                };
                 let address = constructed_sub_script.to_address(chain)?;
                 if constructed_sub_script == boltz_sub_script
                     && address.to_string() == self.get_funding_address()?
@@ -771,7 +777,7 @@ impl CreateSwapResponse {
                     &self.get_redeem_script()?,
                     &blinding_key.clone(),
                 )?;
-                if &boltz_sub_script.hashlock != &preimage.hash160.to_string() {
+                if &boltz_sub_script.hashlock != &preimage.hash160 {
                     return Err(Error::Protocol(format!(
                         "Hash160 mismatch: {},{}",
                         boltz_sub_script.hashlock,
@@ -779,14 +785,17 @@ impl CreateSwapResponse {
                     )));
                 }
                 let secp = ZKSecp256k1::new();
-                let script = LBtcSwapScript::new(
-                    SwapType::Submarine,
-                    &preimage.hash160.to_string(),
-                    &boltz_sub_script.reciever_pubkey,
-                    self.get_timeout()?,
-                    &keypair.public_key().to_string(),
-                    &ZKKeyPair::from_seckey_str(&secp, &blinding_key)?.into(),
-                );
+                let script = LBtcSwapScript {
+                    swap_type: SwapType::Submarine,
+                    hashlock: preimage.hash160,
+                    reciever_pubkey: boltz_sub_script.reciever_pubkey,
+                    locktime: elements::LockTime::from_height(self.get_timeout()?)?,
+                    sender_pubkey: PublicKey {
+                        compressed: true,
+                        inner: keypair.public_key(),
+                    },
+                    blinding_key: ZKKeyPair::from_seckey_str(&secp, &blinding_key)?.into(),
+                };
 
                 let address = script.to_address(chain)?;
                 println!(
@@ -841,13 +850,16 @@ impl CreateSwapResponse {
             Chain::Bitcoin | Chain::BitcoinTestnet => {
                 let boltz_rev_script = BtcSwapScript::reverse_from_str(&self.get_redeem_script()?)?;
 
-                let constructed_rev_script = BtcSwapScript::new(
-                    SwapType::ReverseSubmarine,
-                    &preimage.hash160.to_string(),
-                    &keypair.public_key().to_string(),
-                    &(self.get_timeout()?),
-                    &boltz_rev_script.sender_pubkey,
-                );
+                let constructed_rev_script = BtcSwapScript {
+                    swap_type: SwapType::ReverseSubmarine,
+                    hashlock: preimage.hash160,
+                    receiver_pubkey: PublicKey {
+                        compressed: true,
+                        inner: keypair.public_key(),
+                    },
+                    locktime: LockTime::from_height(self.get_timeout()?)?,
+                    sender_pubkey: boltz_rev_script.sender_pubkey,
+                };
                 let address = constructed_rev_script.to_address(chain)?;
                 if constructed_rev_script == boltz_rev_script
                     && address.to_string() == self.get_lockup_address()?
@@ -864,14 +876,17 @@ impl CreateSwapResponse {
                     &blinding_key.clone(),
                 )?;
                 let secp = ZKSecp256k1::new();
-                let constructed_rev_script = LBtcSwapScript::new(
-                    SwapType::ReverseSubmarine,
-                    &preimage.hash160.to_string(),
-                    &keypair.public_key().to_string(),
-                    self.get_timeout()?,
-                    &boltz_rev_script.sender_pubkey,
-                    &ZKKeyPair::from_seckey_str(&secp, &blinding_key)?.into(),
-                );
+                let constructed_rev_script = LBtcSwapScript {
+                    swap_type: SwapType::ReverseSubmarine,
+                    hashlock: preimage.hash160,
+                    reciever_pubkey: PublicKey {
+                        compressed: true,
+                        inner: keypair.public_key(),
+                    },
+                    locktime: elements::LockTime::from_height(self.get_timeout()?)?,
+                    sender_pubkey: boltz_rev_script.sender_pubkey,
+                    blinding_key: ZKKeyPair::from_seckey_str(&secp, &blinding_key)?,
+                };
                 let address = constructed_rev_script.to_address(chain)?;
                 if constructed_rev_script == boltz_rev_script
                     && address.to_string() == self.get_lockup_address()?
