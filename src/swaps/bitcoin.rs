@@ -2,6 +2,7 @@ use bitcoin::consensus::Decodable;
 use bitcoin::ecdsa::Signature;
 use bitcoin::hashes::Hash;
 use bitcoin::hex::{DisplayHex, FromHex};
+use bitcoin::script::{PushBytes, PushBytesBuf};
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::transaction::Version;
 use bitcoin::{
@@ -10,9 +11,9 @@ use bitcoin::{
     Address, OutPoint, PublicKey,
 };
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
-use bitcoin::{Amount, Txid};
+use bitcoin::{Amount, EcdsaSighashType, Txid};
 use electrum_client::ElectrumApi;
-use std::ops::Add;
+use std::ops::{Add, Index};
 use std::str::FromStr;
 
 use crate::{
@@ -27,6 +28,7 @@ use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160};
 use super::boltz::SwapType;
 
 /// Bitcoin swap script helper.
+// TODO: This should encode the network at global level.
 #[derive(Debug, PartialEq, Clone)]
 pub struct BtcSwapScript {
     pub swap_type: SwapType,
@@ -233,10 +235,14 @@ impl BtcSwapScript {
     /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
     pub fn to_address(&self, network: Chain) -> Result<Address, Error> {
         let script = self.to_script()?;
-        let network = match network {
+        let mut network = match network {
             Chain::Bitcoin => Network::Bitcoin,
             _ => Network::Testnet,
         };
+        // Use regtest for integration tests
+        if cfg!(test) {
+            network = Network::Regtest;
+        }
         match self.swap_type {
             SwapType::Submarine => Ok(Address::p2shwsh(&script, network)),
             SwapType::ReverseSubmarine => Ok(Address::p2wsh(&script, network)),
@@ -285,11 +291,11 @@ fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 /// A structure representing either a Claim or a Refund Tx.
 /// This Tx spends from the HTLC.
 pub struct BtcSwapTx {
-    kind: SwapTxKind,
-    swap_script: BtcSwapScript,
-    output_address: Address,
+    pub kind: SwapTxKind, // These fields needs to be public to do manual creation in IT.
+    pub swap_script: BtcSwapScript,
+    pub output_address: Address,
     // The HTLC utxo in (Outpoint, Amount) Pair
-    utxo: (OutPoint, u64),
+    pub utxo: (OutPoint, u64),
 }
 impl BtcSwapTx {
     /// Craft a new ClaimTx. Only works for Reverse Swaps.
@@ -367,8 +373,13 @@ impl BtcSwapTx {
         absolute_fees: u64,
     ) -> Result<Transaction, Error> {
         debug_assert!(
-            self.swap_script.swap_type != SwapType::Submarine && self.kind != SwapTxKind::Refund,
+            self.swap_script.swap_type != SwapType::Submarine,
             "Cannot sign claim tx, for a normal-swap, refund-type"
+        );
+
+        debug_assert!(
+            self.kind != SwapTxKind::Refund,
+            "Cannot sign claim with Refund type BTCSwapTx"
         );
 
         let preimage_bytes = if let Some(value) = preimage.bytes {
@@ -379,9 +390,8 @@ impl BtcSwapTx {
             )));
         };
 
-        let sequence = Sequence::from_consensus(0xFFFFFFFF);
         let unsigned_input: TxIn = TxIn {
-            sequence: sequence,
+            sequence: Sequence::MAX,
             previous_output: self.utxo.0,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
@@ -391,106 +401,123 @@ impl BtcSwapTx {
             script_pubkey: self.output_address.payload().script_pubkey(),
             value: output_amount,
         };
-        let unsigned_tx = Transaction {
+        let mut unsigned_tx = Transaction {
             version: Version(1),
             lock_time: self.swap_script.locktime,
             input: vec![unsigned_input],
             output: vec![output.clone()],
         };
 
-        let redeem_script = self.swap_script.to_script()?;
+        // Compute the signature
+        let witness_script = self.swap_script.to_script()?;
         let secp = Secp256k1::new();
         let hash_type = bitcoin::sighash::EcdsaSighashType::All;
-        let sighash = SighashCache::new(unsigned_tx.clone()).p2wsh_signature_hash(
+        let sighash = SighashCache::new(&unsigned_tx).p2wsh_signature_hash(
             0,
-            &redeem_script,
+            &witness_script,
             Amount::from_sat(self.utxo.1),
             hash_type,
         )?;
-        let sighash_message = Message::from_digest_slice(&sighash[..])?;
+        let sighash_message = Message::from_digest(sighash.to_byte_array());
         let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
         signature.verify(&sighash_message, &keys.public_key())?;
         let ecdsa_signature = Signature::sighash_all(signature);
+
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
         witness.push_ecdsa_signature(&ecdsa_signature);
         witness.push(preimage_bytes);
-        witness.push(redeem_script.as_bytes());
+        witness.push(witness_script.as_bytes());
 
-        let signed_txin = TxIn {
-            previous_output: self.utxo.0,
-            script_sig: ScriptBuf::new(),
-            sequence: sequence,
-            witness: witness,
-        };
-        let signed_tx = Transaction {
-            version: Version(1),
-            lock_time: self.swap_script.locktime,
-            input: vec![signed_txin],
-            output: vec![output.clone()],
-        };
-        Ok(signed_tx)
+        unsigned_tx
+            .input
+            .get_mut(0)
+            .expect("input expected")
+            .witness = witness;
+
+        Ok(unsigned_tx)
     }
 
     /// Sign a submarine swap refund transaction.
     /// Panics if called on Reverse Swap, Claim type.
     pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, Error> {
         debug_assert!(
-            self.swap_script.swap_type != SwapType::Submarine && self.kind != SwapTxKind::Refund,
-            "Cannot sign refund tx, for a reverse-swap, claim-type"
+            self.swap_script.swap_type != SwapType::ReverseSubmarine,
+            "Cannot sign refund tx, for a reverse-swap"
         );
 
-        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+        debug_assert!(
+            self.kind != SwapTxKind::Claim,
+            "Cannot sign refund with a claim-type BtcSwapTx"
+        );
+
         let unsigned_input: TxIn = TxIn {
-            sequence: sequence,
+            sequence: Sequence::ZERO, // enables absolute locktime
             previous_output: self.utxo.0,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
         let output_amount: Amount = Amount::from_sat(self.utxo.1 - absolute_fees);
         let output: TxOut = TxOut {
-            script_pubkey: self.output_address.payload().script_pubkey(),
+            script_pubkey: self.output_address.script_pubkey(),
             value: output_amount,
         };
-        let unsigned_tx = Transaction {
-            version: Version(1),
+        let mut unsigned_tx = Transaction {
+            version: Version(2),
             lock_time: self.swap_script.locktime,
             input: vec![unsigned_input],
-            output: vec![output.clone()],
+            output: vec![output],
         };
 
-        let redeem_script = self.swap_script.to_script()?;
+        // The whole witness script of the swap tx.
+        let witness_script = self.swap_script.to_script()?;
+
+        // a p2wsh script pubkey, from the witness_script to set the script_sig field
+        let redeem_script = witness_script.to_p2wsh();
+        let mut script_sig = ScriptBuf::new();
+        let mut push_bytes = PushBytesBuf::new();
+        push_bytes.extend_from_slice(redeem_script.as_bytes());
+        script_sig.push_slice(push_bytes);
+
+        // The script pubkey of the previous output for sighash calculation
+        let script_pubkey = self
+            .swap_script
+            .to_address(Chain::BitcoinTestnet)
+            .unwrap()
+            .script_pubkey();
+
+        // Create signature
         let secp = Secp256k1::new();
-        let hash_type = bitcoin::sighash::EcdsaSighashType::All;
-        let sighash = SighashCache::new(unsigned_tx.clone()).p2wpkh_signature_hash(
+        let sighash = SighashCache::new(&unsigned_tx).p2wsh_signature_hash(
             0,
-            &redeem_script,
+            &witness_script,
             Amount::from_sat(self.utxo.1),
-            hash_type,
+            EcdsaSighashType::All,
         )?;
-        let sighash_message = Message::from_digest_slice(&sighash[..])?;
+        let sighash_message = Message::from_digest(sighash.to_byte_array());
         let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
         let ecdsa_signature = Signature::sighash_all(signature);
 
+        // Assemble the witness data
         // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
         let mut witness = Witness::new();
         witness.push_ecdsa_signature(&ecdsa_signature);
-        witness.push([0]);
-        witness.push(redeem_script.as_bytes());
+        witness.push(Vec::new()); // empty push to activate the timelock branch of the script
+        witness.push(witness_script);
 
-        let signed_txin = TxIn {
-            previous_output: self.utxo.0,
-            script_sig: ScriptBuf::new(),
-            sequence: sequence,
-            witness: witness,
-        };
-        let signed_tx = Transaction {
-            version: Version(1),
-            lock_time: self.swap_script.locktime,
-            input: vec![signed_txin],
-            output: vec![output.clone()],
-        };
-        Ok(signed_tx)
+        // set scriptsig and witness field
+        unsigned_tx
+            .input
+            .get_mut(0)
+            .expect("input expected")
+            .script_sig = script_sig;
+        unsigned_tx
+            .input
+            .get_mut(0)
+            .expect("input expected")
+            .witness = witness;
+
+        Ok(unsigned_tx)
     }
 
     /// Calculate the size of a transaction.
