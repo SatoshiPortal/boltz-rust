@@ -41,7 +41,7 @@ fn test_reverse_claim_regtest() {
     };
 
     // Send coin the swapscript address and confirm tx
-    let swap_addrs = swap_script.to_address(Chain::BitcoinTestnet).unwrap();
+    let swap_addrs = swap_script.to_address(Chain::BitcoinRegtest).unwrap();
     let spk = swap_addrs.script_pubkey();
     println!("spk: {}", spk);
     test_framework.send_coins(&swap_addrs, Amount::from_sat(10000));

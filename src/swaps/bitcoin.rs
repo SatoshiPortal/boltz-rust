@@ -237,12 +237,14 @@ impl BtcSwapScript {
         let script = self.to_script()?;
         let mut network = match network {
             Chain::Bitcoin => Network::Bitcoin,
-            _ => Network::Testnet,
+            Chain::BitcoinRegtest => Network::Regtest,
+            Chain::BitcoinTestnet => Network::Testnet,
+            _ => {
+                return Err(Error::Protocol(
+                    "Liquid chain used for Bitcoin operations".to_string(),
+                ))
+            }
         };
-        // Use regtest for integration tests
-        if cfg!(test) {
-            network = Network::Regtest;
-        }
         match self.swap_type {
             SwapType::Submarine => Ok(Address::p2shwsh(&script, network)),
             SwapType::ReverseSubmarine => Ok(Address::p2wsh(&script, network)),

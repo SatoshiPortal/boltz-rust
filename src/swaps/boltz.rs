@@ -746,7 +746,7 @@ impl CreateSwapResponse {
         chain: Chain,
     ) -> Result<(), Error> {
         match chain {
-            Chain::Bitcoin | Chain::BitcoinTestnet => {
+            Chain::Bitcoin | Chain::BitcoinTestnet | Chain::BitcoinRegtest => {
                 let boltz_sub_script =
                     BtcSwapScript::submarine_from_str(&self.get_redeem_script()?)?;
 
@@ -847,7 +847,7 @@ impl CreateSwapResponse {
             }
         }
         match chain {
-            Chain::Bitcoin | Chain::BitcoinTestnet => {
+            Chain::Bitcoin | Chain::BitcoinTestnet | Chain::BitcoinRegtest => {
                 let boltz_rev_script = BtcSwapScript::reverse_from_str(&self.get_redeem_script()?)?;
 
                 let constructed_rev_script = BtcSwapScript {

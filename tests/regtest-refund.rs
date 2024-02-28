@@ -45,7 +45,7 @@ fn test_submarine_refund_regtest() {
     };
 
     // Send coin the swapscript address and confirm tx
-    let swap_addrs = swap_script.to_address(Chain::BitcoinTestnet).unwrap();
+    let swap_addrs = swap_script.to_address(Chain::BitcoinRegtest).unwrap();
     test_framework.send_coins(&swap_addrs, Amount::from_sat(10000));
     test_framework.generate_blocks(1);
 
