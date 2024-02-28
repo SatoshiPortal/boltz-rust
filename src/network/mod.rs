@@ -4,6 +4,7 @@ pub mod electrum;
 pub enum Chain {
     Bitcoin,
     BitcoinTestnet,
+    BitcoinRegtest,
     Liquid,
     LiquidTestnet,
 }
