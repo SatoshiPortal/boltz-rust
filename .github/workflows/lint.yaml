@@ -26,6 +26,6 @@ jobs:
         run: rustup update
       - name: Check fmt
         run: cargo fmt --all -- --check
-      - name: Clippy
-        #TODO: enable clippy when all clippy warnings are fixed.
-        #run: cargo clippy --all-targets --all-features -- -D warnings
+      #- name: Clippy
+      #TODO: enable clippy when all clippy warnings are fixed.
+      #run: cargo clippy --all-targets --all-features -- -D warnings
