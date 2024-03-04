@@ -4,6 +4,9 @@
 
 #![allow(E0382)]
 
+/// Error Module
+mod error;
+/// Blockchain Network module. Currently only contains electrum interface.
 pub mod network;
 /// core swap logic
 pub mod swaps;
@@ -33,6 +36,8 @@ use std::cell::RefCell;
 use std::ffi::{c_char, CStr, CString};
 use std::ptr;
 use std::str::FromStr;
+use swaps::bitcoin::{BtcSwapScript, BtcSwapTx};
+use swaps::boltz::{SwapTxKind, SwapType};
 use swaps::liquid::LBtcSwapScript;
 use swaps::liquid::LBtcSwapTx;
 
@@ -215,7 +220,7 @@ fn create_and_sign_transaction(
         "[Rust] create tx - swap_script - sender_pubkey: {:?}, hashlock: {:?}, timelock: {:?}",
         swap_script.sender_pubkey.to_string(),
         swap_script.hashlock.to_string(),
-        swap_script.timelock
+        swap_script.locktime
     ));
 
     // Create the swap transaction based on the transaction type
@@ -223,13 +228,11 @@ fn create_and_sign_transaction(
         TransactionType::Claim => LBtcSwapTx::new_claim(
             swap_script.clone(),
             onchain_address_str.to_string(),
-            tx_str.to_string(),
             network_config,
         ),
         TransactionType::Refund => LBtcSwapTx::new_refund(
             swap_script.clone(),
             onchain_address_str.to_string(),
-            tx_str.to_string(),
             network_config,
         ),
     };
