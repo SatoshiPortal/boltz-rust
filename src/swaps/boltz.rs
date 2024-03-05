@@ -33,21 +33,24 @@
 //! assert!((output_amount - base_fees) == response.onchain_amount?);
 
 //! ```
+use crate::error::Error;
 use crate::network::Chain;
+use bitcoin::absolute::LockTime;
 use bitcoin::secp256k1::Keypair;
+use bitcoin::PublicKey;
+use bitcoin::ScriptBuf;
 use elements::secp256k1_zkp::Keypair as ZKKeyPair;
 use elements::secp256k1_zkp::Secp256k1 as ZKSecp256k1;
 use lightning_invoice::Bolt11Invoice;
+use serde_json::Value;
 // use reqwest;
 use crate::swaps::bitcoin::BtcSwapScript;
 use crate::swaps::liquid::LBtcSwapScript;
-use crate::util::error::{ErrorKind, S5Error};
 use crate::util::secrets::Preimage;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::str::FromStr;
-use ureq::Error;
 
 pub const BOLTZ_TESTNET_URL: &str = "https://testnet.boltz.exchange/api";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
@@ -68,119 +71,37 @@ impl BoltzApiClient {
             base_url: base_url.to_string(),
         }
     }
-    /// In order to create a swap, one first has to know which pairs are supported and what kind of rates, limits and fees are applied when creating a new swap.
-    /// The following call returns this information.
-    pub fn get_pairs(&self) -> Result<GetPairsResponse, S5Error> {
-        let url = format!("{}/getpairs", self.base_url);
 
-        match ureq::get(&url).call() {
-            Ok(res) => {
-                let body = match res.into_string() {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                let get_pairs_response: GetPairsResponse = match serde_json::from_str(&body) {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                Ok(get_pairs_response)
-            }
-            Err(Error::Status(_code, res)) => {
-                let message = match res.into_string() {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                Err(S5Error::new(ErrorKind::BoltzApi, &message))
-            }
-
-            Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
-        }
+    /// Make a get request. returns the Response
+    fn get(&self, end_point: &str) -> Result<String, Error> {
+        let url = format!("{}/{}", self.base_url, end_point);
+        Ok(ureq::get(&url).call()?.into_string()?)
     }
 
-    pub fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, S5Error> {
-        let url = format!("{}/getfeeestimation", self.base_url);
+    /// Make a Post request. Returns the Response
+    fn post(&self, end_point: &str, data: Value) -> Result<String, Error> {
+        let url = format!("{}/{}", self.base_url, end_point);
+        Ok(ureq::post(&url).send_json(data)?.into_string()?)
+    }
+    /// In order to create a swap, one first has to know which pairs are supported and what kind of rates, limits and fees are applied when creating a new swap.
+    /// The following call returns this information.
+    pub fn get_pairs(&self) -> Result<GetPairsResponse, Error> {
+        Ok(serde_json::from_str(&self.get("getpairs")?)?)
+    }
 
-        match ureq::get(&url).call() {
-            Ok(res) => {
-                let body = match res.into_string() {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                let get_fee_estimation_response: GetFeeEstimationResponse =
-                    match serde_json::from_str(&body) {
-                        Ok(t) => t,
-                        Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                    };
-                Ok(get_fee_estimation_response)
-            }
-            Err(Error::Status(_code, res)) => {
-                let message = match res.into_string() {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                Err(S5Error::new(ErrorKind::BoltzApi, &message))
-            }
-            Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
-        }
+    pub fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, Error> {
+        Ok(serde_json::from_str(&self.get("getfeeestimation")?)?)
     }
     /// Create a swap. This method supports using either a Submarine or Reverse SwapRequest
     /// Check CreateSwapRequest to see how to construct each swap request.
-    pub fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, S5Error> {
-        let url = format!("{}/createswap", self.base_url);
-        let data = match serde_json::to_value(request) {
-            Ok(t) => t,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-        match ureq::post(&url).send_json(data) {
-            Ok(res) => {
-                let body = match res.into_string() {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                let create_swap_response: CreateSwapResponse = match serde_json::from_str(&body) {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                Ok(create_swap_response)
-            }
-            Err(Error::Status(_code, res)) => {
-                let message = match res.into_string() {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                Err(S5Error::new(ErrorKind::BoltzApi, &message))
-            }
-            Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
-        }
+    pub fn create_swap(&self, request: CreateSwapRequest) -> Result<CreateSwapResponse, Error> {
+        let data = serde_json::to_value(request)?;
+        Ok(serde_json::from_str(&self.post("createswap", data)?)?)
     }
     /// Checks the status of an ongoing swap with boltz.
-    pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, S5Error> {
-        let url = format!("{}/swapstatus", self.base_url);
-        let data = match serde_json::to_value(request) {
-            Ok(t) => t,
-            Err(e) => return Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-        };
-        match ureq::post(&url).send_json(data) {
-            Ok(res) => {
-                let body = match res.into_string() {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                let swap_status_response: SwapStatusResponse = match serde_json::from_str(&body) {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                Ok(swap_status_response)
-            }
-            Err(Error::Status(_code, res)) => {
-                let message = match res.into_string() {
-                    Ok(t) => t,
-                    Err(e) => return Err(S5Error::new(ErrorKind::BoltzApi, &e.to_string())),
-                };
-                Err(S5Error::new(ErrorKind::BoltzApi, &message))
-            }
-            Err(_) => Err(S5Error::new(ErrorKind::BoltzApi, "Request failed")),
-        }
+    pub fn swap_status(&self, request: SwapStatusRequest) -> Result<SwapStatusResponse, Error> {
+        let data = serde_json::to_value(request)?;
+        Ok(serde_json::from_str(&self.post("swapstatus", data)?)?)
     }
 }
 
@@ -232,34 +153,16 @@ pub struct GetPairsResponse {
 }
 
 impl GetPairsResponse {
-    pub fn get_btc_pair(&self) -> Result<Pair, S5Error> {
-        match self
-            .pairs
-            .pairs
-            .get(&PairId::BtcBtc.to_string())
-            .map(|pair_info| pair_info)
-        {
-            Some(t) => Ok(t.clone()),
-            None => Err(S5Error::new(
-                ErrorKind::BoltzApi,
-                "Could not find pair BTC/BTC",
-            )),
-        }
+    /// Get the BtcBtc Pair data from the response.
+    /// Returns None if not found.
+    pub fn get_btc_pair(&self) -> Option<Pair> {
+        self.pairs.pairs.get(&PairId::BtcBtc.to_string()).cloned()
     }
-    pub fn get_lbtc_pair(&self) -> Result<Pair, S5Error> {
-        match self
-            .pairs
-            .pairs
-            .get(&PairId::LBtcBtc.to_string())
-            .map(|pair_info| pair_info)
-        {
-            Some(t) => Ok(t.clone()),
-            None => Err(S5Error::new(
-                ErrorKind::BoltzApi,
-                "Could not find pair LBTC/BTC",
-            )),
-        }
-        .clone()
+
+    /// Get the LBtcBtc Pair data from the response.
+    /// Returns None if not found.
+    pub fn get_lbtc_pair(&self) -> Option<Pair> {
+        self.pairs.pairs.get(&PairId::LBtcBtc.to_string()).cloned()
     }
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -293,18 +196,18 @@ pub struct Limits {
 }
 impl Limits {
     /// Check whether the output amount intended is within the Limits
-    pub fn within(&self, output_amount: u64) -> Result<(), S5Error> {
+    pub fn within(&self, output_amount: u64) -> Result<(), Error> {
         if output_amount < self.minimal as u64 {
-            return Err(S5Error::new(
-                ErrorKind::Input,
-                &format!("Ouput amount is below minimum {}", self.minimal),
-            ));
+            return Err(Error::Protocol(format!(
+                "Ouput amount is below minimum {}",
+                self.minimal
+            )));
         }
         if output_amount > self.maximal as u64 {
-            return Err(S5Error::new(
-                ErrorKind::Input,
-                &format!("Ouput amount is above maximum {}", self.maximal),
-            ));
+            return Err(Error::Protocol(format!(
+                "Ouput amount is above maximum {}",
+                self.maximal
+            )));
         }
         Ok(())
     }
@@ -347,43 +250,43 @@ pub struct Fees {
 
 impl Fees {
     /// Calculate total submarine fees (boltz + claim + lockup_estimate)
-    pub fn submarine_total(&self, output_amount: u64) -> Result<u64, S5Error> {
-        let boltz = self.submarine_boltz(output_amount)?;
-        let claim = self.submarine_claim()?;
+    pub fn submarine_total(&self, output_amount: u64) -> u64 {
+        let boltz = self.submarine_boltz(output_amount);
+        let claim = self.submarine_claim();
         let lockup = self.submarine_lockup_estimate();
-        Ok(boltz + claim + lockup)
+        boltz + claim + lockup
     }
     /// Calculate boltz fees for a submarine swap, given an output amount
-    pub fn submarine_boltz(&self, output_amount: u64) -> Result<u64, S5Error> {
+    pub fn submarine_boltz(&self, output_amount: u64) -> u64 {
         let boltz_fee = ((self.percentage_swap_in / 100.0) * output_amount as f64).round() as u64;
-        Ok(boltz_fee)
+        boltz_fee
     }
     /// Get claim miner fees for a submarine swap
-    pub fn submarine_claim(&self) -> Result<u64, S5Error> {
+    pub fn submarine_claim(&self) -> u64 {
         let ln_fee = (self.miner_fees.quote_asset.normal) as u64;
         let claim_miner_fees = (self.miner_fees.base_asset.normal) as u64;
-        Ok(claim_miner_fees + ln_fee)
+        claim_miner_fees + ln_fee
     }
     /// Get onchain lockup miner fees for a submarine swap
     pub fn submarine_lockup_estimate(&self) -> u64 {
         self.miner_fees.base_asset.normal as u64
     }
     /// Calculate total reverse fees (boltz + claim + lockup_estimate)
-    pub fn reverse_total(&self, output_amount: u64) -> Result<u64, S5Error> {
-        let boltz = self.reverse_boltz(output_amount)?;
-        let lockup = self.reverse_lockup()?;
+    pub fn reverse_total(&self, output_amount: u64) -> u64 {
+        let boltz = self.reverse_boltz(output_amount);
+        let lockup = self.reverse_lockup();
         let claim = self.reverse_claim_estimate();
-        Ok(boltz + lockup + claim)
+        boltz + lockup + claim
     }
     /// Calculate boltz fees for a reverse swap, given an output amount
-    pub fn reverse_boltz(&self, output_amount: u64) -> Result<u64, S5Error> {
+    pub fn reverse_boltz(&self, output_amount: u64) -> u64 {
         let boltz_fee = ((self.percentage / 100.0) * output_amount as f64).round() as u64;
-        Ok(boltz_fee)
+        boltz_fee
     }
     /// Get lockup miner fees for a reverse swap
-    pub fn reverse_lockup(&self) -> Result<u64, S5Error> {
+    pub fn reverse_lockup(&self) -> u64 {
         let lockup_fee = (self.miner_fees.base_asset.reverse.lockup) as u64;
-        Ok(lockup_fee)
+        lockup_fee
     }
     /// Estimate claim tx miner fee (claim miner fee) for a reverse swap
     pub fn reverse_claim_estimate(&self) -> u64 {
@@ -707,21 +610,21 @@ pub struct ChannelDetails {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSwapResponse {
-    id: String,
+    pub id: String,
     pub invoice: Option<String>,
-    redeem_script: Option<String>,
-    pub timeout_block_height: Option<u64>,
+    pub redeem_script: Option<String>,
+    pub timeout_block_height: Option<u32>,
     pub onchain_amount: Option<u64>,
-    lockup_address: Option<String>,
+    pub lockup_address: Option<String>,
     pub miner_fee_invoice: Option<String>,
     pub service_fee_percentage: Option<f64>,
     pub preimage: Option<String>,
     pub claim_address: Option<String>,
     pub claim_public_key: Option<String>,
-    private_key: Option<String>,
+    pub private_key: Option<String>,
     pub refund_address: Option<String>,
     pub refund_public_key: Option<String>,
-    blinding_key: Option<String>,
+    pub blinding_key: Option<String>,
     pub address: Option<String>,
     pub expected_amount: Option<u64>,
 }
@@ -732,102 +635,59 @@ impl CreateSwapResponse {
         self.id.clone()
     }
     /// Get a copy of the redeem script
-    pub fn get_redeem_script(&self) -> Result<String, S5Error> {
-        if let Some(redeem_script) = &self.redeem_script {
-            Ok(redeem_script.clone())
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                "Boltz response does not contain a redeem script.",
-            ))
-        }
+    pub fn get_redeem_script(&self) -> Result<String, Error> {
+        Ok(self.redeem_script.clone().ok_or(Error::Protocol(
+            "Boltz response does not contain a redeem script.".to_string(),
+        ))?)
     }
 
     /// Get a copy of the address to fund for a submarine swap
-    pub fn get_funding_address(&self) -> Result<String, S5Error> {
-        if let Some(address) = &self.address {
-            Ok(address.clone())
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                "Boltz response does not contain a funding address.",
-            ))
-        }
+    pub fn get_funding_address(&self) -> Result<String, Error> {
+        Ok(self.address.clone().ok_or(Error::Protocol(
+            "Boltz response does not contain funding address.".to_string(),
+        ))?)
     }
 
     /// Get a copy of the expected amount to fund a submarine swap
-    pub fn get_funding_amount(&self) -> Result<u64, S5Error> {
-        if let Some(amount) = self.expected_amount {
-            Ok(amount)
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                "Boltz response does not contain an expected amount.",
-            ))
-        }
+    pub fn get_funding_amount(&self) -> Result<u64, Error> {
+        Ok(self.expected_amount.clone().ok_or(Error::Protocol(
+            "Boltz response does not contain an expected amount.".to_string(),
+        ))?)
     }
 
     /// Get a copy of the blinding key.
-    pub fn get_blinding_key(&self) -> Result<String, S5Error> {
-        if let Some(key) = &self.blinding_key {
-            Ok(key.clone())
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                "Boltz response does not contain a blinding key.",
-            ))
-        }
+    pub fn get_blinding_key(&self) -> Result<String, Error> {
+        Ok(self.blinding_key.clone().ok_or(Error::Protocol(
+            "Boltz response does not contain an blinding key.".to_string(),
+        ))?)
     }
 
     /// Get a copy of the lockup address to sweep for a reverse swap
-    pub fn get_lockup_address(&self) -> Result<String, S5Error> {
-        if let Some(address) = &self.lockup_address {
-            Ok(address.clone())
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                "Boltz response does not contain a lockup address.",
-            ))
-        }
+    pub fn get_lockup_address(&self) -> Result<String, Error> {
+        Ok(self.lockup_address.clone().ok_or(Error::Protocol(
+            "Boltz response does not contain an lockup address.".to_string(),
+        ))?)
     }
 
     /// Get a copy of the onchain lockup amount (utxo size of a reverse swap)
-    pub fn get_lockup_amount(&self) -> Result<u64, S5Error> {
-        if let Some(amount) = self.onchain_amount {
-            Ok(amount)
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                "Boltz response does not contain an expected amount.",
-            ))
-        }
+    pub fn get_lockup_amount(&self) -> Result<u64, Error> {
+        Ok(self.onchain_amount.clone().ok_or(Error::Protocol(
+            "Boltz response does not contain an expected amount.".to_string(),
+        ))?)
     }
 
     /// Get a copy of the Timelock value
-    pub fn get_timeout(&self) -> Result<u32, S5Error> {
-        if let Some(timeout) = self.timeout_block_height {
-            Ok(timeout as u32)
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                "Boltz response does not contain timeout",
-            ))
-        }
+    pub fn get_timeout(&self) -> Result<u32, Error> {
+        Ok(self.timeout_block_height.clone().ok_or(Error::Protocol(
+            "Boltz response does not contain timeout.".to_string(),
+        ))?)
     }
 
     /// Get a copy of the Invoice value
-    pub fn get_invoice(&self) -> Result<Bolt11Invoice, S5Error> {
-        if let Some(invoice_str) = &self.invoice {
-            match Bolt11Invoice::from_str(invoice_str) {
-                Ok(invoice) => Ok(invoice),
-                Err(e) => Err(S5Error::new(ErrorKind::Input, &e.to_string())),
-            }
-        } else {
-            Err(S5Error::new(
-                ErrorKind::Input,
-                "Boltz response does not contain an invoice",
-            ))
-        }
+    pub fn get_invoice(&self) -> Result<Bolt11Invoice, Error> {
+        Ok(Bolt11Invoice::from_str(&self.invoice.clone().ok_or(
+            Error::Protocol("Boltz response does not contain an invoice.".to_string()),
+        )?)?)
     }
 
     /// Get a BtcSwapScript of the a btc submarine swap response
@@ -836,21 +696,11 @@ impl CreateSwapResponse {
         preimage: &Preimage,
         keypair: &Keypair,
         chain: Chain,
-    ) -> Result<BtcSwapScript, S5Error> {
-        match self.validate_submarine(&preimage, &keypair, chain) {
-            Ok(()) => {
-                if self.redeem_script.is_none() {
-                    return Err(S5Error::new(
-                        ErrorKind::Input,
-                        "Boltz response does not contain redeem script",
-                    ));
-                }
-                BtcSwapScript::submarine_from_str(&self.get_redeem_script()?)
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        }
+    ) -> Result<BtcSwapScript, Error> {
+        self.validate_submarine(&preimage, &keypair, chain)?;
+        Ok(BtcSwapScript::submarine_from_str(
+            &self.get_redeem_script()?,
+        )?)
     }
     /// Get a LbtcSwapScript of the a lbtc submarine swap response
     pub fn into_lbtc_sub_swap_script(
@@ -858,24 +708,12 @@ impl CreateSwapResponse {
         preimage: &Preimage,
         keypair: &Keypair,
         chain: Chain,
-    ) -> Result<LBtcSwapScript, S5Error> {
-        match self.validate_submarine(preimage, keypair, chain) {
-            Ok(()) => {
-                if self.redeem_script.is_none() {
-                    return Err(S5Error::new(
-                        ErrorKind::Input,
-                        "Boltz response does not contain redeem script",
-                    ));
-                }
-                LBtcSwapScript::submarine_from_str(
-                    &self.get_redeem_script()?,
-                    &self.get_blinding_key()?,
-                )
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        }
+    ) -> Result<LBtcSwapScript, Error> {
+        self.validate_submarine(&preimage, &keypair, chain)?;
+        Ok(LBtcSwapScript::submarine_from_str(
+            &self.get_redeem_script()?,
+            &self.get_blinding_key()?,
+        )?)
     }
     /// Get a BtcSwapScript of the a btc reverse swap response
     pub fn into_btc_rev_swap_script(
@@ -883,19 +721,9 @@ impl CreateSwapResponse {
         preimage: &Preimage,
         keypair: &Keypair,
         chain: Chain,
-    ) -> Result<BtcSwapScript, S5Error> {
-        match self.validate_reverse(preimage, keypair, chain) {
-            Ok(()) => {
-                if self.redeem_script.is_none() {
-                    return Err(S5Error::new(
-                        ErrorKind::Input,
-                        "Boltz response does not contain redeem script",
-                    ));
-                }
-                BtcSwapScript::reverse_from_str(&self.get_redeem_script()?)
-            }
-            Err(e) => return Err(e),
-        }
+    ) -> Result<BtcSwapScript, Error> {
+        self.validate_reverse(&preimage, &keypair, chain)?;
+        Ok(BtcSwapScript::reverse_from_str(&self.get_redeem_script()?)?)
     }
     /// Get a LbtcSwapScript of the a lbtc reverse swap response
     pub fn into_lbtc_rev_swap_script(
@@ -903,23 +731,12 @@ impl CreateSwapResponse {
         preimage: &Preimage,
         keypair: &ZKKeyPair,
         chain: Chain,
-    ) -> Result<LBtcSwapScript, S5Error> {
-        match self.validate_reverse(preimage, keypair, chain) {
-            Ok(()) => {
-                if self.redeem_script.is_none() {
-                    return Err(S5Error::new(
-                        ErrorKind::Input,
-                        "Boltz response does not contain redeem script",
-                    ));
-                }
-                LBtcSwapScript::reverse_from_str(
-                    &self.get_redeem_script()?,
-                    &self.get_blinding_key()?,
-                )
-            }
-
-            Err(e) => return Err(e),
-        }
+    ) -> Result<LBtcSwapScript, Error> {
+        self.validate_reverse(&preimage, &keypair, chain)?;
+        Ok(LBtcSwapScript::reverse_from_str(
+            &self.get_redeem_script()?,
+            &self.get_blinding_key()?,
+        )?)
     }
     /// Ensure submarine swap redeem script uses the preimage hash used in the invoice
     fn validate_submarine(
@@ -927,28 +744,30 @@ impl CreateSwapResponse {
         preimage: &Preimage,
         keypair: &Keypair,
         chain: Chain,
-    ) -> Result<(), S5Error> {
+    ) -> Result<(), Error> {
         match chain {
-            Chain::Bitcoin | Chain::BitcoinTestnet => {
+            Chain::Bitcoin | Chain::BitcoinTestnet | Chain::BitcoinRegtest => {
                 let boltz_sub_script =
                     BtcSwapScript::submarine_from_str(&self.get_redeem_script()?)?;
 
-                let constructed_sub_script = BtcSwapScript::new(
-                    SwapType::Submarine,
-                    &preimage.hash160.to_string(),
-                    &boltz_sub_script.reciever_pubkey,
-                    &(self.get_timeout()?),
-                    &keypair.public_key().to_string(),
-                );
+                let constructed_sub_script = BtcSwapScript {
+                    swap_type: SwapType::Submarine,
+                    hashlock: preimage.hash160,
+                    receiver_pubkey: boltz_sub_script.receiver_pubkey,
+                    locktime: LockTime::from_height(self.get_timeout()?)?,
+                    sender_pubkey: bitcoin::PublicKey {
+                        compressed: true,
+                        inner: keypair.public_key(),
+                    },
+                };
                 let address = constructed_sub_script.to_address(chain)?;
                 if constructed_sub_script == boltz_sub_script
                     && address.to_string() == self.get_funding_address()?
                 {
                     Ok(())
                 } else {
-                    Err(S5Error::new(
-                        ErrorKind::BoltzApi,
-                        "Script/FundingAddress Mismatch",
+                    Err(Error::Protocol(
+                        "Script/FundingAddress Mismatch".to_string(),
                     ))
                 }
             }
@@ -958,25 +777,25 @@ impl CreateSwapResponse {
                     &self.get_redeem_script()?,
                     &blinding_key.clone(),
                 )?;
-                if &boltz_sub_script.hashlock != &preimage.hash160.to_string() {
-                    return Err(S5Error::new(
-                        ErrorKind::BoltzApi,
-                        &format!(
-                            "Hash160 mismatch: {},{}",
-                            boltz_sub_script.hashlock,
-                            preimage.hash160.to_string()
-                        ),
-                    ));
+                if &boltz_sub_script.hashlock != &preimage.hash160 {
+                    return Err(Error::Protocol(format!(
+                        "Hash160 mismatch: {},{}",
+                        boltz_sub_script.hashlock,
+                        preimage.hash160.to_string()
+                    )));
                 }
                 let secp = ZKSecp256k1::new();
-                let script = LBtcSwapScript::new(
-                    SwapType::Submarine,
-                    &preimage.hash160.to_string(),
-                    &boltz_sub_script.reciever_pubkey,
-                    self.get_timeout()?,
-                    &keypair.public_key().to_string(),
-                    &ZKKeyPair::from_seckey_str(&secp, &blinding_key)?.into(),
-                );
+                let script = LBtcSwapScript {
+                    swap_type: SwapType::Submarine,
+                    hashlock: preimage.hash160,
+                    reciever_pubkey: boltz_sub_script.reciever_pubkey,
+                    locktime: elements::LockTime::from_height(self.get_timeout()?)?,
+                    sender_pubkey: PublicKey {
+                        compressed: true,
+                        inner: keypair.public_key(),
+                    },
+                    blinding_key: ZKKeyPair::from_seckey_str(&secp, &blinding_key)?.into(),
+                };
 
                 let address = script.to_address(chain)?;
                 println!(
@@ -991,9 +810,8 @@ impl CreateSwapResponse {
                 {
                     Ok(())
                 } else {
-                    Err(S5Error::new(
-                        ErrorKind::BoltzApi,
-                        "Script/FundingAddress Mismatch",
+                    Err(Error::Protocol(
+                        "Script/FundingAddress Mismatch".to_string(),
                     ))
                 }
             }
@@ -1008,59 +826,47 @@ impl CreateSwapResponse {
         preimage: &Preimage,
         keypair: &Keypair,
         chain: Chain,
-    ) -> Result<(), S5Error> {
+    ) -> Result<(), Error> {
         match &self.invoice {
             Some(invoice_str) => {
-                let invoice = match Bolt11Invoice::from_str(&invoice_str) {
-                    Ok(invoice) => invoice,
-                    Err(_) => {
-                        return Err(S5Error::new(
-                            ErrorKind::BoltzApi,
-                            "Error parsing invoice from boltz.",
-                        ))
-                    }
-                };
+                let invoice = Bolt11Invoice::from_str(&invoice_str)?;
                 if &invoice.payment_hash().to_string() == &preimage.sha256.to_string() {
                     ()
                 } else {
-                    return Err(S5Error::new(
-                        ErrorKind::BoltzApi,
-                        &format!(
-                            "{},{}",
-                            &invoice.payment_hash().to_string(),
-                            preimage.sha256.to_string()
-                        ),
-                    ));
+                    return Err(Error::Protocol(format!(
+                        "Preimage missmatch : {},{}",
+                        &invoice.payment_hash().to_string(),
+                        preimage.sha256.to_string()
+                    )));
                 }
             }
             None => {
-                return Err(S5Error::new(
-                    ErrorKind::BoltzApi,
-                    "No invoice found in Boltz response.",
+                return Err(Error::Protocol(
+                    "No invoice found in Boltz response.".to_string(),
                 ))
             }
         }
         match chain {
-            Chain::Bitcoin | Chain::BitcoinTestnet => {
+            Chain::Bitcoin | Chain::BitcoinTestnet | Chain::BitcoinRegtest => {
                 let boltz_rev_script = BtcSwapScript::reverse_from_str(&self.get_redeem_script()?)?;
 
-                let constructed_rev_script = BtcSwapScript::new(
-                    SwapType::ReverseSubmarine,
-                    &preimage.hash160.to_string(),
-                    &keypair.public_key().to_string(),
-                    &(self.get_timeout()?),
-                    &boltz_rev_script.sender_pubkey,
-                );
+                let constructed_rev_script = BtcSwapScript {
+                    swap_type: SwapType::ReverseSubmarine,
+                    hashlock: preimage.hash160,
+                    receiver_pubkey: PublicKey {
+                        compressed: true,
+                        inner: keypair.public_key(),
+                    },
+                    locktime: LockTime::from_height(self.get_timeout()?)?,
+                    sender_pubkey: boltz_rev_script.sender_pubkey,
+                };
                 let address = constructed_rev_script.to_address(chain)?;
                 if constructed_rev_script == boltz_rev_script
                     && address.to_string() == self.get_lockup_address()?
                 {
                     Ok(())
                 } else {
-                    Err(S5Error::new(
-                        ErrorKind::BoltzApi,
-                        "Script/LockupAddress Mismatch",
-                    ))
+                    Err(Error::Protocol("Script/LockupAddress Mismatch".to_string()))
                 }
             }
             Chain::Liquid | Chain::LiquidTestnet => {
@@ -1070,24 +876,24 @@ impl CreateSwapResponse {
                     &blinding_key.clone(),
                 )?;
                 let secp = ZKSecp256k1::new();
-                let constructed_rev_script = LBtcSwapScript::new(
-                    SwapType::ReverseSubmarine,
-                    &preimage.hash160.to_string(),
-                    &keypair.public_key().to_string(),
-                    self.get_timeout()?,
-                    &boltz_rev_script.sender_pubkey,
-                    &ZKKeyPair::from_seckey_str(&secp, &blinding_key)?.into(),
-                );
+                let constructed_rev_script = LBtcSwapScript {
+                    swap_type: SwapType::ReverseSubmarine,
+                    hashlock: preimage.hash160,
+                    reciever_pubkey: PublicKey {
+                        compressed: true,
+                        inner: keypair.public_key(),
+                    },
+                    locktime: elements::LockTime::from_height(self.get_timeout()?)?,
+                    sender_pubkey: boltz_rev_script.sender_pubkey,
+                    blinding_key: ZKKeyPair::from_seckey_str(&secp, &blinding_key)?,
+                };
                 let address = constructed_rev_script.to_address(chain)?;
                 if constructed_rev_script == boltz_rev_script
                     && address.to_string() == self.get_lockup_address()?
                 {
                     Ok(())
                 } else {
-                    Err(S5Error::new(
-                        ErrorKind::BoltzApi,
-                        "Script/LockupAddress Mismatch",
-                    ))
+                    Err(Error::Protocol("Script/LockupAddress Mismatch".to_string()))
                 }
             }
         }
@@ -1254,8 +1060,7 @@ mod tests {
         let pairs = client.get_pairs().unwrap();
         let btc_pair = pairs.get_btc_pair().unwrap();
         let output_amount = 75_000;
-        let base_fees = btc_pair.fees.reverse_boltz(output_amount).unwrap()
-            + btc_pair.fees.reverse_lockup().unwrap();
+        let base_fees = btc_pair.fees.reverse_boltz(output_amount) + btc_pair.fees.reverse_lockup();
         let claim_fee = btc_pair.fees.reverse_claim_estimate();
         println!("CALCULATED FEES: {}", base_fees);
         println!("ONCHAIN LOCKUP: {}", output_amount - base_fees);

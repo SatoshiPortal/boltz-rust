@@ -1,6 +1,6 @@
 // use electrum_client::raw_client::RawClient;
 
-use crate::util::error::{ErrorKind, S5Error};
+use crate::error::Error;
 
 use super::Chain;
 
@@ -16,7 +16,7 @@ enum ElectrumUrl {
 }
 
 impl ElectrumUrl {
-    pub fn build_client(&self, timeout: u8) -> Result<electrum_client::Client, S5Error> {
+    pub fn build_client(&self, timeout: u8) -> Result<electrum_client::Client, Error> {
         let builder = electrum_client::ConfigBuilder::new();
         let builder = builder.timeout(Some(timeout));
         let (url, builder) = match self {
@@ -25,10 +25,7 @@ impl ElectrumUrl {
             }
             ElectrumUrl::Plaintext(url) => (format!("tcp://{}", url), builder),
         };
-        match electrum_client::Client::from_config(&url, builder.build()) {
-            Ok(result) => Ok(result),
-            Err(e) => Err(S5Error::new(ErrorKind::Network, &e.to_string())),
-        }
+        Ok(electrum_client::Client::from_config(&url, builder.build())?)
     }
 }
 
@@ -81,7 +78,7 @@ impl ElectrumConfig {
         self.network.clone()
     }
     /// Builds an electrum_client::Client which can be used to make calls to electrum api
-    pub fn build_client(&self) -> Result<electrum_client::Client, S5Error> {
+    pub fn build_client(&self) -> Result<electrum_client::Client, Error> {
         self.url.clone().build_client(self.timeout)
     }
 }

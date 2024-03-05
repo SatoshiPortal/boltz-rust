@@ -1,6 +1,6 @@
 use std::{path::PathBuf, str::FromStr};
 
-use boltz_rust::{
+use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltz::{BoltzApiClient, CreateSwapRequest, SwapStatusRequest, BOLTZ_TESTNET_URL},
@@ -37,8 +37,8 @@ fn test_liquid_ssi() {
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_lbtc_pair = boltz_pairs.get_lbtc_pair().unwrap();
-    let fees = boltz_lbtc_pair.fees.submarine_boltz(_out_amount).unwrap()
-        + boltz_lbtc_pair.fees.submarine_claim().unwrap();
+    let fees =
+        boltz_lbtc_pair.fees.submarine_boltz(_out_amount) + boltz_lbtc_pair.fees.submarine_claim();
     println!("TOTAL FEES:{}", fees);
 
     let request = CreateSwapRequest::new_lbtc_submarine(
@@ -112,8 +112,8 @@ fn test_liquid_rsi() {
     let boltz_client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
     let boltz_pairs = boltz_client.get_pairs().unwrap();
     let boltz_lbtc_pair = boltz_pairs.get_lbtc_pair().unwrap();
-    let fees = boltz_lbtc_pair.fees.reverse_boltz(out_amount).unwrap()
-        + boltz_lbtc_pair.fees.reverse_lockup().unwrap();
+    let fees =
+        boltz_lbtc_pair.fees.reverse_boltz(out_amount) + boltz_lbtc_pair.fees.reverse_lockup();
     println!("TOTAL FEES: {}", fees);
 
     let request = CreateSwapRequest::new_lbtc_reverse_onchain_amt(
@@ -145,7 +145,7 @@ fn test_liquid_rsi() {
     println!("*******INVOICE****************");
     println!("{}", invoice.to_string());
     println!("timeoutBlockHeight: {}", response.get_timeout().unwrap());
-    println!("nLocktime: {}", boltz_script_elements.timelock);
+    println!("nLocktime: {}", boltz_script_elements.locktime);
     println!("");
     println!("Once you have paid the invoice, press enter to continue the tests.");
     println!("******************************");
@@ -175,7 +175,6 @@ fn test_liquid_rsi() {
     let rev_swap_tx = LBtcSwapTx::new_claim(
         boltz_script_elements,
         RETURN_ADDRESS.to_string(),
-        "123456".to_string(), // need to add real tx for test
         &network_config,
     )
     .unwrap();
@@ -201,10 +200,10 @@ fn test_recover_liquid_rsi() {
     };
     let script: LBtcSwapScript = recovery.try_into().unwrap();
     let network_config = ElectrumConfig::default_liquid();
-    println!("{:?}", script.fetch_utxo(&network_config, None));
+    println!("{:?}", script.fetch_utxo(&network_config));
 
     let tx =
-        LBtcSwapTx::new_claim(script.clone(), RETURN_ADDRESS.to_string(), "123456".to_string(), &network_config).unwrap();
+        LBtcSwapTx::new_claim(script.clone(), RETURN_ADDRESS.to_string(), &network_config).unwrap();
     let _keypair: Keypair = recovery.try_into().unwrap();
     let _preimage: Preimage = recovery.try_into().unwrap();
 
