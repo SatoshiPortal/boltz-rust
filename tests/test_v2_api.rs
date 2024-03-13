@@ -7,6 +7,7 @@ use boltz_client::{
 };
 
 #[test]
+#[ignore = "Run legend-regtest"]
 fn test_v2_submarine() {
     let swapper = BtcSwapper::init(BOLTZ_REGTEST, Chain::BitcoinRegtest);
 
@@ -21,6 +22,7 @@ fn test_v2_submarine() {
 }
 
 #[test]
+#[ignore = "Run legend-regtest"]
 fn test_v2_reverse() {
     let swapper = BtcSwapper::init(BOLTZ_REGTEST, Chain::BitcoinRegtest);
 
