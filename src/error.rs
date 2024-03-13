@@ -19,6 +19,10 @@ pub enum Error {
     BIP39(bip39::Error),
     Hash(bitcoin::hashes::FromSliceError),
     Locktime(String),
+    Url(url::ParseError),
+    WebSocket(tungstenite::Error),
+    Taproot(String),
+    Musig2(String),
 }
 
 impl From<electrum_client::Error> for Error {
@@ -150,5 +154,53 @@ impl From<bitcoin::absolute::Error> for Error {
 impl From<elements::locktime::Error> for Error {
     fn from(value: elements::locktime::Error) -> Self {
         Self::Locktime(value.to_string())
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(value: url::ParseError) -> Self {
+        Self::Url(value)
+    }
+}
+
+impl From<tungstenite::Error> for Error {
+    fn from(value: tungstenite::Error) -> Self {
+        Self::WebSocket(value)
+    }
+}
+
+impl From<bitcoin::taproot::TaprootError> for Error {
+    fn from(value: bitcoin::taproot::TaprootError) -> Self {
+        Self::Taproot(value.to_string())
+    }
+}
+
+impl From<bitcoin::taproot::TaprootBuilderError> for Error {
+    fn from(value: bitcoin::taproot::TaprootBuilderError) -> Self {
+        Self::Taproot(value.to_string())
+    }
+}
+
+impl From<elements::secp256k1_zkp::MusigTweakErr> for Error {
+    fn from(value: elements::secp256k1_zkp::MusigTweakErr) -> Self {
+        Self::Musig2(value.to_string())
+    }
+}
+
+impl From<elements::secp256k1_zkp::MusigNonceGenError> for Error {
+    fn from(value: elements::secp256k1_zkp::MusigNonceGenError) -> Self {
+        Self::Musig2(value.to_string())
+    }
+}
+
+impl From<elements::secp256k1_zkp::ParseError> for Error {
+    fn from(value: elements::secp256k1_zkp::ParseError) -> Self {
+        Self::Musig2(value.to_string())
+    }
+}
+
+impl From<elements::secp256k1_zkp::MusigSignError> for Error {
+    fn from(value: elements::secp256k1_zkp::MusigSignError) -> Self {
+        Self::Musig2(value.to_string())
     }
 }
