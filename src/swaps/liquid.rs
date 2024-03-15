@@ -479,7 +479,7 @@ impl LBtcSwapTx {
             .ok_or(Error::Protocol("No preimage provided".to_string()))?;
         let redeem_script = self.swap_script.to_script()?;
 
-        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+        let sequence = Sequence::MAX;
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo,
@@ -628,7 +628,7 @@ impl LBtcSwapTx {
         );
 
         let redeem_script = self.swap_script.to_script()?;
-        let sequence = Sequence::from_consensus(0xFFFFFFFF);
+        let sequence = Sequence::ZERO;
         let unsigned_input: TxIn = TxIn {
             sequence: sequence,
             previous_output: self.utxo,

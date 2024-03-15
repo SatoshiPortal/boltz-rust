@@ -19,6 +19,7 @@ pub use bitcoin::secp256k1::{Keypair, Message, Secp256k1, XOnlyPublicKey};
 pub use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 pub use lightning_invoice::Bolt11Invoice;
 use serde::Serialize;
+use std::panic::{self, AssertUnwindSafe};
 
 use crate::util::secrets::Preimage;
 use bitcoin::secp256k1::hashes::{sha256, Hash};
@@ -110,7 +111,7 @@ pub extern "C" fn extract_claim_public_key(comparison_script: *const c_char) -> 
     return CString::new("").unwrap().into_raw();
 }
 
-enum TransactionType {
+pub enum TransactionType {
     Claim,
     Refund,
 }
@@ -125,16 +126,23 @@ pub extern "C" fn create_and_sign_claim_transaction(
     tx: *const c_char,
     fees: u64,
 ) -> *mut c_char {
-    create_and_sign_transaction(
-        TransactionType::Claim,
-        redeem_script,
-        blinding_key,
-        onchain_address,
-        private_key,
-        Some(preimage),
-        tx,
-        fees,
-    )
+    match panic::catch_unwind(AssertUnwindSafe(|| {
+        create_and_sign_transaction(
+            TransactionType::Claim,
+            redeem_script,
+            blinding_key,
+            onchain_address,
+            private_key,
+            Some(preimage),
+            tx,
+            fees,
+        )
+    })) {
+        Ok(result) => result,
+        Err(_) => CString::new("Panic occurred during create_and_sign_claim_transaction")
+            .unwrap()
+            .into_raw(),
+    }
 }
 
 #[no_mangle]
@@ -146,19 +154,27 @@ pub extern "C" fn create_and_sign_refund_transaction(
     tx: *const c_char,
     fees: u64,
 ) -> *mut c_char {
-    create_and_sign_transaction(
-        TransactionType::Refund,
-        redeem_script,
-        blinding_key,
-        onchain_address,
-        private_key,
-        None, // No preimage for refund
-        tx,
-        fees,
-    )
+    match panic::catch_unwind(AssertUnwindSafe(|| {
+        create_and_sign_transaction(
+            TransactionType::Refund,
+            redeem_script,
+            blinding_key,
+            onchain_address,
+            private_key,
+            None, // No preimage for refund
+            tx,
+            fees,
+        )
+    })) {
+        Ok(result) => result,
+        Err(_) => CString::new("Panic occurred during create_and_sign_refund_transaction")
+            .unwrap()
+            .into_raw(),
+    }
 }
 
-fn create_and_sign_transaction(
+#[no_mangle]
+pub extern "C" fn create_and_sign_transaction(
     transaction_type: TransactionType,
     redeem_script: *const c_char,
     blinding_key: *const c_char,
