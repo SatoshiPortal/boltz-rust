@@ -1,9 +1,9 @@
 use bitcoind::{
     bitcoincore_rpc::{Client, RpcApi},
-    BitcoinD,
+    BitcoinD, Conf,
 };
 
-use bitcoin::{network::Network, Address, Amount};
+use bitcoin::{network::Network, Address, Amount, Txid};
 
 pub struct TestFramework {
     bitcoind: BitcoinD,
@@ -15,7 +15,10 @@ impl TestFramework {
     /// Initializes the Bitcoind regtest backend, mines initial blocks,
     /// creates a test-wallet and funds it with 10,000 sats.
     pub fn init() -> Self {
-        let bitcoind = BitcoinD::from_downloaded().unwrap();
+        let mut conf = Conf::default();
+
+        conf.args.push("-txindex=1");
+        let bitcoind = BitcoinD::from_downloaded_with_conf(&conf).unwrap();
 
         // Generate initial 101 blocks
         let mining_address = bitcoind
@@ -72,11 +75,11 @@ impl TestFramework {
             .unwrap();
     }
 
-    pub fn send_coins(&self, addr: &Address, amount: Amount) {
+    pub fn send_coins(&self, addr: &Address, amount: Amount) -> Txid {
         self.bitcoind
             .client
             .send_to_address(&addr, amount, None, None, None, None, None, None)
-            .unwrap();
+            .unwrap()
     }
 
     pub fn get_test_wallet(&self) -> &Client {
