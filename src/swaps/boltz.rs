@@ -241,11 +241,11 @@ pub struct ReverseMinerFee {
 #[serde(rename_all = "camelCase")]
 pub struct Fees {
     /// The percentage of the "send amount" that is charged by Boltz as "Boltz Fee" for swaps from quote to base asset (e.g. Lightning -> Bitcoin).
-    percentage: f64,
+    pub percentage: f64,
     /// The percentage of the "send amount" that is charged by Boltz as "Boltz Fee" for swaps from base to quote asset (e.g. Bitcoin -> Lightning).
-    percentage_swap_in: f64,
+    pub percentage_swap_in: f64,
     /// The network fees charged for locking up and claiming funds onchain. These values are absolute, denominated in 10 ** -8 of the quote asset.
-    miner_fees: MinerFees,
+    pub miner_fees: MinerFees,
 }
 
 impl Fees {
