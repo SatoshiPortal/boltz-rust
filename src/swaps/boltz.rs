@@ -250,15 +250,15 @@ pub struct Fees {
 
 impl Fees {
     /// Calculate total submarine fees (boltz + claim + lockup_estimate)
-    pub fn submarine_total(&self, output_amount: u64) -> u64 {
-        let boltz = self.submarine_boltz(output_amount);
+    pub fn submarine_total(&self, invoice_amount_sat: u64) -> u64 {
+        let boltz = self.submarine_boltz(invoice_amount_sat);
         let claim = self.submarine_claim();
         let lockup = self.submarine_lockup_estimate();
         boltz + claim + lockup
     }
-    /// Calculate boltz fees for a submarine swap, given an output amount
-    pub fn submarine_boltz(&self, output_amount: u64) -> u64 {
-        let boltz_fee = ((self.percentage_swap_in / 100.0) * output_amount as f64).round() as u64;
+    /// Calculate boltz fees for a submarine swap, given the invoice amount
+    pub fn submarine_boltz(&self, invoice_amount_sat: u64) -> u64 {
+        let boltz_fee = ((self.percentage_swap_in / 100.0) * invoice_amount_sat as f64).ceil() as u64;
         boltz_fee
     }
     /// Get claim miner fees for a submarine swap
@@ -272,15 +272,15 @@ impl Fees {
         self.miner_fees.base_asset.normal as u64
     }
     /// Calculate total reverse fees (boltz + claim + lockup_estimate)
-    pub fn reverse_total(&self, output_amount: u64) -> u64 {
-        let boltz = self.reverse_boltz(output_amount);
+    pub fn reverse_total(&self, invoice_amount_sat: u64) -> u64 {
+        let boltz = self.reverse_boltz(invoice_amount_sat);
         let lockup = self.reverse_lockup();
         let claim = self.reverse_claim_estimate();
         boltz + lockup + claim
     }
-    /// Calculate boltz fees for a reverse swap, given an output amount
-    pub fn reverse_boltz(&self, output_amount: u64) -> u64 {
-        let boltz_fee = ((self.percentage / 100.0) * output_amount as f64).round() as u64;
+    /// Calculate boltz fees for a reverse swap, given the invoice amount
+    pub fn reverse_boltz(&self, invoice_amount_sat: u64) -> u64 {
+        let boltz_fee = ((self.percentage / 100.0) * invoice_amount_sat as f64).ceil() as u64;
         boltz_fee
     }
     /// Get lockup miner fees for a reverse swap
@@ -981,20 +981,20 @@ mod tests {
     fn test_get_pairs() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let response = client.get_pairs().unwrap();
-        let output_amount = 100_000;
+        let invoice_amount_sat = 100_000;
         let _btc_pair_hash = response.get_btc_pair().unwrap().hash;
         let _rev_total_fee = response
             .get_btc_pair()
             .unwrap()
             .fees
-            .reverse_total(output_amount);
+            .reverse_total(invoice_amount_sat);
         let _btc_limits = response.get_btc_pair().unwrap().limits;
         let _lbtc_pair_hash = response.get_lbtc_pair().unwrap().hash;
         let _sub_total_fee = response
             .get_lbtc_pair()
             .unwrap()
             .fees
-            .submarine_total(output_amount);
+            .submarine_total(invoice_amount_sat);
         let _lbtc_limits = response.get_lbtc_pair().unwrap().limits;
     }
 
@@ -1059,14 +1059,14 @@ mod tests {
         let client = BoltzApiClient::new(BOLTZ_MAINNET_URL);
         let pairs = client.get_pairs().unwrap();
         let btc_pair = pairs.get_btc_pair().unwrap();
-        let output_amount = 75_000;
-        let base_fees = btc_pair.fees.reverse_boltz(output_amount) + btc_pair.fees.reverse_lockup();
+        let invoice_amount_sat = 75_000;
+        let base_fees = btc_pair.fees.reverse_boltz(invoice_amount_sat) + btc_pair.fees.reverse_lockup();
         let claim_fee = btc_pair.fees.reverse_claim_estimate();
         println!("CALCULATED FEES: {}", base_fees);
-        println!("ONCHAIN LOCKUP: {}", output_amount - base_fees);
+        println!("ONCHAIN LOCKUP: {}", invoice_amount_sat - base_fees);
         println!(
-            "ONCHAIN RECIEVABLE: {}",
-            output_amount - base_fees - claim_fee
+            "ONCHAIN RECEIVABLE: {}",
+            invoice_amount_sat - base_fees - claim_fee
         );
         let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let claim_key_pair = SwapKey::from_reverse_account(mnemonic, "", Chain::Bitcoin, 0)
@@ -1078,11 +1078,11 @@ mod tests {
             &btc_pair.hash,
             &preimage.sha256.to_string(),
             &claim_key_pair.public_key().to_string(),
-            output_amount,
+            invoice_amount_sat,
         );
         let response = client.create_swap(request).unwrap();
         println!("Onchain Amount: {}", response.onchain_amount.unwrap());
-        assert!((output_amount - base_fees) == response.onchain_amount.unwrap());
+        assert_eq!((invoice_amount_sat - base_fees), response.onchain_amount.unwrap());
 
         let _btc_rss =
             response.into_btc_rev_swap_script(&preimage, &claim_key_pair, Chain::Bitcoin);
