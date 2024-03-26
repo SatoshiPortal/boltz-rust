@@ -9,13 +9,15 @@ use bitcoin::{
         rand::{rngs::OsRng, thread_rng, RngCore},
         Keypair, Secp256k1,
     },
+    script::Instruction,
     secp256k1::{Message, SecretKey},
     sighash::{Prevouts, SighashCache},
     taproot::{LeafVersion, Signature, TaprootBuilder},
     transaction::Version,
-    Address, Amount, OutPoint, PublicKey, ScriptBuf, Sequence, TapSighashType, Transaction, TxIn,
-    TxOut, Witness, XOnlyPublicKey,
+    Address, Amount, OutPoint, PublicKey, ScriptBuf, Sequence, TapLeafHash, TapSighashType,
+    Transaction, TxIn, TxOut, Witness, XOnlyPublicKey,
 };
+use electrum_client::{Client, ElectrumApi};
 use elements::secp256k1_zkp::{
     MusigAggNonce, MusigKeyAggCache, MusigPartialSignature, MusigPubNonce, MusigSession,
     MusigSessionId,
@@ -25,8 +27,9 @@ use lightning_invoice::Bolt11Invoice;
 use crate::{
     error::Error,
     network::Chain,
-    swaps::boltzv2::{
-        CreateReverseReq, CreateSwapRequest, Subscription, SwapUpdate, BOLTZ_REGTEST,
+    swaps::{
+        bitcoin::bytes_to_u32_little_endian,
+        boltzv2::{CreateReverseReq, CreateSwapRequest, Subscription, SwapUpdate, BOLTZ_REGTEST},
     },
     util::{secrets::Preimage, setup_logger},
 };
@@ -164,6 +167,152 @@ impl BtcSwapper {
         Ok((partial_sig, pub_nonce))
     }
 
+    /// Creates a refund timelocked transaction for subamrine swap.
+    pub fn submarine_refund(
+        &self,
+        electrum: &Client,
+        create_swap_response: &CreateSwapResponse,
+        destination: Address,
+        fee: Amount,
+    ) -> Result<Transaction, Error> {
+        // Step 1: Start with a Musig KeyAgg Cache
+        let secp = Secp256k1::new();
+
+        let pubkeys = [
+            create_swap_response.claim_public_key.inner,
+            self.keypair.public_key(),
+        ];
+
+        let mut key_agg_cache = MusigKeyAggCache::new(&secp, &pubkeys);
+
+        // Step 2: Build the Taporoot
+        let internal_key = key_agg_cache.agg_pk();
+
+        let taproot_builder = TaprootBuilder::new();
+
+        let (claim_script, claim_version) = (
+            create_swap_response.swap_tree.claim_leaf.output.clone(),
+            LeafVersion::from_consensus(create_swap_response.swap_tree.claim_leaf.version)?,
+        );
+        let (refund_script, refund_version) = (
+            create_swap_response.swap_tree.refund_leaf.output.clone(),
+            LeafVersion::from_consensus(create_swap_response.swap_tree.refund_leaf.version)?,
+        );
+
+        let taproot_builder = taproot_builder.add_leaf_with_ver(1, claim_script, claim_version)?;
+        let taproot_builder =
+            taproot_builder.add_leaf_with_ver(1, refund_script.clone(), refund_version)?;
+
+        let taproot_spend_info = taproot_builder.finalize(&secp, internal_key).unwrap(); // Taproot finalizing in unfailable
+
+        // Verify taproot construction
+        let output_key = taproot_spend_info.output_key();
+
+        let lockup_spk = Address::from_str(&create_swap_response.address)?
+            .assume_checked()
+            .script_pubkey();
+
+        let pubkey_instruction = lockup_spk
+            .instructions()
+            .last()
+            .expect("should contain value")
+            .expect("should not fail");
+
+        let lockup_xonly_pubkey_bytes = pubkey_instruction
+            .push_bytes()
+            .expect("pubkey bytes expected");
+
+        let lockup_xonly_pubkey = XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes.as_bytes())?;
+
+        debug_assert!(lockup_xonly_pubkey == output_key.to_inner());
+
+        log::info!("Taproot creation and verification success!");
+
+        // Assume theres only one funding UTXO.
+        let funding_utxo = &electrum
+            .batch_script_list_unspent([lockup_spk.as_script()])
+            .unwrap()[0][0];
+
+        let funding_txout = TxOut {
+            script_pubkey: lockup_spk,
+            value: Amount::from_sat(funding_utxo.value),
+        };
+
+        let funding_outpoint = OutPoint::new(funding_utxo.tx_hash, 0);
+
+        let spending_txin = TxIn {
+            previous_output: funding_outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_LOCKTIME_NO_RBF,
+            witness: Witness::new(),
+        };
+
+        let spending_txout = TxOut {
+            value: Amount::from_sat(funding_utxo.value) - fee,
+            script_pubkey: destination.script_pubkey(),
+        };
+
+        let lock_time = refund_script
+            .instructions()
+            .filter_map(|i| {
+                let ins = i.unwrap();
+                if let Instruction::PushBytes(bytes) = ins {
+                    if bytes.len() == 3 as usize {
+                        Some(LockTime::from_consensus(bytes_to_u32_little_endian(
+                            &bytes.as_bytes(),
+                        )))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .next()
+            .unwrap();
+
+        let mut spending_tx = Transaction {
+            version: Version::TWO,
+            lock_time,
+            input: vec![spending_txin],
+            output: vec![spending_txout],
+        };
+
+        let leaf_hash = TapLeafHash::from_script(&refund_script, LeafVersion::TapScript);
+
+        let sighash = SighashCache::new(spending_tx.clone())
+            .taproot_script_spend_signature_hash(
+                0,
+                &Prevouts::All(&[funding_txout]),
+                leaf_hash,
+                TapSighashType::Default,
+            )
+            .unwrap();
+
+        let msg = Message::from_digest_slice(sighash.as_byte_array()).unwrap();
+
+        let sig = secp.sign_schnorr(&msg, &self.keypair);
+
+        let final_sig = Signature {
+            sig,
+            hash_ty: TapSighashType::Default,
+        };
+
+        let control_block = taproot_spend_info
+            .control_block(&(refund_script.clone(), LeafVersion::TapScript))
+            .unwrap();
+
+        let mut witness = Witness::new();
+
+        witness.push(final_sig.to_vec());
+        witness.push(refund_script.as_bytes());
+        witness.push(control_block.serialize());
+
+        spending_tx.input[0].witness = witness;
+
+        Ok(spending_tx)
+    }
+
     /// Compute the final signed claim tx for reverse swap
     fn reverse_claim_tx(
         &self,
@@ -171,6 +320,7 @@ impl BtcSwapper {
         preimage: &Preimage,
         destination: Address,
         fee: Amount,
+        is_cooperative: bool,
     ) -> Result<Transaction, Error> {
         // Get the tx in mempool
         let tx_resp = self.api.get_reverse_tx(&reverse_resp.id).unwrap();
@@ -201,7 +351,7 @@ impl BtcSwapper {
         );
 
         let taproot_builder = taproot_builder
-            .add_leaf_with_ver(1, claim_script, claim_version)
+            .add_leaf_with_ver(1, claim_script.clone(), claim_version)
             .unwrap();
         let taproot_builder = taproot_builder
             .add_leaf_with_ver(1, refund_script, refund_version)
@@ -280,85 +430,122 @@ impl BtcSwapper {
             output: vec![txout],
         };
 
-        let claim_tx_taproot_hash = SighashCache::new(claim_tx.clone())
-            .taproot_key_spend_signature_hash(
-                0,
-                &Prevouts::All(&[lockup_txout]),
-                bitcoin::TapSighashType::Default,
-            )
-            .unwrap();
-
-        // Step 6: Generate secret and public nonces
-        let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array()).unwrap();
-
-        let mut extra_rand = [0u8; 32];
-        OsRng.fill_bytes(&mut extra_rand);
-
-        let (sec_nonce, pub_nonce) = key_agg_cache
-            .nonce_gen(
-                &secp,
-                session_id,
-                self.keypair.public_key(),
-                msg,
-                Some(extra_rand),
-            )
-            .unwrap();
-
-        // Step 7: Get boltz's partail sig
-        let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
-        let partial_sig_resp = self
-            .api
-            .get_reverse_partial_sig(&reverse_resp.id, &preimage, &pub_nonce, &claim_tx_hex)
-            .unwrap();
-
-        let boltz_nonce =
-            MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce).unwrap())
+        // If its a cooperative claim, compute the Musig2 Aggregate Signature and use Keypath spending
+        if is_cooperative {
+            let claim_tx_taproot_hash = SighashCache::new(claim_tx.clone())
+                .taproot_key_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[lockup_txout]),
+                    bitcoin::TapSighashType::Default,
+                )
                 .unwrap();
 
-        let boltz_partial_sig = MusigPartialSignature::from_slice(
-            &Vec::from_hex(&partial_sig_resp.partial_signature).unwrap(),
-        )
-        .unwrap();
+            // Step 6: Generate secret and public nonces
+            let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array()).unwrap();
 
-        // Step 7: Perform
+            let mut extra_rand = [0u8; 32];
+            OsRng.fill_bytes(&mut extra_rand);
 
-        let agg_nonce = MusigAggNonce::new(&secp, &[boltz_nonce, pub_nonce]);
+            let (sec_nonce, pub_nonce) = key_agg_cache
+                .nonce_gen(
+                    &secp,
+                    session_id,
+                    self.keypair.public_key(),
+                    msg,
+                    Some(extra_rand),
+                )
+                .unwrap();
 
-        let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+            // Step 7: Get boltz's partail sig
+            let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
+            let partial_sig_resp = self
+                .api
+                .get_reverse_partial_sig(&reverse_resp.id, &preimage, &pub_nonce, &claim_tx_hex)
+                .unwrap();
 
-        let our_partial_sig = musig_session
-            .partial_sign(&secp, sec_nonce, &self.keypair, &key_agg_cache)
+            let boltz_nonce =
+                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce).unwrap())
+                    .unwrap();
+
+            let boltz_partial_sig = MusigPartialSignature::from_slice(
+                &Vec::from_hex(&partial_sig_resp.partial_signature).unwrap(),
+            )
             .unwrap();
 
-        let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
+            // Step 7: Perform
 
-        let final_schnorr_sig = Signature {
-            sig: schnorr_sig,
-            hash_ty: TapSighashType::Default,
-        };
+            let agg_nonce = MusigAggNonce::new(&secp, &[boltz_nonce, pub_nonce]);
 
-        let mut witness = Witness::new();
-        witness.push(final_schnorr_sig.to_vec());
+            let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
 
-        claim_tx.input[0].witness = witness;
+            let our_partial_sig = musig_session
+                .partial_sign(&secp, sec_nonce, &self.keypair, &key_agg_cache)
+                .unwrap();
 
-        let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
+            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
 
-        // Verify the sigs. These are both failing.
-        let boltz_partial_sig_verify = musig_session.partial_verify(
-            &secp,
-            &key_agg_cache,
-            boltz_partial_sig,
-            boltz_nonce,
-            boltz_pubkey.inner,
-        );
+            let final_schnorr_sig = Signature {
+                sig: schnorr_sig,
+                hash_ty: TapSighashType::Default,
+            };
 
-        debug_assert!(boltz_partial_sig_verify == true);
+            // Verify the sigs.
+            let boltz_partial_sig_verify = musig_session.partial_verify(
+                &secp,
+                &key_agg_cache,
+                boltz_partial_sig,
+                boltz_nonce,
+                boltz_pubkey.inner,
+            );
 
-        let final_sig_verify =
-            secp.verify_schnorr(&final_schnorr_sig.sig, &msg, &output_key.to_inner())?;
+            debug_assert!(boltz_partial_sig_verify == true);
 
-        debug_assert!(final_sig_verify == ());
+            let final_sig_verify =
+                secp.verify_schnorr(&final_schnorr_sig.sig, &msg, &output_key.to_inner())?;
+
+            debug_assert!(final_sig_verify == ());
+
+            let mut witness = Witness::new();
+            witness.push(final_schnorr_sig.to_vec());
+
+            claim_tx.input[0].witness = witness;
+
+            let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
+        } else {
+            // If Non-Cooperative claim use the Script Path spending
+            let leaf_hash = TapLeafHash::from_script(&claim_script, LeafVersion::TapScript);
+
+            let sighash = SighashCache::new(claim_tx.clone())
+                .taproot_script_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[lockup_txout]),
+                    leaf_hash,
+                    TapSighashType::Default,
+                )
+                .unwrap();
+
+            let msg = Message::from_digest_slice(sighash.as_byte_array()).unwrap();
+
+            let sig = secp.sign_schnorr(&msg, &self.keypair);
+
+            let final_sig = Signature {
+                sig,
+                hash_ty: TapSighashType::Default,
+            };
+
+            let control_block = taproot_spend_info
+                .control_block(&(claim_script.clone(), LeafVersion::TapScript))
+                .unwrap();
+
+            let mut witness = Witness::new();
+
+            witness.push(final_sig.to_vec());
+            witness.push(&preimage.bytes.unwrap());
+            witness.push(claim_script.as_bytes());
+            witness.push(control_block.serialize());
+
+            claim_tx.input[0].witness = witness;
+        }
 
         Ok(claim_tx)
     }
@@ -570,6 +757,7 @@ impl BtcSwapper {
                                 &preimage,
                                 claim_addrs.clone(),
                                 claim_tx_fee,
+                                true,
                             )?;
 
                             let claim_tx_hex = serialize(&tx).to_lower_hex_string();

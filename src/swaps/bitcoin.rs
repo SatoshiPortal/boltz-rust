@@ -282,7 +282,7 @@ impl BtcSwapScript {
     }
 }
 
-fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
+pub fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
     let mut result = 0u32;
     for (i, &byte) in bytes.iter().enumerate() {
         result |= (byte as u32) << (8 * i);
