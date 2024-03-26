@@ -112,9 +112,9 @@ impl SwapKey {
 }
 #[derive(Clone)]
 
-/// For Liquid keys, first create a SwapKey and then call .into() to get the equaivalent ZKKeypair
-/// let sk = SwapKey::from_reverse_account(&mnemonic.to_string(), "", Chain::LiquidTestnet, 1).unwrap()
-/// let lsk: LiquidSwapKey = swap_key.into();
+/// For Liquid keys, first create a SwapKey and then call .into() to get the equivalent ZKKeypair
+/// let sk = SwapKey::from_reverse_account(&mnemonic.to_string(), "", Chain::LiquidTestnet, 1)?
+/// let lsk: LiquidSwapKey = swap_key.try_into()?;
 /// let zkkp = lsk.keypair;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LiquidSwapKey {

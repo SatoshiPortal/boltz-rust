@@ -4,7 +4,7 @@
 
 #![allow(unused)]
 /// Error Module
-mod error;
+pub mod error;
 /// Blockchain Network module. Currently only contains electrum interface.
 pub mod network;
 /// core swap logic
