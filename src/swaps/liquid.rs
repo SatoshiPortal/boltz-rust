@@ -333,7 +333,6 @@ impl LBtcSwapScript {
             return Err(Error::Protocol("No Transaction History".to_string()));
         }
         let bitcoin_txid = history.last().expect("txid expected").tx_hash;
-        println!("{}", bitcoin_txid);
         let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid)?;
         let tx: Transaction = elements::encode::deserialize(&raw_tx)?;
         let mut vout = 0;
