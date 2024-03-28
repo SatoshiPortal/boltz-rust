@@ -18,68 +18,98 @@ use bitcoin::secp256k1::rand::thread_rng;
 pub use bitcoin::secp256k1::{Keypair, Message, Secp256k1, XOnlyPublicKey};
 pub use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 pub use lightning_invoice::Bolt11Invoice;
-use serde::Serialize;
 use std::panic::{self, AssertUnwindSafe};
 
 use crate::util::secrets::Preimage;
 use bitcoin::secp256k1::hashes::{sha256, Hash};
 use bitcoin::secp256k1::schnorr::Signature;
 use elements::bitcoin::hashes::ripemd160;
+use elements::bitcoin::PublicKey;
 use elements::encode::Encodable;
 use elements::hex::{FromHex, ToHex};
-use elements::opcodes;
-use elements::opcodes::Ordinary::OP_IF;
-use elements::script::Builder;
-use elements::secp256k1_zkp::PublicKey;
+use elements::{
+    address::Address as EAddress, opcodes::all::*, script::Builder as EBuilder, AddressParams,
+    LockTime,
+};
 use hex::decode;
 use network::electrum::ElectrumConfig;
 use std::cell::RefCell;
 use std::ffi::{c_char, CStr, CString};
 use std::ptr;
 use std::str::FromStr;
-use swaps::bitcoin::{BtcSwapScript, BtcSwapTx};
-use swaps::boltz::{SwapTxKind, SwapType};
 use swaps::liquid::LBtcSwapScript;
 use swaps::liquid::LBtcSwapTx;
 
 #[no_mangle]
-pub extern "C" fn reconstruct_swap_script(
+pub extern "C" fn validate_submarine(
     preimage_hash: *const c_char,
     claim_public_key: *const c_char,
     refund_public_key: *const c_char,
     timeout_block_height: u32,
-) -> *mut c_char {
-    let preimage_hash_string = unsafe { CStr::from_ptr(preimage_hash).to_str().unwrap().trim() };
-    let claim_public_key_string =
-        unsafe { CStr::from_ptr(claim_public_key).to_str().unwrap().trim() };
-    let refund_public_key_string =
+    lockup_address: *const c_char,
+    redeem_script: *const c_char,
+    blinding_key: *const c_char,
+) -> i32 {
+    let claim_public_key_str = unsafe { CStr::from_ptr(claim_public_key).to_str().unwrap().trim() };
+    let refund_public_key_str =
         unsafe { CStr::from_ptr(refund_public_key).to_str().unwrap().trim() };
 
-    let claim_public_key = PublicKey::from_str(claim_public_key_string)
-        .unwrap()
-        .serialize();
-    let refund_public_key = PublicKey::from_str(refund_public_key_string)
-        .unwrap()
-        .serialize();
-    let preimage_hash_ripemd =
-        ripemd160::Hash::hash(decode(&preimage_hash_string).unwrap().as_slice()).to_byte_array();
+    let claim_public_key = PublicKey::from_str(claim_public_key_str).unwrap();
+    let refund_public_key = PublicKey::from_str(refund_public_key_str).unwrap();
 
-    let script = Builder::new()
-        .push_opcode(opcodes::all::OP_HASH160)
+    let preimage_hash_str = unsafe { CStr::from_ptr(preimage_hash).to_str().unwrap().trim() };
+    let preimage_hash_ripemd =
+        ripemd160::Hash::hash(decode(&preimage_hash_str).unwrap().as_slice()).to_byte_array();
+    let blinding_key_str = unsafe { CStr::from_ptr(blinding_key).to_str().unwrap().trim() };
+    let blinding_key: ZKKeyPair =
+        ZKKeyPair::from_seckey_str(&ZKSecp256k1::new(), &blinding_key_str)
+            .unwrap()
+            .into();
+
+    let locktime = LockTime::from_height(timeout_block_height).unwrap();
+
+    let response_lockup_address =
+        unsafe { CStr::from_ptr(lockup_address).to_str().unwrap().trim() };
+    let response_redeem_script = unsafe { CStr::from_ptr(redeem_script).to_str().unwrap().trim() };
+
+    let reconstructed_script = EBuilder::new()
+        .push_opcode(OP_HASH160)
         .push_slice(&preimage_hash_ripemd)
-        .push_opcode(opcodes::all::OP_EQUAL)
-        .push_opcode(opcodes::all::OP_IF)
-        .push_slice(&claim_public_key)
-        .push_opcode(opcodes::all::OP_ELSE)
-        .push_int(timeout_block_height as i64)
-        .push_opcode(opcodes::all::OP_CLTV)
-        .push_opcode(opcodes::all::OP_DROP)
-        .push_slice(&refund_public_key)
-        .push_opcode(opcodes::all::OP_ENDIF)
-        .push_opcode(opcodes::all::OP_CHECKSIG)
+        .push_opcode(OP_EQUAL)
+        .push_opcode(elements::opcodes::all::OP_IF)
+        .push_key(&claim_public_key)
+        .push_opcode(OP_ELSE)
+        .push_int(locktime.to_consensus_u32() as i64)
+        .push_opcode(OP_CLTV)
+        .push_opcode(OP_DROP)
+        .push_key(&refund_public_key)
+        .push_opcode(OP_ENDIF)
+        .push_opcode(OP_CHECKSIG)
         .into_script();
 
-    return CString::new(script.to_hex().to_owned()).unwrap().into_raw();
+    let reconstructed_address = EAddress::p2wsh(
+        &reconstructed_script,
+        Some(blinding_key.public_key()),
+        &AddressParams::LIQUID,
+    );
+
+    let reconstructed_address_str = reconstructed_address.to_string();
+    let reconstructed_script_str = reconstructed_script.as_bytes().to_hex();
+
+    let script_matches = response_redeem_script == reconstructed_script_str;
+    let address_matches = response_lockup_address == reconstructed_address_str;
+
+    log_message(&format!(
+        "[Rust] validate submarine - response_redeem_script: {:?}, reconstructed_script_str: {:?}, script_matches: {:?}, response_lockup_address: {:?}, reconstructed_address: {:?}, address_matches: {:?},",
+        response_redeem_script,
+        reconstructed_script_str,
+        script_matches,
+        response_lockup_address,
+        reconstructed_address,
+        address_matches
+    ));
+
+    (script_matches && address_matches) as i32
 }
 
 #[no_mangle]
@@ -93,7 +123,7 @@ pub extern "C" fn extract_claim_public_key(comparison_script: *const c_char) -> 
     while let Some(instruction) = iter.next() {
         let ins = instruction.unwrap();
         if ins.op() != None {
-            if ins.op().unwrap() == elements::opcodes::All::from(OP_IF as u8) {
+            if ins.op().unwrap() == elements::opcodes::all::OP_IF {
                 found_op_if = true;
                 continue;
             }
@@ -102,8 +132,9 @@ pub extern "C" fn extract_claim_public_key(comparison_script: *const c_char) -> 
             found_op_if = false;
             let claim_public_key = PublicKey::from_slice(ins.push_bytes().unwrap())
                 .unwrap()
-                .to_hex();
-            return CString::new(claim_public_key.to_owned())
+                .to_bytes();
+            let claim_public_key_hex = hex::encode(&claim_public_key);
+            return CString::new(claim_public_key_hex.to_owned())
                 .unwrap()
                 .into_raw();
         }
