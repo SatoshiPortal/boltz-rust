@@ -43,7 +43,7 @@ init:
 # ##############################################################################
 
 ## all: Compile iOS, Android and bindings targets
-all: ios android bindings
+all: ios android bindings copy
 
 ## ios: Compile the iOS universal library
 ios: target/universal/release/libboltz_rust.a
@@ -125,7 +125,7 @@ copy:
 	cp target/universal/release/libboltz_rust.a boltz-rust/ios
 	tar -cvzf boltz-rust.tar.gz boltz-rust
 
-	mv boltz-rust.tar.gz boltz-rust-0.1.3.tar.gz
+	mv boltz-rust.tar.gz boltz-rust-0.1.4.tar.gz
 
 ## :
 
