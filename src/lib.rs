@@ -275,11 +275,13 @@ pub extern "C" fn create_and_sign_transaction(
         TransactionType::Claim => LBtcSwapTx::new_claim(
             swap_script.clone(),
             onchain_address_str.to_string(),
+            tx_str.to_string(),
             network_config,
         ),
         TransactionType::Refund => LBtcSwapTx::new_refund(
             swap_script.clone(),
             onchain_address_str.to_string(),
+            tx_str.to_string(),
             network_config,
         ),
     };

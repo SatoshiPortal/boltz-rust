@@ -320,21 +320,29 @@ impl LBtcSwapScript {
     pub fn fetch_utxo(
         &self,
         network_config: &ElectrumConfig,
+        raw_tx: Option<Vec<u8>>,
     ) -> Result<(OutPoint, u64, Option<Value>, Option<TxOutSecrets>), Error> {
         let electrum_client = network_config.clone().build_client()?;
         let address = self.to_address(network_config.network())?;
-        let history = electrum_client.script_get_history(BitcoinScript::from_bytes(
-            self.to_address(network_config.network())?
-                .to_unconfidential()
-                .script_pubkey()
-                .as_bytes(),
-        ))?;
-        if history.is_empty() {
-            return Err(Error::Protocol("No Transaction History".to_string()));
-        }
-        let bitcoin_txid = history.last().expect("txid expected").tx_hash;
-        println!("{}", bitcoin_txid);
-        let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid)?;
+
+        let raw_tx = if let Some(tx) = raw_tx {
+            tx
+        } else {
+            let history = electrum_client.script_get_history(BitcoinScript::from_bytes(
+                self.to_address(network_config.network())?
+                    .to_unconfidential()
+                    .script_pubkey()
+                    .as_bytes(),
+            ))?;
+            if history.is_empty() {
+                return Err(Error::Protocol("No Transaction History".to_string()));
+            }
+            let bitcoin_txid = history.last().expect("txid expected").tx_hash;
+            println!("{}", bitcoin_txid);
+            let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid)?;
+            raw_tx
+        };
+
         let tx: Transaction = elements::encode::deserialize(&raw_tx)?;
         let mut vout = 0;
         for output in tx.clone().output {
@@ -408,6 +416,7 @@ impl LBtcSwapTx {
     pub fn new_claim(
         swap_script: LBtcSwapScript,
         output_address: String,
+        tx: String,
         network_config: &ElectrumConfig,
     ) -> Result<LBtcSwapTx, Error> {
         debug_assert!(
@@ -415,8 +424,10 @@ impl LBtcSwapTx {
             "Claim transactions can only be constructed for Reverse swaps."
         );
 
+        let tx_bytes = hex::decode(&tx).map_err(|e| Error::Protocol(format!("Could not decode tx: {}", e)))?;
+
         let (utxo, utxo_value, utxo_confidential_value, txout_secrets) =
-            swap_script.fetch_utxo(network_config)?;
+            swap_script.fetch_utxo(network_config, Some(tx_bytes))?;
 
         Ok(LBtcSwapTx {
             kind: SwapTxKind::Claim,
@@ -432,6 +443,7 @@ impl LBtcSwapTx {
     pub fn new_refund(
         swap_script: LBtcSwapScript,
         output_address: String,
+        tx: String,
         network_config: &ElectrumConfig,
     ) -> Result<LBtcSwapTx, Error> {
         debug_assert!(
@@ -440,8 +452,10 @@ impl LBtcSwapTx {
         );
         let address = Address::from_str(&output_address)?;
 
+        let tx_bytes = hex::decode(&tx).map_err(|e| Error::Protocol(format!("Could not decode tx: {}", e)))?;
+
         let (utxo, utxo_value, utxo_confidential_value, txout_secrets) =
-            swap_script.fetch_utxo(network_config)?;
+            swap_script.fetch_utxo(network_config, Some(tx_bytes))?;
 
         Ok(LBtcSwapTx {
             kind: SwapTxKind::Refund,
@@ -921,7 +935,7 @@ mod tests {
         assert_eq!(address.to_string(), expected_address);
 
         let liquid_swap_tx =
-            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), network_config).unwrap();
+            LBtcSwapTx::new_claim(el_script, RETURN_ADDRESS.to_string(), "".to_string(), network_config).unwrap();
         //let _ = liquid_swap_tx.fetch_utxo(&network_config).unwrap();
         println!("{:#?}", liquid_swap_tx);
         let final_tx = liquid_swap_tx
