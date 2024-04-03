@@ -9,7 +9,7 @@ BOLTZ NORMAL SWAP: p2shwsh
 ```
     HASH160 <hash of the preimage> 
     EQUAL
-    IF <reciever public key>
+    IF <receiver public key>
     ELSE <timeout block height> 
     CHECKLOCKTIMEVERIFY
     DROP <sender public key> 
@@ -25,7 +25,7 @@ BOLTZ REVERSE SWAP: p2sh
     EQUAL
     IF
     HASH160 <hash of the preimage>
-    EQUALVERIFY <reciever public key>
+    EQUALVERIFY <receiver public key>
     ELSE
     DROP <timeout block height>
     CLTV
