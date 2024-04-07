@@ -78,11 +78,11 @@ impl BtcSwapper {
         let taproot_builder = TaprootBuilder::new();
 
         let (claim_script, claim_version) = (
-            create_swap_response.swap_tree.claim_leaf.output.clone(),
+            ScriptBuf::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?,
             LeafVersion::from_consensus(create_swap_response.swap_tree.claim_leaf.version)?,
         );
         let (refund_script, refund_version) = (
-            create_swap_response.swap_tree.refund_leaf.output.clone(),
+            ScriptBuf::from_hex(&create_swap_response.swap_tree.refund_leaf.output)?,
             LeafVersion::from_consensus(create_swap_response.swap_tree.refund_leaf.version)?,
         );
 
@@ -191,11 +191,11 @@ impl BtcSwapper {
         let taproot_builder = TaprootBuilder::new();
 
         let (claim_script, claim_version) = (
-            create_swap_response.swap_tree.claim_leaf.output.clone(),
+            ScriptBuf::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?,
             LeafVersion::from_consensus(create_swap_response.swap_tree.claim_leaf.version)?,
         );
         let (refund_script, refund_version) = (
-            create_swap_response.swap_tree.refund_leaf.output.clone(),
+            ScriptBuf::from_hex(&create_swap_response.swap_tree.refund_leaf.output.clone())?,
             LeafVersion::from_consensus(create_swap_response.swap_tree.refund_leaf.version)?,
         );
 
@@ -342,12 +342,12 @@ impl BtcSwapper {
         let taproot_builder = TaprootBuilder::new();
 
         let (claim_script, claim_version) = (
-            reverse_resp.swap_tree.claim_leaf.output.clone(),
-            LeafVersion::from_consensus(reverse_resp.swap_tree.claim_leaf.version).unwrap(),
+            ScriptBuf::from_hex(&reverse_resp.swap_tree.claim_leaf.output)?,
+            LeafVersion::from_consensus(reverse_resp.swap_tree.claim_leaf.version)?,
         );
         let (refund_script, refund_version) = (
-            reverse_resp.swap_tree.refund_leaf.output.clone(),
-            LeafVersion::from_consensus(reverse_resp.swap_tree.refund_leaf.version).unwrap(),
+            ScriptBuf::from_hex(&reverse_resp.swap_tree.refund_leaf.output.clone())?,
+            LeafVersion::from_consensus(reverse_resp.swap_tree.refund_leaf.version)?,
         );
 
         let taproot_builder = taproot_builder

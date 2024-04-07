@@ -158,6 +158,12 @@ impl BoltzApiClientV2 {
         )?)
     }
 
+    pub fn get_swap_tx(&self, id: &String) -> Result<SubmarineSwapTxResp, Error> {
+        Ok(serde_json::from_str(
+            &self.get(&format!("swap/submarine/{}/transaction", id))?,
+        )?)
+    }
+
     pub fn get_reverse_partial_sig(
         &self,
         id: &String,
@@ -237,6 +243,7 @@ pub struct CreateSwapResponse {
     pub expected_amount: u64,
     pub id: String,
     pub swap_tree: SwapTree,
+    pub blinding_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,7 +256,7 @@ pub struct SwapTree {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Leaf {
-    pub output: ScriptBuf,
+    pub output: String,
     pub version: u8,
 }
 
@@ -290,6 +297,7 @@ pub struct ReverseResp {
     pub refund_public_key: PublicKey,
     pub timeout_block_height: u32,
     pub onchain_amount: u32,
+    pub blinding_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -298,6 +306,15 @@ pub struct ReverseSwapTxResp {
     pub id: String,
     pub hex: String,
     pub timeout_block_height: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmarineSwapTxResp {
+    pub id: String,
+    pub hex: String,
+    pub timeout_block_height: u32,
+    pub timeout_eta: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
