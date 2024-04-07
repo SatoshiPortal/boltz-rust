@@ -175,6 +175,18 @@ impl From<bitcoin::taproot::TaprootError> for Error {
     }
 }
 
+impl From<elements::taproot::TaprootError> for Error {
+    fn from(value: elements::taproot::TaprootError) -> Self {
+        Self::Taproot(value.to_string())
+    }
+}
+
+impl From<elements::taproot::TaprootBuilderError> for Error {
+    fn from(value: elements::taproot::TaprootBuilderError) -> Self {
+        Self::Taproot(value.to_string())
+    }
+}
+
 impl From<bitcoin::taproot::TaprootBuilderError> for Error {
     fn from(value: bitcoin::taproot::TaprootBuilderError) -> Self {
         Self::Taproot(value.to_string())
