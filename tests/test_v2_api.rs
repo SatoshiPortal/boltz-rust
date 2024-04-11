@@ -28,7 +28,7 @@ fn test_v2_reverse() {
 
     let mut claim_addrs_str = String::new();
 
-    println!("Enter a claim address");
+    println!("Etenr a claim address");
     std::io::stdin().read_line(&mut claim_addrs_str).unwrap();
 
     let claim_addrs_str = claim_addrs_str.trim();

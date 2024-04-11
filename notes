@@ -1,0 +1,57 @@
+Submarine script
+ swap_tree: SwapTree {
+        claim_leaf: Leaf {
+            output: Script(
+                OP_HASH160
+                OP_PUSHBYTES_20
+                f60cae49c06b7a5bf6863afa72c36a518d39d3c1
+                OP_EQUALVERIFY
+                OP_PUSHBYTES_32
+                d9fa65e27683dd2f1924e93508e5e99133e268c578733263eb7a891f6778a43a
+                OP_CHECKSIG
+                ),
+                version: 192
+            },
+        refund_leaf: Leaf {
+            output: Script(
+                OP_PUSHBYTES_32 6cbcb0a7c0aa1721a81032e5af6bbfb0e6cc6eede4bef89b708ac2b833ebad5d
+                OP_CHECKSIGVERIFY
+                OP_PUSHBYTES_2 c900
+                OP_CLTV),
+                version: 192
+                }
+            }
+        }
+
+Reverse script
+SwapTree {
+    claim_leaf: Leaf {
+        output: Script(
+            OP_SIZE
+            OP_PUSHBYTES_1 20
+            OP_EQUALVERIFY
+            OP_HASH160
+            OP_PUSHBYTES_20 3aa2291d2c9fb830bb54d228540dbdac9d1bbe89
+            OP_EQUALVERIFY
+            OP_PUSHBYTES_32 fbc14e4c2fda02edd592b9fe24377e2fc1123c0d3b378641ae6ef14aba0c785e
+            OP_CHECKSIG
+            ),
+        version: 192
+        },
+    refund_leaf: Leaf {
+        output: Script(
+            OP_PUSHBYTES_32 5578a38b772461f2481b2a9c6f6802419b11282fb3719cde6af337c077e3d5f3
+            OP_CHECKSIGVERIFY
+            OP_PUSHBYTES_2 3b01
+            OP_CLTVscvrt
+            ),
+        version: 192
+        }
+    }
+submarine swap
+claim script: a914da623700c30db9c59a6979ea3e399ba5b24740a28820c82b90c7f7b772dc424354245ab597ff0f06bea80caeb443c7f8c888c460fdfdac
+refund script: 20fbdaef583b0e79b058c99e180a7bab334bc8267f07409554073c919d285aae87ad02c900b1
+
+reverse swap
+claim script: 82012088a91477bf3bc6b6b86fdd138f886bee0d6f807f89f04e88203e0ff1af3a7d8c9626838ae90e04aa5bac2ecc161138441157bf9b3c4a790affac
+refund script: 204d0ec2790580f2f22b2b6e7e56ca30962ea2395f01cb563afe24440e3117fc55ad023b01b1

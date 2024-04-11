@@ -10,12 +10,12 @@ use boltz_client::util::secrets::Preimage;
 use boltz_client::{BtcSwapScript, BtcSwapTx};
 use boltz_client::{SwapTxKind, SwapType};
 mod test_framework;
-use test_framework::TestFramework;
+use test_framework::BtcTestFramework;
 
 #[test]
 fn test_reverse_claim_regtest() {
     // Init test framework and get a test-wallet
-    let test_framework = TestFramework::init();
+    let test_framework = BtcTestFramework::init();
 
     // Generate a random preimage and hash it.
     let preimage = Preimage::new();

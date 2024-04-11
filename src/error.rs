@@ -13,6 +13,7 @@ pub enum Error {
     IO(std::io::Error),
     Bolt11(lightning_invoice::ParseOrSemanticError),
     LiquidEncode(elements::encode::Error),
+    BitcoinEncode(bitcoin::consensus::encode::Error),
     Blind(String),
     ConfidentialTx(elements::ConfidentialTxOutError),
     BIP32(bitcoin::bip32::Error),
@@ -214,5 +215,11 @@ impl From<elements::secp256k1_zkp::ParseError> for Error {
 impl From<elements::secp256k1_zkp::MusigSignError> for Error {
     fn from(value: elements::secp256k1_zkp::MusigSignError) -> Self {
         Self::Musig2(value.to_string())
+    }
+}
+
+impl From<bitcoin::consensus::encode::Error> for Error {
+    fn from(value: bitcoin::consensus::encode::Error) -> Self {
+        Self::BitcoinEncode(value)
     }
 }

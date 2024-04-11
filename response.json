@@ -1,0 +1,19 @@
+{
+    "acceptZeroConf": Bool(false),
+    "address": String("tb1p5v74h2kypfneqqhf396862z0metpz2n570eg8tn4whvwpuk252yq0d27tf"),
+    "bip21": String("bitcoin:tb1p5v74h2kypfneqqhf396862z0metpz2n570eg8tn4whvwpuk252yq0d27tf?amount=0.00060362&label=Send%20to%20BTC%20lightning"),
+    "claimPublicKey": String("022f930ccf849e47d03a16d0dbd75d3a0d5238a58a09dfecbb9e1d7d2ffd0b4e1d"),
+    "expectedAmount": Number(60362),
+    "id": String("BMwKUcQLYSUp"),
+    "swapTree": Object {
+        "claimLeaf": Object {
+            "output": String("a914b7166f1895402af1bbd5a0a382240fb97e63b9dc88202f930ccf849e47d03a16d0dbd75d3a0d5238a58a09dfecbb9e1d7d2ffd0b4e1dac"),
+            "version": Number(192),
+        },
+        "refundLeaf": Object {
+            "output": String("2056cf3a2eb507ae020c05186f4457ded331aada2e034d9b4e66b9090ec45e40afad036e6527b1"),
+            "version": Number(192),
+        },
+    },
+    "timeoutBlockHeight": Number(2581870),
+}

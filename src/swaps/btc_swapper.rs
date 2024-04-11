@@ -568,7 +568,7 @@ impl BtcSwapper {
 
         let invoice = Bolt11Invoice::from_str(&data.invoice).unwrap();
 
-        let create_swap_response = self.api.post_swap_req(data).unwrap();
+        let create_swap_response = self.api.post_swap_req(&data).unwrap();
 
         log::info!("Got Swap Response from Boltz server");
 

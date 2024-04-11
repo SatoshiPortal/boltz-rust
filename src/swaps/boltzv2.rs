@@ -121,7 +121,7 @@ impl BoltzApiClientV2 {
 
     pub fn post_swap_req(
         &self,
-        swap_request: CreateSwapRequest,
+        swap_request: &CreateSwapRequest,
     ) -> Result<CreateSwapResponse, Error> {
         let data = serde_json::to_value(swap_request)?;
         Ok(serde_json::from_str(&self.post("swap/submarine", data)?)?)

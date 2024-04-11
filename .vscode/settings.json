@@ -1,0 +1,9 @@
+{
+    "rust-analyzer.diagnostics.useRustcErrorCode": false,
+    "accessibility.signals.lineHasError": {
+        "announcement": "auto"
+    },
+    "cSpell.words": [
+        "Keypair"
+    ]
+}
