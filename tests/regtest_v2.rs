@@ -295,7 +295,7 @@ fn lbtc_submarine_refund() {
     };
 
     // Send coin the swapscript address and confirm tx
-    let swap_addrs = swap_script.to_address(Chain::LiquidTestnet).unwrap();
+    let swap_addrs = swap_script.to_address(Chain::LiquidRegtest).unwrap();
     test_framework.send_coins(&swap_addrs, Amount::from_sat(10000));
     test_framework.generate_blocks(1);
 

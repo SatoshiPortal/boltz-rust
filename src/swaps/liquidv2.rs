@@ -553,29 +553,26 @@ impl LBtcSwapTxV2 {
 
         let secp = Secp256k1::new();
 
-        // Unblind the funding utxo
-        let unblinded_utxo = self
+        let unblined_utxo = self
             .funding_utxo
             .unblind(&secp, self.swap_script.blinding_key.secret_key())?;
+        let asset_id = unblined_utxo.asset;
+        let out_abf = AssetBlindingFactor::new(&mut thread_rng());
+        let exp_asset = Asset::Explicit(asset_id);
 
-        let output_value = Amount::from_sat(unblinded_utxo.value) - absolute_fees;
-        let exp_asset = Asset::Explicit(unblinded_utxo.asset);
-        let exp_value = elements::confidential::Value::Explicit(output_value.to_sat());
+        let (blinded_asset, asset_surjection_proof) =
+            exp_asset.blind(&mut thread_rng(), &secp, out_abf, &[unblined_utxo])?;
 
-        // Create new Blinding Factors
-        let asset_bf = AssetBlindingFactor::new(&mut thread_rng());
-        let msg = elements::RangeProofMessage {
-            asset: unblinded_utxo.asset,
-            bf: asset_bf,
-        };
-        let value_bf = ValueBlindingFactor::last(
+        let output_value = Amount::from_sat(unblined_utxo.value) - absolute_fees;
+
+        let final_vbf = ValueBlindingFactor::last(
             &secp,
             output_value.to_sat(),
-            asset_bf,
+            out_abf,
             &[(
-                unblinded_utxo.value,
-                unblinded_utxo.asset_bf,
-                unblinded_utxo.value_bf,
+                unblined_utxo.value,
+                unblined_utxo.asset_bf,
+                unblined_utxo.value_bf,
             )],
             &[(
                 absolute_fees.to_sat(),
@@ -583,35 +580,31 @@ impl LBtcSwapTxV2 {
                 ValueBlindingFactor::zero(),
             )],
         );
+        let explicit_value = elements::confidential::Value::Explicit(output_value.to_sat());
+        let msg = elements::RangeProofMessage {
+            asset: asset_id,
+            bf: out_abf,
+        };
+        let ephemeral_sk = SecretKey::new(&mut thread_rng());
 
-        // Blind the Value
-        let blinding_key = self.output_address.blinding_pubkey.ok_or(Error::Protocol(
-            "We can only send to blinded address.".to_string(),
-        ))?;
-
-        let (blinded_value, nonce, range_proof) = exp_value.blind(
+        // assuming we always use a blinded address that has an extractable blinding pub
+        let blinding_key = self
+            .output_address
+            .blinding_pubkey
+            .ok_or(Error::Protocol("No blinding key in tx.".to_string()))?;
+        let (blinded_value, nonce, rangeproof) = explicit_value.blind(
             &secp,
-            value_bf,
+            final_vbf,
             blinding_key,
-            SecretKey::new(&mut thread_rng()),
+            ephemeral_sk,
             &self.output_address.script_pubkey(),
             &msg,
         )?;
 
-        // Blind the Asset
-        let (blinded_asset, surjection_proof) = exp_asset.blind(
-            &mut thread_rng(),
-            &secp,
-            AssetBlindingFactor::new(&mut thread_rng()),
-            &[unblinded_utxo],
-        )?;
-
-        // Create the witness and the outputs
         let tx_out_witness = TxOutWitness {
-            surjection_proof: Some(Box::new(surjection_proof)), // from asset blinding
-            rangeproof: Some(Box::new(range_proof)),            // from value blinding
+            surjection_proof: Some(Box::new(asset_surjection_proof)), // from asset blinding
+            rangeproof: Some(Box::new(rangeproof)),                   // from value blinding
         };
-
         let payment_output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
             value: blinded_value,
@@ -619,13 +612,13 @@ impl LBtcSwapTxV2 {
             nonce: nonce,
             witness: tx_out_witness,
         };
-        let fee_output: TxOut = TxOut::new_fee(absolute_fees.to_sat(), unblinded_utxo.asset);
+        let fee_output: TxOut = TxOut::new_fee(absolute_fees.to_sat(), asset_id);
 
         let mut claim_tx = Transaction {
             version: 2,
             lock_time: LockTime::ZERO,
             input: vec![claim_txin],
-            output: vec![fee_output, payment_output],
+            output: vec![payment_output, fee_output],
         };
 
         // If its a cooperative claim, compute the Musig2 Aggregate Signature and use Keypath spending
@@ -749,6 +742,7 @@ impl LBtcSwapTxV2 {
 
             let mut script_witness = Witness::new();
             script_witness.push(final_sig.to_vec());
+            script_witness.push(&preimage.bytes.unwrap());
             script_witness.push(claim_script.as_bytes());
             script_witness.push(control_block.serialize());
 
@@ -856,7 +850,7 @@ impl LBtcSwapTxV2 {
             .filter_map(|i| {
                 let ins = i.unwrap();
                 if let Instruction::PushBytes(bytes) = ins {
-                    if bytes.len() == 3 as usize {
+                    if bytes.len() < 5 as usize {
                         Some(LockTime::from_consensus(bytes_to_u32_little_endian(&bytes)))
                     } else {
                         None
@@ -877,18 +871,13 @@ impl LBtcSwapTxV2 {
 
         let leaf_hash = TapLeafHash::from_script(&refund_script, LeafVersion::default());
 
-        let electrum = ElectrumConfig::default_liquid().build_client()?;
-
-        let genesis_blockhash =
-            elements::BlockHash::from_raw_hash(electrum.block_header(0)?.block_hash().into());
-
         let sighash = SighashCache::new(&refund_tx)
             .taproot_script_spend_signature_hash(
                 0,
                 &Prevouts::All(&[&self.funding_utxo]),
                 leaf_hash,
                 SchnorrSighashType::Default,
-                genesis_blockhash,
+                self.genesis_hash,
             )
             .unwrap();
 
