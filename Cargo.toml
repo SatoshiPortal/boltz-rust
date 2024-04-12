@@ -38,6 +38,7 @@ secp256k1-zkp = {git = "https://github.com/BlockstreamResearch/rust-secp256k1-zk
 
 [dev-dependencies]
 bitcoind = {version = "0.34.1", features = ["25_0"] }
+elementsd = {version  = "0.9.1", features = ["22_1_1"] }
 
 #Empty default feature set, (helpful to generalise in github actions)
 [features]
