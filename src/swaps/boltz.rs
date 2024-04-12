@@ -258,7 +258,8 @@ impl Fees {
     }
     /// Calculate boltz fees for a submarine swap, given the invoice amount
     pub fn submarine_boltz(&self, invoice_amount_sat: u64) -> u64 {
-        let boltz_fee = ((self.percentage_swap_in / 100.0) * invoice_amount_sat as f64).ceil() as u64;
+        let boltz_fee =
+            ((self.percentage_swap_in / 100.0) * invoice_amount_sat as f64).ceil() as u64;
         boltz_fee
     }
     /// Get claim miner fees for a submarine swap
@@ -771,7 +772,7 @@ impl CreateSwapResponse {
                     ))
                 }
             }
-            Chain::Liquid | Chain::LiquidTestnet => {
+            Chain::Liquid | Chain::LiquidTestnet | Chain::LiquidRegtest => {
                 let blinding_key = self.get_blinding_key()?;
                 let boltz_sub_script = LBtcSwapScript::submarine_from_str(
                     &self.get_redeem_script()?,
@@ -869,7 +870,7 @@ impl CreateSwapResponse {
                     Err(Error::Protocol("Script/LockupAddress Mismatch".to_string()))
                 }
             }
-            Chain::Liquid | Chain::LiquidTestnet => {
+            Chain::Liquid | Chain::LiquidTestnet | Chain::LiquidRegtest => {
                 let blinding_key = self.get_blinding_key()?;
                 let boltz_rev_script = LBtcSwapScript::reverse_from_str(
                     &self.get_redeem_script()?,
@@ -1060,7 +1061,8 @@ mod tests {
         let pairs = client.get_pairs().unwrap();
         let btc_pair = pairs.get_btc_pair().unwrap();
         let invoice_amount_sat = 75_000;
-        let base_fees = btc_pair.fees.reverse_boltz(invoice_amount_sat) + btc_pair.fees.reverse_lockup();
+        let base_fees =
+            btc_pair.fees.reverse_boltz(invoice_amount_sat) + btc_pair.fees.reverse_lockup();
         let claim_fee = btc_pair.fees.reverse_claim_estimate();
         println!("CALCULATED FEES: {}", base_fees);
         println!("ONCHAIN LOCKUP: {}", invoice_amount_sat - base_fees);
@@ -1082,7 +1084,10 @@ mod tests {
         );
         let response = client.create_swap(request).unwrap();
         println!("Onchain Amount: {}", response.onchain_amount.unwrap());
-        assert_eq!((invoice_amount_sat - base_fees), response.onchain_amount.unwrap());
+        assert_eq!(
+            (invoice_amount_sat - base_fees),
+            response.onchain_amount.unwrap()
+        );
 
         let _btc_rss =
             response.into_btc_rev_swap_script(&preimage, &claim_key_pair, Chain::Bitcoin);
