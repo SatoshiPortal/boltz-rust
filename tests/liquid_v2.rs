@@ -56,7 +56,9 @@ fn liquid_v2_submarine() {
 
     log::debug!("Swap Response: {:?}", create_swap_response);
 
-    let swap_script = LBtcSwapScriptV2::submarine_from_swap_resp(&create_swap_response).unwrap();
+    let swap_script =
+        LBtcSwapScriptV2::submarine_from_swap_resp(&create_swap_response, refund_public_key)
+            .unwrap();
 
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
@@ -182,6 +184,10 @@ fn bitcoin_v2_reverse() {
     let preimage = Preimage::new();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
     let invoice_amount = 100000;
+    let claim_public_key = PublicKey {
+        compressed: true,
+        inner: our_keys.public_key(),
+    };
 
     // Give a valid claim address or else funds will be lost.
     let claim_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
@@ -191,10 +197,7 @@ fn bitcoin_v2_reverse() {
         from: "BTC".to_string(),
         to: "BTC".to_string(),
         preimage_hash: preimage.sha256,
-        claim_public_key: PublicKey {
-            compressed: true,
-            inner: our_keys.public_key(),
-        },
+        claim_public_key,
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL);
@@ -203,7 +206,8 @@ fn bitcoin_v2_reverse() {
 
     log::debug!("Got Reverse swap response: {:?}", reverse_resp);
 
-    let swap_script = LBtcSwapScriptV2::reverse_from_swap_resp(&reverse_resp).unwrap();
+    let swap_script =
+        LBtcSwapScriptV2::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
 
     // Subscribe to wss status updates
     let mut socket = boltz_api_v2.connect_ws().unwrap();

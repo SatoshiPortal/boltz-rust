@@ -55,6 +55,7 @@ impl BtcSwapScriptV2 {
     /// Create the struct from a submarine swap from create swap response.
     pub fn submarine_from_swap_resp(
         create_swap_response: &CreateSwapResponse,
+        our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
         let claim_script = ScriptBuf::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?;
         let refund_script =
@@ -65,17 +66,13 @@ impl BtcSwapScriptV2 {
 
         let mut last_op = OP_0;
         let mut hashlock = None;
-        let mut reciever_pubkey = None;
         let mut timelock = None;
-        let mut sender_pubkey = None;
 
         for instruction in claim_instructions {
             match instruction {
                 Ok(Instruction::PushBytes(bytes)) => {
                     if bytes.len() == 20 {
                         hashlock = Some(hash160::Hash::from_slice(bytes.as_bytes())?);
-                    } else if bytes.len() == 32 {
-                        reciever_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
                     } else {
                         continue;
                     }
@@ -88,9 +85,7 @@ impl BtcSwapScriptV2 {
             match instruction {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
-                    if bytes.len() == 32 {
-                        sender_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
-                    } else if last_op == OP_CHECKSIGVERIFY {
+                    if last_op == OP_CHECKSIGVERIFY {
                         timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
                             &bytes.as_bytes(),
                         )));
@@ -105,14 +100,8 @@ impl BtcSwapScriptV2 {
         let hashlock =
             hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
 
-        let sender_pubkey = sender_pubkey
-            .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
-
         let timelock =
             timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
-
-        let receiver_pubkey = reciever_pubkey
-            .ok_or_else(|| Error::Protocol("No receiver_pubkey provided".to_string()))?;
 
         let funding_addrs = Address::from_str(&create_swap_response.address)?.assume_checked();
 
@@ -121,14 +110,17 @@ impl BtcSwapScriptV2 {
             // swap_id: create_swap_response.id.clone(),
             funding_addrs: Some(funding_addrs),
             hashlock: hashlock,
-            receiver_pubkey: receiver_pubkey,
+            receiver_pubkey: create_swap_response.claim_public_key,
             locktime: timelock,
-            sender_pubkey: sender_pubkey,
+            sender_pubkey: our_pubkey,
         })
     }
 
     /// Create the struct from a reverse swap create request.
-    pub fn reverse_from_swap_resp(reverse_response: &ReverseResp) -> Result<Self, Error> {
+    pub fn reverse_from_swap_resp(
+        reverse_response: &ReverseResp,
+        our_pubkey: PublicKey,
+    ) -> Result<Self, Error> {
         let claim_script = ScriptBuf::from_hex(&reverse_response.swap_tree.claim_leaf.output)?;
         let refund_script = ScriptBuf::from_hex(&reverse_response.swap_tree.refund_leaf.output)?;
 
@@ -137,17 +129,13 @@ impl BtcSwapScriptV2 {
 
         let mut last_op = OP_0;
         let mut hashlock = None;
-        let mut receiver_pubkey = None;
         let mut timelock = None;
-        let mut sender_pubkey = None;
 
         for instruction in claim_instructions {
             match instruction {
                 Ok(Instruction::PushBytes(bytes)) => {
                     if bytes.len() == 20 {
                         hashlock = Some(hash160::Hash::from_slice(bytes.as_bytes())?);
-                    } else if bytes.len() == 32 {
-                        receiver_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
                     } else {
                         continue;
                     }
@@ -160,9 +148,7 @@ impl BtcSwapScriptV2 {
             match instruction {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
-                    if bytes.len() == 32 {
-                        sender_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
-                    } else if last_op == OP_CHECKSIGVERIFY {
+                    if last_op == OP_CHECKSIGVERIFY {
                         timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
                             &bytes.as_bytes(),
                         )));
@@ -177,14 +163,8 @@ impl BtcSwapScriptV2 {
         let hashlock =
             hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
 
-        let sender_pubkey = sender_pubkey
-            .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
-
         let timelock =
             timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
-
-        let receiver_pubkey = receiver_pubkey
-            .ok_or_else(|| Error::Protocol("No receiver_pubkey provided".to_string()))?;
 
         let funding_addrs = Address::from_str(&reverse_response.lockup_address)?.assume_checked();
 
@@ -193,9 +173,9 @@ impl BtcSwapScriptV2 {
             // swap_id: reverse_response.id.clone(),
             funding_addrs: Some(funding_addrs),
             hashlock: hashlock,
-            receiver_pubkey: receiver_pubkey,
+            receiver_pubkey: our_pubkey,
             locktime: timelock,
-            sender_pubkey: sender_pubkey,
+            sender_pubkey: reverse_response.refund_public_key,
         })
     }
 

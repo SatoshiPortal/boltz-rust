@@ -63,6 +63,7 @@ impl LBtcSwapScriptV2 {
     /// Create the struct from a submarine swap from create swap response.
     pub fn submarine_from_swap_resp(
         create_swap_response: &CreateSwapResponse,
+        our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
         let claim_script = Script::from_str(&create_swap_response.swap_tree.claim_leaf.output)?;
         let refund_script = Script::from_str(&create_swap_response.swap_tree.refund_leaf.output)?;
@@ -72,17 +73,13 @@ impl LBtcSwapScriptV2 {
 
         let mut last_op = OP_0NOTEQUAL;
         let mut hashlock = None;
-        let mut reciever_pubkey = None;
         let mut locktime = None;
-        let mut sender_pubkey = None;
 
         for instruction in claim_instructions {
             match instruction {
                 Ok(Instruction::PushBytes(bytes)) => {
                     if bytes.len() == 20 {
                         hashlock = Some(hash160::Hash::from_slice(bytes)?);
-                    } else if bytes.len() == 32 {
-                        reciever_pubkey = Some(PublicKey::from_slice(bytes)?);
                     } else {
                         continue;
                     }
@@ -95,9 +92,7 @@ impl LBtcSwapScriptV2 {
             match instruction {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
-                    if bytes.len() == 32 {
-                        sender_pubkey = Some(PublicKey::from_slice(bytes)?);
-                    } else if last_op == OP_CHECKSIGVERIFY {
+                    if last_op == OP_CHECKSIGVERIFY {
                         locktime =
                             Some(LockTime::from_consensus(bytes_to_u32_little_endian(&bytes)));
                     } else {
@@ -111,14 +106,8 @@ impl LBtcSwapScriptV2 {
         let hashlock =
             hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
 
-        let sender_pubkey = sender_pubkey
-            .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
-
         let locktime =
             locktime.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
-
-        let receiver_pubkey = reciever_pubkey
-            .ok_or_else(|| Error::Protocol("No receiver_pubkey provided".to_string()))?;
 
         let funding_addrs = Address::from_str(&create_swap_response.address)?;
 
@@ -132,15 +121,18 @@ impl LBtcSwapScriptV2 {
             swap_type: SwapType::Submarine,
             funding_addrs: Some(funding_addrs),
             hashlock,
-            receiver_pubkey,
+            receiver_pubkey: create_swap_response.claim_public_key,
             locktime,
-            sender_pubkey,
+            sender_pubkey: our_pubkey,
             blinding_key,
         })
     }
 
     /// Create the struct from a reverse swap create request.
-    pub fn reverse_from_swap_resp(reverse_response: &ReverseResp) -> Result<Self, Error> {
+    pub fn reverse_from_swap_resp(
+        reverse_response: &ReverseResp,
+        our_pubkey: PublicKey,
+    ) -> Result<Self, Error> {
         let claim_script = Script::from_str(&reverse_response.swap_tree.claim_leaf.output)?;
         let refund_script = Script::from_str(&reverse_response.swap_tree.refund_leaf.output)?;
 
@@ -149,17 +141,13 @@ impl LBtcSwapScriptV2 {
 
         let mut last_op = OP_0NOTEQUAL;
         let mut hashlock = None;
-        let mut reciever_pubkey = None;
         let mut locktime = None;
-        let mut sender_pubkey = None;
 
         for instruction in claim_instructions {
             match instruction {
                 Ok(Instruction::PushBytes(bytes)) => {
                     if bytes.len() == 20 {
                         hashlock = Some(hash160::Hash::from_slice(bytes)?);
-                    } else if bytes.len() == 32 {
-                        reciever_pubkey = Some(PublicKey::from_slice(bytes)?);
                     } else {
                         continue;
                     }
@@ -172,9 +160,7 @@ impl LBtcSwapScriptV2 {
             match instruction {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
-                    if bytes.len() == 32 {
-                        sender_pubkey = Some(PublicKey::from_slice(bytes)?);
-                    } else if last_op == OP_CHECKSIGVERIFY {
+                    if last_op == OP_CHECKSIGVERIFY {
                         locktime =
                             Some(LockTime::from_consensus(bytes_to_u32_little_endian(&bytes)));
                     } else {
@@ -188,14 +174,8 @@ impl LBtcSwapScriptV2 {
         let hashlock =
             hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
 
-        let sender_pubkey = sender_pubkey
-            .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
-
         let locktime =
             locktime.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
-
-        let receiver_pubkey = reciever_pubkey
-            .ok_or_else(|| Error::Protocol("No receiver_pubkey provided".to_string()))?;
 
         let funding_addrs = Address::from_str(&reverse_response.lockup_address)?;
 
@@ -209,9 +189,9 @@ impl LBtcSwapScriptV2 {
             swap_type: SwapType::Submarine,
             funding_addrs: Some(funding_addrs),
             hashlock,
-            receiver_pubkey,
+            receiver_pubkey: our_pubkey,
             locktime,
-            sender_pubkey,
+            sender_pubkey: reverse_response.refund_public_key,
             blinding_key,
         })
     }

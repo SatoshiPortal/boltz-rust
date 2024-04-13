@@ -37,7 +37,7 @@ fn bitcoin_v2_submarine() {
     };
 
     // Set a new invoice string and refund address for each test.
-    let invoice = "lntb650u1pjut6cfpp5h7dgn6wghmsm8dfky9cjzrlyf5c2xaszk2lxamfqm2w4eurevpwqdq8d3skk6qxqyjw5qcqp2sp5nyk5mtwjf250uv0uf2l2trhyycefndu868dya04zlrvw5gvaev2srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssqva5tvj5gxfsdmc84hvreme8djgwj3rqr37kwtsa6qttgwzhe7s0yfy482afyje45ppualmatfwnmlmk2py7wc7l3l849jl7vdpa86aqqxmqmws".to_string();
+    let invoice = "lntb500u1pnp5fcppp5cyk7eadg2qvjtvzn7g8mgu53t0ecul5ds6ddwxdn5zc3lzu9w8rsdqgv9ekgumyxqyjw5qcqp2sp5ejghc2nlheeqqdr5cx2euklk3npj8wmmmrmmvlsuq2jrm3h7nw0srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssqcpa468v9u58qu32u9lmejca74hueguu6ffgucka4yrk2u6a5gdrkd96lunfdw2ls43y8qpgcj3z5647rq5skxf56vrhyj6jn03zyssspjh4njf".to_string();
     let refund_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
 
     // Initiate the swap with Boltz
@@ -56,7 +56,9 @@ fn bitcoin_v2_submarine() {
 
     log::debug!("Swap Response: {:?}", create_swap_response);
 
-    let swap_script = BtcSwapScriptV2::submarine_from_swap_resp(&create_swap_response).unwrap();
+    let swap_script =
+        BtcSwapScriptV2::submarine_from_swap_resp(&create_swap_response, refund_public_key)
+            .unwrap();
 
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
@@ -184,6 +186,10 @@ fn bitcoin_v2_reverse() {
     let preimage = Preimage::new();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
     let invoice_amount = 100000;
+    let claim_public_key = PublicKey {
+        compressed: true,
+        inner: our_keys.public_key(),
+    };
 
     // Give a valid claim address or else funds will be lost.
     let claim_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
@@ -193,10 +199,7 @@ fn bitcoin_v2_reverse() {
         from: "BTC".to_string(),
         to: "BTC".to_string(),
         preimage_hash: preimage.sha256,
-        claim_public_key: PublicKey {
-            compressed: true,
-            inner: our_keys.public_key(),
-        },
+        claim_public_key,
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL);
@@ -205,7 +208,8 @@ fn bitcoin_v2_reverse() {
 
     log::debug!("Got Reverse swap response: {:?}", reverse_resp);
 
-    let swap_script = BtcSwapScriptV2::reverse_from_swap_resp(&reverse_resp).unwrap();
+    let swap_script =
+        BtcSwapScriptV2::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
 
     // Subscribe to wss status updates
     let mut socket = boltz_api_v2.connect_ws().unwrap();
