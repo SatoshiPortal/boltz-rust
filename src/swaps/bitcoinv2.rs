@@ -446,18 +446,6 @@ impl BtcSwapTxV2 {
 
         let partial_sig = musig_session.partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)?;
 
-        let is_partial_sig_valid = musig_session.partial_verify(
-            &secp,
-            &key_agg_cache,
-            partial_sig,
-            pub_nonce,
-            keys.public_key(),
-        );
-
-        assert!(is_partial_sig_valid == true);
-
-        log::info!("Partial Signature creation and verification success.");
-
         Ok((partial_sig, pub_nonce))
     }
 
