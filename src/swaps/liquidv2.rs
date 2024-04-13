@@ -463,6 +463,15 @@ impl LBtcSwapTxV2 {
 
         let mut key_agg_cache = MusigKeyAggCache::new(&secp, &pubkeys);
 
+        let tweak = SecretKey::from_slice(
+            self.swap_script
+                .taproot_spendinfo()?
+                .tap_tweak()
+                .as_byte_array(),
+        )?;
+
+        let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+
         let session_id = MusigSessionId::new(&mut thread_rng());
 
         let msg = Message::from_digest_slice(
@@ -621,6 +630,15 @@ impl LBtcSwapTxV2 {
                     self.swap_script.sender_pubkey.inner,
                 ],
             );
+
+            let tweak = SecretKey::from_slice(
+                self.swap_script
+                    .taproot_spendinfo()?
+                    .tap_tweak()
+                    .as_byte_array(),
+            )?;
+
+            let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
 
             let session_id = MusigSessionId::new(&mut thread_rng());
 

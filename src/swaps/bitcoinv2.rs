@@ -4,7 +4,7 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::key::rand::rngs::OsRng;
 use bitcoin::key::rand::{thread_rng, RngCore};
 use bitcoin::script::{PushBytes, PushBytesBuf};
-use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
+use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
 use bitcoin::sighash::Prevouts;
 use bitcoin::taproot::{LeafVersion, Signature, TaprootBuilder, TaprootSpendInfo};
 use bitcoin::transaction::Version;
@@ -416,6 +416,15 @@ impl BtcSwapTxV2 {
 
         let mut key_agg_cache = MusigKeyAggCache::new(&secp, &pubkeys);
 
+        let tweak = SecretKey::from_slice(
+            self.swap_script
+                .taproot_spendinfo()?
+                .tap_tweak()
+                .as_byte_array(),
+        )?;
+
+        let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+
         let session_id = MusigSessionId::new(&mut thread_rng());
 
         let msg = Message::from_digest_slice(
@@ -563,6 +572,15 @@ impl BtcSwapTxV2 {
                     self.swap_script.sender_pubkey.inner,
                 ],
             );
+
+            let tweak = SecretKey::from_slice(
+                self.swap_script
+                    .taproot_spendinfo()?
+                    .tap_tweak()
+                    .as_byte_array(),
+            )?;
+
+            let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
 
             let session_id = MusigSessionId::new(&mut thread_rng());
 
