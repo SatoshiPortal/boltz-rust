@@ -649,7 +649,7 @@ impl LBtcSwapTxV2 {
                 .nonce_gen(&secp, session_id, keys.public_key(), msg, Some(extra_rand))
                 .unwrap();
 
-            // Step 7: Get boltz's partail sig
+            // Step 7: Get boltz's partial sig
             let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
             let partial_sig_resp = boltz_api
                 .get_reverse_partial_sig(&swap_id, &preimage, &pub_nonce, &claim_tx_hex)
@@ -668,17 +668,6 @@ impl LBtcSwapTxV2 {
 
             let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
 
-            let our_partial_sig = musig_session
-                .partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)
-                .unwrap();
-
-            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
-
-            let final_schnorr_sig = SchnorrSig {
-                sig: schnorr_sig,
-                hash_ty: SchnorrSighashType::Default,
-            };
-
             // Verify the sigs.
             let boltz_partial_sig_verify = musig_session.partial_verify(
                 &secp,
@@ -689,6 +678,17 @@ impl LBtcSwapTxV2 {
             );
 
             assert!(boltz_partial_sig_verify == true);
+
+            let our_partial_sig = musig_session
+                .partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)
+                .unwrap();
+
+            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
+
+            let final_schnorr_sig = SchnorrSig {
+                sig: schnorr_sig,
+                hash_ty: SchnorrSighashType::Default,
+            };
 
             let output_key = self.swap_script.taproot_spendinfo()?.output_key();
 

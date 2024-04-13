@@ -611,13 +611,16 @@ impl BtcSwapTxV2 {
 
             let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
 
-            musig_session.partial_verify(
+            // Verify the Boltz's sig.
+            let boltz_partial_sig_verify = musig_session.partial_verify(
                 &secp,
                 &key_agg_cache,
                 boltz_partial_sig,
                 boltz_public_nonce,
                 self.swap_script.sender_pubkey.inner,
             );
+
+            assert!(boltz_partial_sig_verify == true);
 
             let our_partial_sig = musig_session
                 .partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)
@@ -629,17 +632,6 @@ impl BtcSwapTxV2 {
                 sig: schnorr_sig,
                 hash_ty: TapSighashType::Default,
             };
-
-            // Verify the sigs.
-            let boltz_partial_sig_verify = musig_session.partial_verify(
-                &secp,
-                &key_agg_cache,
-                boltz_partial_sig,
-                boltz_public_nonce,
-                self.swap_script.sender_pubkey.inner,
-            );
-
-            assert!(boltz_partial_sig_verify == true);
 
             let output_key = self.swap_script.taproot_spendinfo()?.output_key();
 
