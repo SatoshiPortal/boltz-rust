@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
     network::electrum::ElectrumConfig,
@@ -261,6 +261,8 @@ fn bitcoin_v2_reverse() {
 
                     if update.status == "transaction.mempool" {
                         log::info!("Boltz broadcasted funding tx");
+
+                        std::thread::sleep(Duration::from_secs(30));
 
                         let claim_tx = BtcSwapTxV2::new_claim(
                             swap_script.clone(),
