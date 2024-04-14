@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
     network::electrum::ElectrumConfig,
@@ -177,7 +177,7 @@ fn liquid_v2_submarine() {
 
 #[test]
 #[ignore = "Requires testnet invoice and refund address"]
-fn bitcoin_v2_reverse() {
+fn liquid_v2_reverse() {
     setup_logger();
 
     let secp = Secp256k1::new();
@@ -200,7 +200,7 @@ fn bitcoin_v2_reverse() {
         claim_public_key,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
 
@@ -259,6 +259,8 @@ fn bitcoin_v2_reverse() {
 
                     if update.status == "transaction.mempool" {
                         log::info!("Boltz broadcasted funding tx");
+
+                        std::thread::sleep(Duration::from_secs(15));
 
                         let claim_tx = LBtcSwapTxV2::new_claim(
                             swap_script.clone(),

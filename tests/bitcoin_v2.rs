@@ -2,12 +2,9 @@ use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
     network::electrum::ElectrumConfig,
-    swaps::{
-        boltz::BOLTZ_TESTNET_URL,
-        boltzv2::{
-            BoltzApiClientV2, CreateReverseReq, CreateSwapRequest, Subscription, SwapUpdate,
-            BOLTZ_TESTNET_URL_V2,
-        },
+    swaps::boltzv2::{
+        BoltzApiClientV2, CreateReverseReq, CreateSwapRequest, Subscription, SwapUpdate,
+        BOLTZ_TESTNET_URL_V2,
     },
     util::{secrets::Preimage, setup_logger},
     Bolt11Invoice, BtcSwapScriptV2, BtcSwapTxV2, Secp256k1,
@@ -202,7 +199,7 @@ fn bitcoin_v2_reverse() {
         claim_public_key,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
 
@@ -262,7 +259,7 @@ fn bitcoin_v2_reverse() {
                     if update.status == "transaction.mempool" {
                         log::info!("Boltz broadcasted funding tx");
 
-                        std::thread::sleep(Duration::from_secs(30));
+                        std::thread::sleep(Duration::from_secs(15));
 
                         let claim_tx = BtcSwapTxV2::new_claim(
                             swap_script.clone(),

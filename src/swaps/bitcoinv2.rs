@@ -346,6 +346,7 @@ pub struct BtcSwapTxV2 {
     // The HTLC utxo in (Outpoint, Amount) Pair
     pub utxo: (OutPoint, TxOut),
 }
+
 impl BtcSwapTxV2 {
     /// Craft a new ClaimTx. Only works for Reverse Swaps.
     /// Returns None, if the HTLC utxo doesn't exist for the swap.

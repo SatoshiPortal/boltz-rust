@@ -65,8 +65,8 @@ impl LBtcSwapScriptV2 {
         create_swap_response: &CreateSwapResponse,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
-        let claim_script = Script::from_str(&create_swap_response.swap_tree.claim_leaf.output)?;
-        let refund_script = Script::from_str(&create_swap_response.swap_tree.refund_leaf.output)?;
+        let claim_script = Script::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?;
+        let refund_script = Script::from_hex(&create_swap_response.swap_tree.refund_leaf.output)?;
 
         let claim_instructions = claim_script.instructions();
         let refund_instructions = refund_script.instructions();
@@ -133,8 +133,8 @@ impl LBtcSwapScriptV2 {
         reverse_response: &ReverseResp,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
-        let claim_script = Script::from_str(&reverse_response.swap_tree.claim_leaf.output)?;
-        let refund_script = Script::from_str(&reverse_response.swap_tree.refund_leaf.output)?;
+        let claim_script = Script::from_hex(&reverse_response.swap_tree.claim_leaf.output)?;
+        let refund_script = Script::from_hex(&reverse_response.swap_tree.refund_leaf.output)?;
 
         let claim_instructions = claim_script.instructions();
         let refund_instructions = refund_script.instructions();
@@ -186,7 +186,7 @@ impl LBtcSwapScriptV2 {
         let blinding_key = ZKKeyPair::from_seckey_str(&Secp256k1::new(), blinding_str)?;
 
         Ok(Self {
-            swap_type: SwapType::Submarine,
+            swap_type: SwapType::ReverseSubmarine,
             funding_addrs: Some(funding_addrs),
             hashlock,
             receiver_pubkey: our_pubkey,
