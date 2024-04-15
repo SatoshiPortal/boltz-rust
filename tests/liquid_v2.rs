@@ -2,13 +2,12 @@ use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
     network::electrum::ElectrumConfig,
-    swaps::{
-        boltz::BOLTZ_TESTNET_URL,
+    swaps::
         boltzv2::{
             BoltzApiClientV2, CreateReverseReq, CreateSwapRequest, Subscription, SwapUpdate,
             BOLTZ_TESTNET_URL_V2,
         },
-    },
+    
     util::{secrets::Preimage, setup_logger},
     Bolt11Invoice, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1,
 };
