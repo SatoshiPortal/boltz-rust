@@ -75,7 +75,7 @@ pub struct SwapResponse {
     lbtc: HashMap<String, SwapParams>,
 }
 
-/// Reference Documnetation: https://docs.boltz.exchange/v/api/
+/// Reference Documnetation: https://api.boltz.exchange/swagger
 pub struct BoltzApiClientV2 {
     base_url: String,
 }
@@ -121,7 +121,7 @@ impl BoltzApiClientV2 {
 
     pub fn post_swap_req(
         &self,
-        swap_request: CreateSwapRequest,
+        swap_request: &CreateSwapRequest,
     ) -> Result<CreateSwapResponse, Error> {
         let data = serde_json::to_value(swap_request)?;
         Ok(serde_json::from_str(&self.post("swap/submarine", data)?)?)
@@ -158,6 +158,12 @@ impl BoltzApiClientV2 {
         )?)
     }
 
+    pub fn get_swap_tx(&self, id: &String) -> Result<SubmarineSwapTxResp, Error> {
+        Ok(serde_json::from_str(
+            &self.get(&format!("swap/submarine/{}/transaction", id))?,
+        )?)
+    }
+
     pub fn get_reverse_partial_sig(
         &self,
         id: &String,
@@ -187,7 +193,7 @@ impl BoltzApiClientV2 {
 
         let chain = match chain {
             Chain::Bitcoin | Chain::BitcoinRegtest | Chain::BitcoinTestnet => "BTC",
-            Chain::Liquid | Chain::LiquidTestnet => "L-BTC",
+            Chain::Liquid | Chain::LiquidTestnet | Chain::LiquidRegtest => "L-BTC",
         };
 
         let end_point = format!("chain/{}/transaction", chain);
@@ -237,6 +243,7 @@ pub struct CreateSwapResponse {
     pub expected_amount: u64,
     pub id: String,
     pub swap_tree: SwapTree,
+    pub blinding_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,7 +256,7 @@ pub struct SwapTree {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Leaf {
-    pub output: ScriptBuf,
+    pub output: String,
     pub version: u8,
 }
 
@@ -290,6 +297,7 @@ pub struct ReverseResp {
     pub refund_public_key: PublicKey,
     pub timeout_block_height: u32,
     pub onchain_amount: u32,
+    pub blinding_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -298,6 +306,15 @@ pub struct ReverseSwapTxResp {
     pub id: String,
     pub hex: String,
     pub timeout_block_height: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmarineSwapTxResp {
+    pub id: String,
+    pub hex: String,
+    pub timeout_block_height: u32,
+    pub timeout_eta: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
