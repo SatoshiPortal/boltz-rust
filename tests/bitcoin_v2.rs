@@ -34,7 +34,7 @@ fn bitcoin_v2_submarine() {
     };
 
     // Set a new invoice string and refund address for each test.
-    let invoice = "lntb500u1pnp5fcppp5cyk7eadg2qvjtvzn7g8mgu53t0ecul5ds6ddwxdn5zc3lzu9w8rsdqgv9ekgumyxqyjw5qcqp2sp5ejghc2nlheeqqdr5cx2euklk3npj8wmmmrmmvlsuq2jrm3h7nw0srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssqcpa468v9u58qu32u9lmejca74hueguu6ffgucka4yrk2u6a5gdrkd96lunfdw2ls43y8qpgcj3z5647rq5skxf56vrhyj6jn03zyssspjh4njf".to_string();
+    let invoice = "lntb510u1pnpuwgxpp5arh2aw92wv5vxmndm0704zu2qhj6k8xhg38dlylt2atcc3vcs88qdqgdverzvm2xqyjw5qcqp2sp52vgwm4s6pc2q38hxrma9h4ycgtn4kzaq0we0d4mjtq030fu6zsfqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssq6frgq8gly29thefxg83y57hv564npas5dqc0cslml2q3cj0usrdptqa5p2el3df0c0xc6raxnty06m745l87v4qausuq9xh0wj2x57cpxsxxcz".to_string();
     let refund_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
 
     // Initiate the swap with Boltz
@@ -43,6 +43,7 @@ fn bitcoin_v2_submarine() {
         to: "BTC".to_string(),
         invoice: invoice.to_string(),
         refund_public_key,
+        referral_id: None
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
@@ -197,6 +198,7 @@ fn bitcoin_v2_reverse() {
         to: "BTC".to_string(),
         preimage_hash: preimage.sha256,
         claim_public_key,
+        referral_id: None
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);

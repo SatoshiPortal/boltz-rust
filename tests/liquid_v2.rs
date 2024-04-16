@@ -45,6 +45,7 @@ fn liquid_v2_submarine() {
         to: "BTC".to_string(),
         invoice: invoice.to_string(),
         refund_public_key,
+        referral_id: None
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
@@ -197,6 +198,7 @@ fn liquid_v2_reverse() {
         to: "BTC".to_string(),
         preimage_hash: preimage.sha256,
         claim_public_key,
+        referral_id: None
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);

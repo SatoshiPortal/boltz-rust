@@ -231,6 +231,8 @@ pub struct CreateSwapRequest {
     pub to: String,
     pub invoice: String,
     pub refund_public_key: PublicKey,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub referral_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -285,6 +287,8 @@ pub struct CreateReverseReq {
     pub to: String,
     pub preimage_hash: sha256::Hash,
     pub claim_public_key: PublicKey,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub referral_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
