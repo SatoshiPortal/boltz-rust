@@ -1,4 +1,5 @@
 //!
+//! ### DEPRECATED v1 API. We recommend using v2, taproot API.
 //! ## Estimate fees
 //!
 //! ### Example

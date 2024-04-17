@@ -38,7 +38,7 @@ use elements::secp256k1_zkp::{
     MusigSessionId,
 };
 
-/// Bitcoin swap script helper.
+/// Bitcoin v2 swap script helper.
 // TODO: This should encode the network at global level.
 #[derive(Debug, PartialEq, Clone)]
 pub struct BtcSwapScriptV2 {
@@ -52,7 +52,7 @@ pub struct BtcSwapScriptV2 {
 }
 
 impl BtcSwapScriptV2 {
-    /// Create the struct from a submarine swap from create swap response.
+    /// Create the struct for a submarine swap from boltz create swap response.
     pub fn submarine_from_swap_resp(
         create_swap_response: &CreateSwapResponse,
         our_pubkey: PublicKey,
@@ -130,7 +130,7 @@ impl BtcSwapScriptV2 {
         }
     }
 
-    /// Create the struct from a reverse swap create request.
+    /// Create the struct for a reverse swap from a boltz create response.
     pub fn reverse_from_swap_resp(
         reverse_response: &ReverseResp,
         our_pubkey: PublicKey,
@@ -242,10 +242,10 @@ impl BtcSwapScriptV2 {
 
         let taproot_builder = taproot_builder
             .add_leaf_with_ver(1, self.claim_script(), LeafVersion::TapScript)
-            .unwrap();
+            ?;
         let taproot_builder = taproot_builder
             .add_leaf_with_ver(1, self.refund_script(), LeafVersion::TapScript)
-            .unwrap();
+            ?;
 
         let taproot_spend_info = taproot_builder.finalize(&secp, internal_key).unwrap();
 
@@ -279,8 +279,7 @@ impl BtcSwapScriptV2 {
         Ok(taproot_spend_info)
     }
 
-    /// Get address for the swap script.
-    /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
+    /// Get taproot address for the swap script.
     pub fn to_address(&self, network: Chain) -> Result<Address, Error> {
         let spend_info = self.taproot_spendinfo()?;
         let output_key = spend_info.output_key();
@@ -449,7 +448,7 @@ impl BtcSwapTxV2 {
         let session_id = MusigSessionId::new(&mut thread_rng());
 
         let msg = Message::from_digest_slice(
-            &Vec::from_hex(&claim_tx_response.transaction_hash).unwrap(),
+            &Vec::from_hex(&claim_tx_response.transaction_hash)?,
         )?;
 
         // Step 4: Start the Musig2 Signing session
@@ -535,9 +534,9 @@ impl BtcSwapTxV2 {
                     &Prevouts::All(&[&self.utxo.1]),
                     bitcoin::TapSighashType::Default,
                 )
-                .unwrap();
+                ?;
 
-            let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array()).unwrap();
+            let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
             // Step 2: Get the Public and Secret nonces
 
@@ -559,22 +558,22 @@ impl BtcSwapTxV2 {
 
             let (sec_nonce, pub_nonce) = key_agg_cache
                 .nonce_gen(&secp, session_id, keys.public_key(), msg, Some(extra_rand))
-                .unwrap();
+                ?;
 
             // Step 7: Get boltz's partail sig
             let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
             let partial_sig_resp = boltz_api
                 .get_reverse_partial_sig(&swap_id, &preimage, &pub_nonce, &claim_tx_hex)
-                .unwrap();
+                ?;
 
             let boltz_public_nonce =
-                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce).unwrap())
-                    .unwrap();
+                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)
+                    ?;
 
             let boltz_partial_sig = MusigPartialSignature::from_slice(
-                &Vec::from_hex(&partial_sig_resp.partial_signature).unwrap(),
+                &Vec::from_hex(&partial_sig_resp.partial_signature)?,
             )
-            .unwrap();
+            ?;
 
             // Aggregate Our's and Other's Nonce and start the Musig session.
             let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
@@ -594,7 +593,7 @@ impl BtcSwapTxV2 {
 
             let our_partial_sig = musig_session
                 .partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)
-                .unwrap();
+                ?;
 
             let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
 
@@ -625,9 +624,9 @@ impl BtcSwapTxV2 {
                     leaf_hash,
                     TapSighashType::Default,
                 )
-                .unwrap();
+                ?;
 
-            let msg = Message::from_digest_slice(sighash.as_byte_array()).unwrap();
+            let msg = Message::from_digest_slice(sighash.as_byte_array())?;
 
             let sig = secp.sign_schnorr(&msg, &keys);
 
@@ -727,9 +726,9 @@ impl BtcSwapTxV2 {
                 leaf_hash,
                 TapSighashType::Default,
             )
-            .unwrap();
+            ?;
 
-        let msg = Message::from_digest_slice(sighash.as_byte_array()).unwrap();
+        let msg = Message::from_digest_slice(sighash.as_byte_array())?;
 
         let sig = Secp256k1::new().sign_schnorr(&msg, &keys);
 

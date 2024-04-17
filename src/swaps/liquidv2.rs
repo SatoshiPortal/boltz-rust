@@ -47,7 +47,7 @@ use super::{
     boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateSwapResponse, ReverseResp},
 };
 
-/// Liquid swap script helper.
+/// Liquid v2 swap script helper.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LBtcSwapScriptV2 {
     pub swap_type: SwapType,
@@ -60,7 +60,7 @@ pub struct LBtcSwapScriptV2 {
 }
 
 impl LBtcSwapScriptV2 {
-    /// Create the struct from a submarine swap from create swap response.
+    /// Create the struct for a submarine swap from boltz create response.
     pub fn submarine_from_swap_resp(
         create_swap_response: &CreateSwapResponse,
         our_pubkey: PublicKey,
@@ -128,7 +128,7 @@ impl LBtcSwapScriptV2 {
         })
     }
 
-    /// Create the struct from a reverse swap create request.
+    /// Create the struct for a reverse swap from boltz create response.
     pub fn reverse_from_swap_resp(
         reverse_response: &ReverseResp,
         our_pubkey: PublicKey,
@@ -278,8 +278,7 @@ impl LBtcSwapScriptV2 {
         Ok(taproot_spend_info)
     }
 
-    /// Get address for the swap script.
-    /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
+    /// Get taproot address for the swap script.
     /// Always returns a confidential address
     pub fn to_address(&self, network: Chain) -> Result<EAddress, Error> {
         let taproot_spend_info = self.taproot_spendinfo()?;
@@ -500,7 +499,6 @@ impl LBtcSwapTxV2 {
     }
 
     /// Sign a reverse swap claim transaction.
-    /// Panics if called on a Normal Swap or Refund Tx.
     /// If the claim is cooperative, provide the other party's partial sigs.
     /// If this is None, transaction will be claimed via taproot script path.
     pub fn sign_claim(
@@ -616,7 +614,7 @@ impl LBtcSwapTxV2 {
                 )
                 .unwrap();
 
-            let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array()).unwrap();
+            let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
             let mut key_agg_cache = MusigKeyAggCache::new(
                 &secp,
@@ -640,24 +638,29 @@ impl LBtcSwapTxV2 {
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
 
-            let (sec_nonce, pub_nonce) = key_agg_cache
-                .nonce_gen(&secp, session_id, keys.public_key(), msg, Some(extra_rand))
-                .unwrap();
+            let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
+                &secp,
+                session_id,
+                keys.public_key(),
+                msg,
+                Some(extra_rand),
+            )?;
 
             // Step 7: Get boltz's partial sig
             let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
-            let partial_sig_resp = boltz_api
-                .get_reverse_partial_sig(&swap_id, &preimage, &pub_nonce, &claim_tx_hex)
-                .unwrap();
+            let partial_sig_resp = boltz_api.get_reverse_partial_sig(
+                &swap_id,
+                &preimage,
+                &pub_nonce,
+                &claim_tx_hex,
+            )?;
 
             let boltz_public_nonce =
-                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce).unwrap())
-                    .unwrap();
+                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
 
-            let boltz_partial_sig = MusigPartialSignature::from_slice(
-                &Vec::from_hex(&partial_sig_resp.partial_signature).unwrap(),
-            )
-            .unwrap();
+            let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+                &partial_sig_resp.partial_signature,
+            )?)?;
 
             let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
 
@@ -672,11 +675,12 @@ impl LBtcSwapTxV2 {
                 self.swap_script.sender_pubkey.inner,
             );
 
-            assert!(boltz_partial_sig_verify == true);
+            if (!boltz_partial_sig_verify){
+                return Err(Error::Taproot(("Unable to verify Partial Signature".to_string())))
+            }
 
-            let our_partial_sig = musig_session
-                .partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)
-                .unwrap();
+            let our_partial_sig =
+                musig_session.partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)?;
 
             let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
 
@@ -718,7 +722,7 @@ impl LBtcSwapTxV2 {
                 )
                 .unwrap();
 
-            let msg = Message::from_digest_slice(sighash.as_byte_array()).unwrap();
+            let msg = Message::from_digest_slice(sighash.as_byte_array())?;
 
             let sig = secp.sign_schnorr(&msg, &keys);
 
@@ -877,7 +881,7 @@ impl LBtcSwapTxV2 {
             )
             .unwrap();
 
-        let msg = Message::from_digest_slice(sighash.as_byte_array()).unwrap();
+        let msg = Message::from_digest_slice(sighash.as_byte_array())?;
 
         let sig = secp.sign_schnorr(&msg, &keys);
 
