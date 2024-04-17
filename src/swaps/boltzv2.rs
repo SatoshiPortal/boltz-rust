@@ -23,7 +23,8 @@ use elements::secp256k1_zkp::{
     MusigAggNonce, MusigKeyAggCache, MusigPartialSignature, MusigPubNonce, MusigSession,
     MusigSessionId,
 };
-
+/// Represents the blockchain heights for Bitcoin (BTC) and Liquid (L-BTC).
+/// Typically populated via Boltz API (/chain/heights)
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HeightResponse {
     #[serde(rename = "BTC")]
@@ -44,6 +45,7 @@ pub struct Limits {
     pub maximal_zero_conf: u64,
 }
 
+/// Represents the Swap fees
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Fees {
@@ -67,6 +69,8 @@ pub struct SwapParams {
     pub fees: Fees,
 }
 
+/// Represetnts Swap parameters (like fees and limits) for Bitcoin (BTC) and Liquid (L-BTC)
+/// Typically populated via Boltz API (/swap/submarine)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapResponse {
     #[serde(rename = "BTC")]
@@ -75,12 +79,22 @@ pub struct SwapResponse {
     lbtc: HashMap<String, SwapParams>,
 }
 
-/// Reference Documnetation: https://api.boltz.exchange/swagger
+/// API client for interacting with the Boltz API version 2.
+///
+/// This struct encapsulates the base URL for the API and provides methods
+/// to create and manage swaps, etc.,
+///
+/// Reference Documentation: [Boltz API v2](https://api.boltz.exchange/swagger)
 pub struct BoltzApiClientV2 {
+    /// Typically
+    /// * `https://api.boltz.exchange/v2` for mainnet
+    /// * `https://api.testnet.boltz.exchange/v2` for testnet
     base_url: String,
 }
 
 impl BoltzApiClientV2 {
+
+    // Create a new Boltz API Client
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.to_string(),
@@ -95,30 +109,34 @@ impl BoltzApiClientV2 {
         Ok(socket)
     }
 
-    /// Make a get request. returns the Response
+    /// Make a GET request. returns the Response
     fn get(&self, end_point: &str) -> Result<String, Error> {
         let url = format!("{}/{}", self.base_url, end_point);
         Ok(ureq::get(&url).call()?.into_string()?)
     }
 
-    /// Make a Post request. Returns the Response
+    /// Make a POST request. Returns the Response
     fn post(&self, end_point: &str, data: impl Serialize) -> Result<String, Error> {
         let url = format!("{}/{}", self.base_url, end_point);
         Ok(ureq::post(&url).send_json(data)?.into_string()?)
     }
 
+    /// Get the fee estimation for the swap
     pub fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, Error> {
         Ok(serde_json::from_str(&self.get("chain/fees")?)?)
     }
 
+    /// Get the blockchain heights for Bitcoin and Liquid
     pub fn get_height(&self) -> Result<HeightResponse, Error> {
         Ok(serde_json::from_str(&self.get("chain/heights")?)?)
     }
 
+    /// Get SwapReponse which has fees, limits and other parameters for swaps
     pub fn get_pairs(&self) -> Result<SwapResponse, Error> {
         Ok(serde_json::from_str(&self.get("swap/submarine")?)?)
     }
 
+    /// Create a swap request
     pub fn post_swap_req(
         &self,
         swap_request: &CreateSwapRequest,
@@ -127,11 +145,13 @@ impl BoltzApiClientV2 {
         Ok(serde_json::from_str(&self.post("swap/submarine", data)?)?)
     }
 
+    /// Get the needed information to post a partial signature for a cooperative claim transaction
     pub fn get_claim_tx_details(&self, id: &String) -> Result<ClaimTxResponse, Error> {
         let endpoint = format!("swap/submarine/{}/claim", id);
         Ok(serde_json::from_str(&self.get(&endpoint)?)?)
     }
 
+    /// Sends partial signature for a cooperative claim transaction
     pub fn post_claim_tx_details(
         &self,
         id: &String,
@@ -148,22 +168,26 @@ impl BoltzApiClientV2 {
         Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
     }
 
-    pub fn post_reverse_req(&self, req: CreateReverseReq) -> Result<ReverseResp, Error> {
-        Ok(serde_json::from_str(&self.post("swap/reverse", req)?)?)
-    }
-
-    pub fn get_reverse_tx(&self, id: &String) -> Result<ReverseSwapTxResp, Error> {
-        Ok(serde_json::from_str(
-            &self.get(&format!("swap/reverse/{}/transaction", id))?,
-        )?)
-    }
-
+    /// Get the lockup transaction of a Submarine Swap
     pub fn get_swap_tx(&self, id: &String) -> Result<SubmarineSwapTxResp, Error> {
         Ok(serde_json::from_str(
             &self.get(&format!("swap/submarine/{}/transaction", id))?,
         )?)
     }
 
+    /// Create a reverse swap request
+    pub fn post_reverse_req(&self, req: CreateReverseReq) -> Result<ReverseResp, Error> {
+        Ok(serde_json::from_str(&self.post("swap/reverse", req)?)?)
+    }
+
+    /// Get the lockup transaction of a Reverse Swap
+    pub fn get_reverse_tx(&self, id: &String) -> Result<ReverseSwapTxResp, Error> {
+        Ok(serde_json::from_str(
+            &self.get(&format!("swap/reverse/{}/transaction", id))?,
+        )?)
+    }
+
+    /// Requests a partial signature for a cooperative reverse swap claim transaction
     pub fn get_reverse_partial_sig(
         &self,
         id: &String,
@@ -184,6 +208,7 @@ impl BoltzApiClientV2 {
         Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
     }
 
+    /// Broadcast a transaction in the given network
     pub fn broadcast_tx(&self, chain: Chain, tx_hex: &String) -> Result<Value, Error> {
         let data = json!(
             {
@@ -201,6 +226,9 @@ impl BoltzApiClientV2 {
     }
 }
 
+
+/// Represents information to create partial signature for a cooperative claim transaction
+/// Typically populated via Boltz API (/swap/submarine/{swapId}/claim)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaimTxResponse {
@@ -224,6 +252,7 @@ pub struct ClaimTxData {
     pub fees: Fees,
 }
 
+/// Represents information to create a submarine swap
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSwapRequest {
@@ -235,6 +264,7 @@ pub struct CreateSwapRequest {
     pub referral_id: Option<String>,
 }
 
+/// Represents API response from Boltz on creating a submarine swap
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSwapResponse {
@@ -248,6 +278,7 @@ pub struct CreateSwapResponse {
     pub blinding_key: Option<String>,
 }
 
+///
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SwapTree {
@@ -255,6 +286,7 @@ pub struct SwapTree {
     pub refund_leaf: Leaf,
 }
 
+///
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Leaf {
@@ -262,6 +294,7 @@ pub struct Leaf {
     pub version: u8,
 }
 
+/// Represents a WSS subscription to Boltz for swap updates
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subscription {
     op: String,
@@ -279,6 +312,7 @@ impl Subscription {
     }
 }
 
+/// Represents information to create a reverse swap
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateReverseReq {
@@ -291,6 +325,7 @@ pub struct CreateReverseReq {
     pub referral_id: Option<String>,
 }
 
+/// Represents API response from Boltz on creating a reverse swap
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReverseResp {
@@ -304,6 +339,7 @@ pub struct ReverseResp {
     pub blinding_key: Option<String>,
 }
 
+/// Represents lockup transaction of a Reverse Swap
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReverseSwapTxResp {
@@ -312,6 +348,7 @@ pub struct ReverseSwapTxResp {
     pub timeout_block_height: u32,
 }
 
+/// Represents lockup transaction of a Submarine Swap
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmarineSwapTxResp {
@@ -321,6 +358,7 @@ pub struct SubmarineSwapTxResp {
     pub timeout_eta: u32,
 }
 
+/// Represents a partial signature for a cooperative reverse swap claim transaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReversePartialSig {
@@ -328,12 +366,14 @@ pub struct ReversePartialSig {
     pub partial_signature: String,
 }
 
+/// Represents a status update to a swap, refered by it's ID
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Update {
     pub id: String,
     pub status: String,
 }
 
+/// Represents a swap status update error
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RespError {
     pub id: String,
