@@ -223,3 +223,64 @@ impl From<bitcoin::consensus::encode::Error> for Error {
         Self::BitcoinEncode(value)
     }
 }
+
+impl Error {
+    // Returns the name of the enum variant as a string
+    pub fn name(&self) -> String {
+        match self {
+            Error::Electrum(_) => "Electrum",
+            Error::Hex(_) => "Hex",
+            Error::Protocol(_) => "Protocol",
+            Error::Key(_) => "Key",
+            Error::Address(_) => "Address",
+            Error::Sighash(_) => "Sighash",
+            Error::Secp(_) => "Secp",
+            Error::HTTP(_) => "HTTP",
+            Error::JSON(_) => "JSON",
+            Error::IO(_) => "IO",
+            Error::Bolt11(_) => "Bolt11",
+            Error::LiquidEncode(_) => "LiquidEncode",
+            Error::BitcoinEncode(_) => "BitcoinEncode",
+            Error::Blind(_) => "Blind",
+            Error::ConfidentialTx(_) => "ConfidentialTx",
+            Error::BIP32(_) => "BIP32",
+            Error::BIP39(_) => "BIP39",
+            Error::Hash(_) => "Hash",
+            Error::Locktime(_) => "Locktime",
+            Error::Url(_) => "Url",
+            Error::WebSocket(_) => "WebSocket",
+            Error::Taproot(_) => "Taproot",
+            Error::Musig2(_) => "Musig2",
+        }
+        .to_string()
+    }
+
+    // Returns the error message as a string
+    pub fn message(&self) -> String {
+        match self {
+            Error::Electrum(e) => e.to_string(),
+            Error::Hex(e) => e.clone(),
+            Error::Protocol(e) => e.clone(),
+            Error::Key(e) => e.to_string(),
+            Error::Address(e) => e.clone(),
+            Error::Sighash(e) => e.to_string(),
+            Error::Secp(e) => e.to_string(),
+            Error::HTTP(e) => e.to_string(),
+            Error::JSON(e) => e.to_string(),
+            Error::IO(e) => e.to_string(),
+            Error::Bolt11(e) => e.to_string(),
+            Error::LiquidEncode(e) => e.to_string(),
+            Error::BitcoinEncode(e) => e.to_string(),
+            Error::Blind(e) => e.clone(),
+            Error::ConfidentialTx(e) => e.to_string(),
+            Error::BIP32(e) => e.to_string(),
+            Error::BIP39(e) => e.to_string(),
+            Error::Hash(e) => e.to_string(),
+            Error::Locktime(e) => e.clone(),
+            Error::Url(e) => e.to_string(),
+            Error::WebSocket(e) => e.to_string(),
+            Error::Taproot(e) => e.clone(),
+            Error::Musig2(e) => e.clone(),
+        }
+    }
+}
