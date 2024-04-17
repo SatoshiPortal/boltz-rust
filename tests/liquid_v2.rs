@@ -2,12 +2,10 @@ use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
     network::electrum::ElectrumConfig,
-    swaps::
-        boltzv2::{
-            BoltzApiClientV2, CreateReverseReq, CreateSwapRequest, Subscription, SwapUpdate,
-            BOLTZ_TESTNET_URL_V2,
-        },
-    
+    swaps::boltzv2::{
+        BoltzApiClientV2, CreateReverseReq, CreateSwapRequest, Subscription, SwapUpdate,
+        BOLTZ_TESTNET_URL_V2,
+    },
     util::{secrets::Preimage, setup_logger},
     Bolt11Invoice, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1,
 };
@@ -45,7 +43,7 @@ fn liquid_v2_submarine() {
         to: "BTC".to_string(),
         invoice: invoice.to_string(),
         refund_public_key,
-        referral_id: None
+        referral_id: None,
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
@@ -198,7 +196,7 @@ fn liquid_v2_reverse() {
         to: "BTC".to_string(),
         preimage_hash: preimage.sha256,
         claim_public_key,
-        referral_id: None
+        referral_id: None,
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
