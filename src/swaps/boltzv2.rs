@@ -210,20 +210,6 @@ pub struct ClaimTxResponse {
     pub transaction_hash: String,
 }
 
-/// Various swap parameters associated with different assets.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaimTxData {
-    /// Pair hash, representing an id for an asset-pair swap
-    pub hash: String,
-    /// The exchange rate of the pair
-    pub rate: f64,
-    /// The swap limits
-    pub limits: Limits,
-    /// Total fees required for the swap
-    pub fees: Fees,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSwapRequest {
