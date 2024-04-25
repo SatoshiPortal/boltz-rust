@@ -44,7 +44,8 @@ use elements::secp256k1_zkp::{
 pub struct BtcSwapScriptV2 {
     pub swap_type: SwapType,
     // pub swap_id: String,
-    pub funding_addrs: Option<Address>,
+    pub funding_addrs: Option<Address>, // we should not store this as a field, since we have a method
+    // if we are using it just to recognize regtest, we should consider another strategy
     pub hashlock: hash160::Hash,
     pub receiver_pubkey: PublicKey,
     pub locktime: LockTime,
