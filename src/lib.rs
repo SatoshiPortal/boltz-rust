@@ -12,8 +12,8 @@ pub mod swaps;
 /// utilities (key, preimage, error)
 pub mod util;
 
-pub use bitcoin::{PublicKey,secp256k1::{Keypair, Secp256k1}, Address,blockdata::locktime::absolute::LockTime,hashes::hash160::Hash};
-pub use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
+pub use bitcoin::{PublicKey,secp256k1::{Keypair, Secp256k1}, Address,blockdata::locktime::absolute::LockTime,hashes::hash160::Hash, Amount};
+pub use elements::{secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1}, address::Address as ElementsAddress, locktime::LockTime as ElementsLockTime};
 pub use lightning_invoice::Bolt11Invoice;
 
 pub use swaps::boltz::{SwapTxKind, SwapType};

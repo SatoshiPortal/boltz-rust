@@ -188,12 +188,12 @@ fn liquid_v2_reverse() {
     };
 
     // Give a valid claim address or else funds will be lost.
-    let claim_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
+    let claim_address = "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7".to_string();
 
     let create_reverse_req = CreateReverseRequest {
         invoice_amount,
         from: "BTC".to_string(),
-        to: "BTC".to_string(),
+        to: "L-BTC".to_string(),
         preimage_hash: preimage.sha256,
         claim_public_key,
         referral_id: None,
