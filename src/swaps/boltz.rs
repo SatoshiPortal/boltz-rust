@@ -1058,7 +1058,7 @@ mod tests {
 
     #[test]
     fn test_composite() {
-        let client = BoltzApiClient::new(BOLTZ_MAINNET_URL);
+        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let pairs = client.get_pairs().unwrap();
         let btc_pair = pairs.get_btc_pair().unwrap();
         let invoice_amount_sat = 75_000;
