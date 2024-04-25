@@ -31,7 +31,7 @@ use crate::{
 use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160};
 
 use super::boltz::SwapType;
-use super::boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateSwapResponse, ReverseResp};
+use super::boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateSubmarineResponse, CreateReverseResponse};
 
 use elements::secp256k1_zkp::{
     MusigAggNonce, MusigKeyAggCache, MusigPartialSignature, MusigPubNonce, MusigSession,
@@ -55,7 +55,7 @@ pub struct BtcSwapScriptV2 {
 impl BtcSwapScriptV2 {
     /// Create the struct for a submarine swap from boltz create swap response.
     pub fn submarine_from_swap_resp(
-        create_swap_response: &CreateSwapResponse,
+        create_swap_response: &CreateSubmarineResponse,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
         let claim_script = ScriptBuf::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?;
@@ -133,7 +133,7 @@ impl BtcSwapScriptV2 {
 
     /// Create the struct for a reverse swap from a boltz create response.
     pub fn reverse_from_swap_resp(
-        reverse_response: &ReverseResp,
+        reverse_response: &CreateReverseResponse,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
         let claim_script = ScriptBuf::from_hex(&reverse_response.swap_tree.claim_leaf.output)?;

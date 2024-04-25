@@ -121,8 +121,8 @@ impl BoltzApiClientV2 {
 
     pub fn post_swap_req(
         &self,
-        swap_request: &CreateSwapRequest,
-    ) -> Result<CreateSwapResponse, Error> {
+        swap_request: &CreateSubmarineRequest,
+    ) -> Result<CreateSubmarineResponse, Error> {
         let data = serde_json::to_value(swap_request)?;
         Ok(serde_json::from_str(&self.post("swap/submarine", data)?)?)
     }
@@ -148,7 +148,7 @@ impl BoltzApiClientV2 {
         Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
     }
 
-    pub fn post_reverse_req(&self, req: CreateReverseReq) -> Result<ReverseResp, Error> {
+    pub fn post_reverse_req(&self, req: CreateReverseRequest) -> Result<CreateReverseResponse, Error> {
         Ok(serde_json::from_str(&self.post("swap/reverse", req)?)?)
     }
 
@@ -212,7 +212,7 @@ pub struct ClaimTxResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateSwapRequest {
+pub struct CreateSubmarineRequest {
     pub from: String,
     pub to: String,
     pub invoice: String,
@@ -223,7 +223,7 @@ pub struct CreateSwapRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateSwapResponse {
+pub struct CreateSubmarineResponse {
     accept_zero_conf: bool,
     pub address: String,
     bip21: String,
@@ -267,7 +267,7 @@ impl Subscription {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateReverseReq {
+pub struct CreateReverseRequest {
     pub invoice_amount: u32,
     pub from: String,
     pub to: String,
@@ -279,7 +279,7 @@ pub struct CreateReverseReq {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReverseResp {
+pub struct CreateReverseResponse {
     pub id: String,
     pub invoice: String,
     pub swap_tree: SwapTree,

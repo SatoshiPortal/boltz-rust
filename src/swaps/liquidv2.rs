@@ -44,7 +44,7 @@ use elements::{
 
 use super::{
     boltz::SwapType,
-    boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateSwapResponse, ReverseResp},
+    boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateSubmarineResponse, CreateReverseResponse},
 };
 
 /// Liquid v2 swap script helper.
@@ -62,7 +62,7 @@ pub struct LBtcSwapScriptV2 {
 impl LBtcSwapScriptV2 {
     /// Create the struct for a submarine swap from boltz create response.
     pub fn submarine_from_swap_resp(
-        create_swap_response: &CreateSwapResponse,
+        create_swap_response: &CreateSubmarineResponse,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
         let claim_script = Script::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?;
@@ -130,7 +130,7 @@ impl LBtcSwapScriptV2 {
 
     /// Create the struct for a reverse swap from boltz create response.
     pub fn reverse_from_swap_resp(
-        reverse_response: &ReverseResp,
+        reverse_response: &CreateReverseResponse,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
         let claim_script = Script::from_hex(&reverse_response.swap_tree.claim_leaf.output)?;
