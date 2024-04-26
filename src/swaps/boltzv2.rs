@@ -6,7 +6,7 @@ use bitcoin::{
 use lightning_invoice::Bolt11Invoice;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tungstenite::{connect, stream::MaybeTlsStream, WebSocket};
+use tungstenite::{connect, http::response, stream::MaybeTlsStream, WebSocket};
 use ureq::json;
 
 use crate::{error::Error, network::Chain, util::secrets::Preimage};
@@ -148,7 +148,10 @@ impl BoltzApiClientV2 {
         Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
     }
 
-    pub fn post_reverse_req(&self, req: CreateReverseRequest) -> Result<CreateReverseResponse, Error> {
+    pub fn post_reverse_req(
+        &self,
+        req: CreateReverseRequest,
+    ) -> Result<CreateReverseResponse, Error> {
         Ok(serde_json::from_str(&self.post("swap/reverse", req)?)?)
     }
 
@@ -181,6 +184,24 @@ impl BoltzApiClientV2 {
         );
 
         let endpoint = format!("swap/reverse/{}/claim", id);
+        Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
+    }
+
+    pub fn get_submarine_partial_sig(
+        &self,
+        id: &String,
+        pub_nonce: &MusigPubNonce,
+        refund_tx_hex: &String,
+    ) -> Result<ReversePartialSig, Error> {
+        let data = json!(
+            {
+                "pubNonce": pub_nonce.serialize().to_lower_hex_string(),
+                "transaction": refund_tx_hex,
+                "index": 0
+            }
+        );
+
+        let endpoint = format!("swap/submarine/{}/claim", id);
         Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
     }
 
