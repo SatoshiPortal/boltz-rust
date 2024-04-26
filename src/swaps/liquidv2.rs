@@ -44,7 +44,7 @@ use elements::{
 
 use super::{
     boltz::SwapType,
-    boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateSubmarineResponse, CreateReverseResponse},
+    boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateReverseResponse, CreateSubmarineResponse},
 };
 
 /// Liquid v2 swap script helper.
@@ -675,8 +675,10 @@ impl LBtcSwapTxV2 {
                 self.swap_script.sender_pubkey.inner,
             );
 
-            if (!boltz_partial_sig_verify){
-                return Err(Error::Taproot(("Unable to verify Partial Signature".to_string())))
+            if (!boltz_partial_sig_verify) {
+                return Err(Error::Taproot(
+                    ("Unable to verify Partial Signature".to_string()),
+                ));
             }
 
             let our_partial_sig =

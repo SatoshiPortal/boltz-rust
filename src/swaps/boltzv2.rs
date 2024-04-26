@@ -148,7 +148,10 @@ impl BoltzApiClientV2 {
         Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
     }
 
-    pub fn post_reverse_req(&self, req: CreateReverseRequest) -> Result<CreateReverseResponse, Error> {
+    pub fn post_reverse_req(
+        &self,
+        req: CreateReverseRequest,
+    ) -> Result<CreateReverseResponse, Error> {
         Ok(serde_json::from_str(&self.post("swap/reverse", req)?)?)
     }
 
