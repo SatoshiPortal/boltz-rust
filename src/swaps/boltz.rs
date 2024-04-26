@@ -34,6 +34,9 @@
 //! assert!((output_amount - base_fees) == response.onchain_amount?);
 
 //! ```
+use std::str::FromStr;
+use std::sync::Arc;
+
 use crate::error::Error;
 use crate::network::Chain;
 use bitcoin::absolute::LockTime;
@@ -51,7 +54,7 @@ use crate::util::secrets::Preimage;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::str::FromStr;
+use ureq::{AgentBuilder, TlsConnector};
 
 pub const BOLTZ_TESTNET_URL: &str = "https://testnet.boltz.exchange/api";
 pub const BOLTZ_MAINNET_URL: &str = "https://api.boltz.exchange";
@@ -82,7 +85,21 @@ impl BoltzApiClient {
     /// Make a Post request. Returns the Response
     fn post(&self, end_point: &str, data: Value) -> Result<String, Error> {
         let url = format!("{}/{}", self.base_url, end_point);
-        Ok(ureq::post(&url).send_json(data)?.into_string()?)
+
+        let response = match native_tls::TlsConnector::new() {
+            // If native_tls is available, use that for TLS
+            // It has better handling of close_notify, which avoids some POST call failures
+            // See https://github.com/SatoshiPortal/boltz-rust/issues/39
+            Ok(tls_connector) => AgentBuilder::new()
+                .tls_connector(Arc::new(tls_connector))
+                .build()
+                .request("POST", &url)
+                .send_json(data)?
+                .into_string()?,
+            // If native_tls is not available, fallback to the default (rustls)
+            Err(_) => ureq::post(&url).send_json(data)?.into_string()?,
+        };
+        Ok(response)
     }
     /// In order to create a swap, one first has to know which pairs are supported and what kind of rates, limits and fees are applied when creating a new swap.
     /// The following call returns this information.
