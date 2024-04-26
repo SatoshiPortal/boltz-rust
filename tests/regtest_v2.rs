@@ -179,7 +179,7 @@ fn btc_submarine_refund() {
         utxo,
     };
 
-    let refund_tx = swap_tx.sign_refund(&sender_keypair, 1000).unwrap();
+    let refund_tx = swap_tx.sign_refund(&sender_keypair, 1000, None).unwrap();
 
     // Make the timelock matured and broadcast the spend
     test_framework.generate_blocks(100);
@@ -316,7 +316,7 @@ fn lbtc_submarine_refund() {
     };
 
     let refund_tx = swap_tx
-        .sign_refund(&sender_keypair, Amount::from_sat(1000))
+        .sign_refund(&sender_keypair, Amount::from_sat(1000), None)
         .unwrap();
 
     // Make the timelock matured and broadcast the spend

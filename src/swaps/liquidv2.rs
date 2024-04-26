@@ -44,7 +44,7 @@ use elements::{
 
 use super::{
     boltz::SwapType,
-    boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateSubmarineResponse, CreateReverseResponse},
+    boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateReverseResponse, CreateSubmarineResponse},
 };
 
 /// Liquid v2 swap script helper.
@@ -675,8 +675,10 @@ impl LBtcSwapTxV2 {
                 self.swap_script.sender_pubkey.inner,
             );
 
-            if (!boltz_partial_sig_verify){
-                return Err(Error::Taproot(("Unable to verify Partial Signature".to_string())))
+            if (!boltz_partial_sig_verify) {
+                return Err(Error::Taproot(
+                    ("Unable to verify Partial Signature".to_string()),
+                ));
             }
 
             let our_partial_sig =
@@ -757,7 +759,12 @@ impl LBtcSwapTxV2 {
     }
 
     /// Sign a refund transaction for a submarine swap
-    pub fn sign_refund(&self, keys: &Keypair, absolute_fees: Amount) -> Result<Transaction, Error> {
+    pub fn sign_refund(
+        &self,
+        keys: &Keypair,
+        absolute_fees: Amount,
+        is_cooperative: Option<(&BoltzApiClientV2, &String)>,
+    ) -> Result<Transaction, Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(Error::Protocol(
                 "Cannot sign refund tx, for a reverse-swap".to_string(),
@@ -869,46 +876,146 @@ impl LBtcSwapTxV2 {
             output: vec![fee_output, payment_output],
         };
 
-        let leaf_hash = TapLeafHash::from_script(&refund_script, LeafVersion::default());
+        if let Some((boltz_api, swap_id)) = is_cooperative {
+            let claim_tx_taproot_hash = SighashCache::new(&refund_tx)
+                .taproot_key_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[&self.funding_utxo]),
+                    SchnorrSighashType::Default,
+                    self.genesis_hash,
+                )
+                .unwrap();
 
-        let sighash = SighashCache::new(&refund_tx)
-            .taproot_script_spend_signature_hash(
-                0,
-                &Prevouts::All(&[&self.funding_utxo]),
-                leaf_hash,
-                SchnorrSighashType::Default,
-                self.genesis_hash,
-            )
-            .unwrap();
+            let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
-        let msg = Message::from_digest_slice(sighash.as_byte_array())?;
+            let mut key_agg_cache = MusigKeyAggCache::new(
+                &secp,
+                &[
+                    self.swap_script.receiver_pubkey.inner,
+                    self.swap_script.sender_pubkey.inner,
+                ],
+            );
 
-        let sig = secp.sign_schnorr(&msg, &keys);
+            let tweak = SecretKey::from_slice(
+                self.swap_script
+                    .taproot_spendinfo()?
+                    .tap_tweak()
+                    .as_byte_array(),
+            )?;
 
-        let final_sig = SchnorrSig {
-            sig,
-            hash_ty: SchnorrSighashType::Default,
-        };
+            let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
 
-        let control_block = self
-            .swap_script
-            .taproot_spendinfo()?
-            .control_block(&(refund_script.clone(), LeafVersion::default()))
-            .unwrap();
+            let session_id = MusigSessionId::new(&mut thread_rng());
 
-        let mut script_witness = Witness::new();
-        script_witness.push(final_sig.to_vec());
-        script_witness.push(refund_script.as_bytes());
-        script_witness.push(control_block.serialize());
+            let mut extra_rand = [0u8; 32];
+            OsRng.fill_bytes(&mut extra_rand);
 
-        let witness = TxInWitness {
-            amount_rangeproof: None,
-            inflation_keys_rangeproof: None,
-            script_witness: script_witness.to_vec(),
-            pegin_witness: vec![],
-        };
+            let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
+                &secp,
+                session_id,
+                keys.public_key(),
+                msg,
+                Some(extra_rand),
+            )?;
 
-        refund_tx.input[0].witness = witness;
+            // Step 7: Get boltz's partial sig
+            let claim_tx_hex = serialize(&refund_tx).to_lower_hex_string();
+            let partial_sig_resp =
+                boltz_api.get_submarine_partial_sig(&swap_id, &pub_nonce, &claim_tx_hex)?;
+
+            let boltz_public_nonce =
+                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
+
+            let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+                &partial_sig_resp.partial_signature,
+            )?)?;
+
+            let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
+
+            let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+
+            // Verify the sigs.
+            let boltz_partial_sig_verify = musig_session.partial_verify(
+                &secp,
+                &key_agg_cache,
+                boltz_partial_sig,
+                boltz_public_nonce,
+                self.swap_script.sender_pubkey.inner,
+            );
+
+            if (!boltz_partial_sig_verify) {
+                return Err(Error::Taproot(
+                    ("Unable to verify Partial Signature".to_string()),
+                ));
+            }
+
+            let our_partial_sig =
+                musig_session.partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)?;
+
+            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
+
+            let final_schnorr_sig = SchnorrSig {
+                sig: schnorr_sig,
+                hash_ty: SchnorrSighashType::Default,
+            };
+
+            let output_key = self.swap_script.taproot_spendinfo()?.output_key();
+
+            let _ = secp.verify_schnorr(&final_schnorr_sig.sig, &msg, &output_key.into_inner())?;
+
+            let mut script_witness = Witness::new();
+            script_witness.push(final_schnorr_sig.to_vec());
+
+            let witness = TxInWitness {
+                amount_rangeproof: None,
+                inflation_keys_rangeproof: None,
+                script_witness: script_witness.to_vec(),
+                pegin_witness: vec![],
+            };
+
+            refund_tx.input[0].witness = witness;
+        } else {
+            let leaf_hash = TapLeafHash::from_script(&refund_script, LeafVersion::default());
+
+            let sighash = SighashCache::new(&refund_tx)
+                .taproot_script_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[&self.funding_utxo]),
+                    leaf_hash,
+                    SchnorrSighashType::Default,
+                    self.genesis_hash,
+                )
+                .unwrap();
+
+            let msg = Message::from_digest_slice(sighash.as_byte_array())?;
+
+            let sig = secp.sign_schnorr(&msg, &keys);
+
+            let final_sig = SchnorrSig {
+                sig,
+                hash_ty: SchnorrSighashType::Default,
+            };
+
+            let control_block = self
+                .swap_script
+                .taproot_spendinfo()?
+                .control_block(&(refund_script.clone(), LeafVersion::default()))
+                .unwrap();
+
+            let mut script_witness = Witness::new();
+            script_witness.push(final_sig.to_vec());
+            script_witness.push(refund_script.as_bytes());
+            script_witness.push(control_block.serialize());
+
+            let witness = TxInWitness {
+                amount_rangeproof: None,
+                inflation_keys_rangeproof: None,
+                script_witness: script_witness.to_vec(),
+                pegin_witness: vec![],
+            };
+
+            refund_tx.input[0].witness = witness;
+        }
 
         Ok(refund_tx)
     }
@@ -920,7 +1027,7 @@ impl LBtcSwapTxV2 {
         let dummy_abs_fee = Amount::from_sat(5_000);
         let tx = match self.kind {
             SwapTxKind::Claim => self.sign_claim(keys, preimage, dummy_abs_fee, None)?, // TODO: Hardcode cooperative spend size
-            SwapTxKind::Refund => self.sign_refund(keys, dummy_abs_fee)?,
+            SwapTxKind::Refund => self.sign_refund(keys, dummy_abs_fee, None)?,
         };
         Ok(tx.vsize())
     }
@@ -930,11 +1037,29 @@ impl LBtcSwapTxV2 {
         &self,
         signed_tx: &Transaction,
         network_config: &ElectrumConfig,
+        is_lowball: Option<(&BoltzApiClientV2, Chain)>,
     ) -> Result<String, Error> {
-        let electrum_client = network_config.build_client()?;
-        let serialized = serialize(signed_tx);
-        Ok(electrum_client
-            .transaction_broadcast_raw(&serialized)?
-            .to_string())
+        if let Some((boltz_api, chain)) = is_lowball {
+            log::info!("Attempting lowball braodcast");
+            let tx_hex = serialize(signed_tx).to_lower_hex_string();
+            let response = boltz_api.broadcast_tx(chain, &tx_hex)?;
+            let txid = response
+                .as_object()
+                .unwrap()
+                .get("id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string();
+            log::info!("Broadcasted transaction via Boltz: {}", txid);
+
+            return Ok(txid);
+        } else {
+            let electrum_client = network_config.build_client()?;
+            let serialized = serialize(signed_tx);
+            Ok(electrum_client
+                .transaction_broadcast_raw(&serialized)?
+                .to_string())
+        }
     }
 }
