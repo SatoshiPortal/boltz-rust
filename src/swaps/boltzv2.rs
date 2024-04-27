@@ -201,7 +201,7 @@ impl BoltzApiClientV2 {
             }
         );
 
-        let endpoint = format!("swap/submarine/{}/claim", id);
+        let endpoint = format!("swap/submarine/{}/refund", id);
         Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
     }
 

@@ -815,6 +815,8 @@ impl BtcSwapTxV2 {
             witness.push(final_schnorr_sig.to_vec());
 
             refund_tx.input[0].witness = witness;
+
+            refund_tx.lock_time = LockTime::ZERO; // No locktime for cooperative spend
         } else {
             let leaf_hash =
                 TapLeafHash::from_script(&self.swap_script.refund_script(), LeafVersion::TapScript);

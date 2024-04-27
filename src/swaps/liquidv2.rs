@@ -974,6 +974,8 @@ impl LBtcSwapTxV2 {
             };
 
             refund_tx.input[0].witness = witness;
+
+            refund_tx.lock_time = LockTime::ZERO;
         } else {
             let leaf_hash = TapLeafHash::from_script(&refund_script, LeafVersion::default());
 
