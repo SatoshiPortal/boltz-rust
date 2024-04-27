@@ -150,7 +150,9 @@ fn liquid_v2_submarine() {
 
                     // This means the funding transaction was rejected by Boltz for whatever reason, and we need to get
                     // fund back via refund.
-                    if update.status == "transaction.lockup.failed" {
+                    if update.status == "transaction.lockupFailed"
+                        || update.status == "invoice.failedToPay"
+                    {
                         let swap_tx = LBtcSwapTxV2::new_refund(
                             swap_script.clone(),
                             &refund_address,

@@ -563,7 +563,7 @@ impl BtcSwapTxV2 {
                 Some(extra_rand),
             )?;
 
-            // Step 7: Get boltz's partail sig
+            // Step 7: Get boltz's partial sig
             let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
             let partial_sig_resp = boltz_api.get_reverse_partial_sig(
                 &swap_id,
@@ -765,7 +765,7 @@ impl BtcSwapTxV2 {
                 Some(extra_rand),
             )?;
 
-            // Step 7: Get boltz's partail sig
+            // Step 7: Get boltz's partial sig
             let refund_tx_hex = serialize(&refund_tx).to_lower_hex_string();
             let partial_sig_resp =
                 boltz_api.get_submarine_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)?;
@@ -872,33 +872,13 @@ impl BtcSwapTxV2 {
     }
 
     /// Broadcast transaction to the network.
-    ///
-    /// Lowall sending can be enabled with `is_lowball` option and by providing a [BoltzApiClientV2] and a [Chain].
     pub fn broadcast(
         &self,
         signed_tx: &Transaction,
         network_config: &ElectrumConfig,
-        is_lowball: Option<(&BoltzApiClientV2, Chain)>,
     ) -> Result<Txid, Error> {
-        if let Some((boltz_api, chain)) = is_lowball {
-            log::info!("Attempting lowball braodcast");
-            let tx_hex = serialize(signed_tx).to_lower_hex_string();
-            let response = boltz_api.broadcast_tx(chain, &tx_hex)?;
-            let txid = Txid::from_str(
-                &response
-                    .as_object()
-                    .unwrap()
-                    .get("id")
-                    .unwrap()
-                    .as_str()
-                    .unwrap(),
-            )?;
-            log::info!("Broadcasted transaction via Boltz: {}", txid);
-            return Ok(txid);
-        } else {
-            Ok(network_config
-                .build_client()?
-                .transaction_broadcast(signed_tx)?)
-        }
+        Ok(network_config
+            .build_client()?
+            .transaction_broadcast(signed_tx)?)
     }
 }

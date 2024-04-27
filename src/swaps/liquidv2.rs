@@ -1042,6 +1042,11 @@ impl LBtcSwapTxV2 {
         is_lowball: Option<(&BoltzApiClientV2, Chain)>,
     ) -> Result<String, Error> {
         if let Some((boltz_api, chain)) = is_lowball {
+            if chain == Chain::Liquid {
+                return Err(Error::Protocol(
+                    "Lowball broadcast is not active for main chain".to_string(),
+                ));
+            }
             log::info!("Attempting lowball braodcast");
             let tx_hex = serialize(signed_tx).to_lower_hex_string();
             let response = boltz_api.broadcast_tx(chain, &tx_hex)?;
