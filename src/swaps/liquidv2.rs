@@ -940,7 +940,7 @@ impl LBtcSwapTxV2 {
                 &key_agg_cache,
                 boltz_partial_sig,
                 boltz_public_nonce,
-                self.swap_script.sender_pubkey.inner,
+                self.swap_script.receiver_pubkey.inner,
             );
 
             if (!boltz_partial_sig_verify) {
