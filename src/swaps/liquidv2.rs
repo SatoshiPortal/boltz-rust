@@ -229,14 +229,26 @@ impl LBtcSwapScriptV2 {
             .into_script()
     }
 
+    pub fn musig_keyagg_cache(&self) -> MusigKeyAggCache {
+        match self.swap_type {
+            SwapType::Submarine => {
+                let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
+                MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
+            }
+
+            SwapType::ReverseSubmarine => {
+                let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
+                MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
+            }
+        }
+    }
+
     /// Internally used to convert struct into a bitcoin::Script type
     fn taproot_spendinfo(&self) -> Result<TaprootSpendInfo, Error> {
         let secp = Secp256k1::new();
 
         // Setup Key Aggregation cache
-        let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
-
-        let mut key_agg_cache = MusigKeyAggCache::new(&secp, &pubkeys);
+        let mut key_agg_cache = self.musig_keyagg_cache();
 
         // Construct the Taproot
         let internal_key = key_agg_cache.agg_pk();
@@ -616,13 +628,7 @@ impl LBtcSwapTxV2 {
 
             let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
-            let mut key_agg_cache = MusigKeyAggCache::new(
-                &secp,
-                &[
-                    self.swap_script.receiver_pubkey.inner,
-                    self.swap_script.sender_pubkey.inner,
-                ],
-            );
+            let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
 
             let tweak = SecretKey::from_slice(
                 self.swap_script
@@ -888,13 +894,7 @@ impl LBtcSwapTxV2 {
 
             let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
-            let mut key_agg_cache = MusigKeyAggCache::new(
-                &secp,
-                &[
-                    self.swap_script.receiver_pubkey.inner,
-                    self.swap_script.sender_pubkey.inner,
-                ],
-            );
+            let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
 
             let tweak = SecretKey::from_slice(
                 self.swap_script
