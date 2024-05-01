@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fmt::format, net::TcpStream};
-
+use ureq::{AgentBuilder, TlsConnector};
+use std::str::FromStr;
+use std::sync::Arc;
 use bitcoin::{
     hashes::sha256, hex::DisplayHex, taproot::TapLeaf, PublicKey, ScriptBuf, Transaction,
 };
@@ -104,7 +106,22 @@ impl BoltzApiClientV2 {
     /// Make a Post request. Returns the Response
     fn post(&self, end_point: &str, data: impl Serialize) -> Result<String, Error> {
         let url = format!("{}/{}", self.base_url, end_point);
-        Ok(ureq::post(&url).send_json(data)?.into_string()?)
+        // Ok(ureq::post(&url).send_json(data)?.into_string()?)
+
+        let response = match native_tls::TlsConnector::new() {
+            // If native_tls is available, use that for TLS
+            // It has better handling of close_notify, which avoids some POST call failures
+            // See https://github.com/SatoshiPortal/boltz-rust/issues/39
+            Ok(tls_connector) => AgentBuilder::new()
+                .tls_connector(Arc::new(tls_connector))
+                .build()
+                .request("POST", &url)
+                .send_json(data)?
+                .into_string()?,
+            // If native_tls is not available, fallback to the default (rustls)
+            Err(_) => ureq::post(&url).send_json(data)?.into_string()?,
+        };
+        Ok(response)
     }
 
     pub fn get_fee_estimation(&self) -> Result<GetFeeEstimationResponse, Error> {
