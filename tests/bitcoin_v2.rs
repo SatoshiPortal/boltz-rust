@@ -111,6 +111,9 @@ fn bitcoin_v2_submarine() {
                             create_swap_response.expected_amount,
                             create_swap_response.address
                         );
+
+                        // Test Cooperative Refund.
+                        // Send 1 sat less to than expected amount to Boltz, and let Boltz fail the swap.
                     }
 
                     // Boltz has paid the invoice, and waiting for our partial sig.
@@ -153,6 +156,46 @@ fn bitcoin_v2_submarine() {
                     if update.status == "transaction.claimed" {
                         log::info!("Successfully completed submarine swap");
                         break;
+                    }
+
+                    // This means the funding transaction was rejected by Boltz for whatever reason, and we need to get
+                    // fund back via refund.
+                    if update.status == "transaction.lockupFailed"
+                        || update.status == "invoice.failedToPay"
+                    {
+                        let swap_tx = BtcSwapTxV2::new_refund(
+                            swap_script.clone(),
+                            &refund_address,
+                            &ElectrumConfig::default_bitcoin(),
+                        )
+                        .unwrap()
+                        .expect("Funding UTXO not found");
+
+                        match swap_tx.sign_refund(
+                            &our_keys,
+                            1000,
+                            Some((&boltz_api_v2, &create_swap_response.id)),
+                        ) {
+                            Ok(tx) => {
+                                let txid = swap_tx
+                                    .broadcast(&tx, &ElectrumConfig::default_bitcoin())
+                                    .unwrap();
+                                log::info!("Cooperative Refund Successfully broadcasted: {}", txid);
+                            }
+                            Err(e) => {
+                                log::info!("Cooperative refund failed. {:?}", e);
+                                log::info!("Attempting Non-cooperative refund.");
+
+                                let tx = swap_tx.sign_refund(&our_keys, 1000, None).unwrap();
+                                let txid = swap_tx
+                                    .broadcast(&tx, &ElectrumConfig::default_bitcoin())
+                                    .unwrap();
+                                log::info!(
+                                    "Non-cooperative Refund Successfully broadcasted: {}",
+                                    txid
+                                );
+                            }
+                        }
                     }
                 }
 
@@ -284,7 +327,7 @@ fn bitcoin_v2_reverse() {
                             .broadcast(&tx, &ElectrumConfig::default_bitcoin())
                             .unwrap();
 
-                        log::info!("Succesfully broadcasted claim tx!");
+                        log::info!("Successfully broadcasted claim tx!");
                         log::debug!("Claim Tx {:?}", tx);
                     }
 

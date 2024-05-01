@@ -17,6 +17,7 @@ use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut
 use bitcoin::{Amount, EcdsaSighashType, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey};
 use electrum_client::ElectrumApi;
 use elements::encode::serialize;
+use elements::pset::serialize::Serialize;
 use std::ops::{Add, Index};
 use std::str::FromStr;
 
@@ -31,7 +32,9 @@ use crate::{
 use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160};
 
 use super::boltz::SwapType;
-use super::boltzv2::{BoltzApiClientV2, ClaimTxResponse, CreateSubmarineResponse, CreateReverseResponse};
+use super::boltzv2::{
+    BoltzApiClientV2, ClaimTxResponse, CreateReverseResponse, CreateSubmarineResponse,
+};
 
 use elements::secp256k1_zkp::{
     MusigAggNonce, MusigKeyAggCache, MusigPartialSignature, MusigPubNonce, MusigSession,
@@ -241,12 +244,10 @@ impl BtcSwapScriptV2 {
 
         let taproot_builder = TaprootBuilder::new();
 
-        let taproot_builder = taproot_builder
-            .add_leaf_with_ver(1, self.claim_script(), LeafVersion::TapScript)
-            ?;
-        let taproot_builder = taproot_builder
-            .add_leaf_with_ver(1, self.refund_script(), LeafVersion::TapScript)
-            ?;
+        let taproot_builder =
+            taproot_builder.add_leaf_with_ver(1, self.claim_script(), LeafVersion::TapScript)?;
+        let taproot_builder =
+            taproot_builder.add_leaf_with_ver(1, self.refund_script(), LeafVersion::TapScript)?;
 
         let taproot_spend_info = taproot_builder.finalize(&secp, internal_key).unwrap();
 
@@ -448,9 +449,7 @@ impl BtcSwapTxV2 {
 
         let session_id = MusigSessionId::new(&mut thread_rng());
 
-        let msg = Message::from_digest_slice(
-            &Vec::from_hex(&claim_tx_response.transaction_hash)?,
-        )?;
+        let msg = Message::from_digest_slice(&Vec::from_hex(&claim_tx_response.transaction_hash)?)?;
 
         // Step 4: Start the Musig2 Signing session
         let mut extra_rand = [0u8; 32];
@@ -534,8 +533,7 @@ impl BtcSwapTxV2 {
                     0,
                     &Prevouts::All(&[&self.utxo.1]),
                     bitcoin::TapSighashType::Default,
-                )
-                ?;
+                )?;
 
             let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
@@ -557,24 +555,29 @@ impl BtcSwapTxV2 {
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
 
-            let (sec_nonce, pub_nonce) = key_agg_cache
-                .nonce_gen(&secp, session_id, keys.public_key(), msg, Some(extra_rand))
-                ?;
+            let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
+                &secp,
+                session_id,
+                keys.public_key(),
+                msg,
+                Some(extra_rand),
+            )?;
 
-            // Step 7: Get boltz's partail sig
+            // Step 7: Get boltz's partial sig
             let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
-            let partial_sig_resp = boltz_api
-                .get_reverse_partial_sig(&swap_id, &preimage, &pub_nonce, &claim_tx_hex)
-                ?;
+            let partial_sig_resp = boltz_api.get_reverse_partial_sig(
+                &swap_id,
+                &preimage,
+                &pub_nonce,
+                &claim_tx_hex,
+            )?;
 
             let boltz_public_nonce =
-                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)
-                    ?;
+                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
 
-            let boltz_partial_sig = MusigPartialSignature::from_slice(
-                &Vec::from_hex(&partial_sig_resp.partial_signature)?,
-            )
-            ?;
+            let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+                &partial_sig_resp.partial_signature,
+            )?)?;
 
             // Aggregate Our's and Other's Nonce and start the Musig session.
             let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
@@ -590,11 +593,14 @@ impl BtcSwapTxV2 {
                 self.swap_script.sender_pubkey.inner,
             );
 
-            assert!(boltz_partial_sig_verify == true);
+            if !boltz_partial_sig_verify {
+                return Err(Error::Protocol(
+                    "Invalid partial-sig received from Boltz".to_string(),
+                ));
+            }
 
-            let our_partial_sig = musig_session
-                .partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)
-                ?;
+            let our_partial_sig =
+                musig_session.partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)?;
 
             let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
 
@@ -611,21 +617,17 @@ impl BtcSwapTxV2 {
             witness.push(final_schnorr_sig.to_vec());
 
             claim_tx.input[0].witness = witness;
-
-            let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
         } else {
             // If Non-Cooperative claim use the Script Path spending
             let leaf_hash =
                 TapLeafHash::from_script(&self.swap_script.claim_script(), LeafVersion::TapScript);
 
-            let sighash = SighashCache::new(claim_tx.clone())
-                .taproot_script_spend_signature_hash(
-                    0,
-                    &Prevouts::All(&[&self.utxo.1]),
-                    leaf_hash,
-                    TapSighashType::Default,
-                )
-                ?;
+            let sighash = SighashCache::new(claim_tx.clone()).taproot_script_spend_signature_hash(
+                0,
+                &Prevouts::All(&[&self.utxo.1]),
+                leaf_hash,
+                TapSighashType::Default,
+            )?;
 
             let msg = Message::from_digest_slice(sighash.as_byte_array())?;
 
@@ -657,7 +659,12 @@ impl BtcSwapTxV2 {
 
     /// Sign a submarine swap refund transaction.
     /// Panics if called on Reverse Swap, Claim type.
-    pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, Error> {
+    pub fn sign_refund(
+        &self,
+        keys: &Keypair,
+        absolute_fees: u64,
+        is_cooperative: Option<(&BoltzApiClientV2, &String)>,
+    ) -> Result<Transaction, Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(Error::Protocol(
                 "Cannot sign refund tx, for a reverse-swap".to_string(),
@@ -710,52 +717,146 @@ impl BtcSwapTxV2 {
             .next()
             .unwrap();
 
-        let mut spending_tx = Transaction {
+        let mut refund_tx = Transaction {
             version: Version::TWO,
             lock_time,
             input: vec![input],
             output: vec![output],
         };
 
-        let leaf_hash =
-            TapLeafHash::from_script(&self.swap_script.refund_script(), LeafVersion::TapScript);
+        let secp = Secp256k1::new();
 
-        let sighash = SighashCache::new(spending_tx.clone())
-            .taproot_script_spend_signature_hash(
-                0,
-                &Prevouts::All(&[&self.utxo.1]),
-                leaf_hash,
-                TapSighashType::Default,
-            )
-            ?;
+        if let Some((boltz_api, swap_id)) = is_cooperative {
+            // Start the Musig session
 
-        let msg = Message::from_digest_slice(sighash.as_byte_array())?;
+            // Step 1: Get the sighash
+            let refund_tx_taproot_hash = SighashCache::new(refund_tx.clone())
+                .taproot_key_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[&self.utxo.1]),
+                    bitcoin::TapSighashType::Default,
+                )?;
 
-        let sig = Secp256k1::new().sign_schnorr(&msg, &keys);
+            let msg = Message::from_digest_slice(refund_tx_taproot_hash.as_byte_array())?;
 
-        let final_sig = Signature {
-            sig,
-            hash_ty: TapSighashType::Default,
-        };
+            // Step 2: Get the Public and Secret nonces
 
-        let control_block = self
-            .swap_script
-            .taproot_spendinfo()?
-            .control_block(&(
-                self.swap_script.refund_script().clone(),
-                LeafVersion::TapScript,
-            ))
-            .expect("Control block calculation failed");
+            let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
 
-        let mut witness = Witness::new();
+            let tweak = SecretKey::from_slice(
+                self.swap_script
+                    .taproot_spendinfo()?
+                    .tap_tweak()
+                    .as_byte_array(),
+            )?;
 
-        witness.push(final_sig.to_vec());
-        witness.push(self.swap_script.refund_script().as_bytes());
-        witness.push(control_block.serialize());
+            let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
 
-        spending_tx.input[0].witness = witness;
+            let session_id = MusigSessionId::new(&mut thread_rng());
 
-        Ok(spending_tx)
+            let mut extra_rand = [0u8; 32];
+            OsRng.fill_bytes(&mut extra_rand);
+
+            let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
+                &secp,
+                session_id,
+                keys.public_key(),
+                msg,
+                Some(extra_rand),
+            )?;
+
+            // Step 7: Get boltz's partial sig
+            let refund_tx_hex = serialize(&refund_tx).to_lower_hex_string();
+            let partial_sig_resp =
+                boltz_api.get_submarine_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)?;
+
+            let boltz_public_nonce =
+                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
+
+            let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+                &partial_sig_resp.partial_signature,
+            )?)?;
+
+            // Aggregate Our's and Other's Nonce and start the Musig session.
+            let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
+
+            let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+
+            // Verify the Boltz's sig.
+            let boltz_partial_sig_verify = musig_session.partial_verify(
+                &secp,
+                &key_agg_cache,
+                boltz_partial_sig,
+                boltz_public_nonce,
+                self.swap_script.receiver_pubkey.inner,
+            );
+
+            if !boltz_partial_sig_verify {
+                return Err(Error::Protocol(
+                    "Invalid partial-sig received from Boltz".to_string(),
+                ));
+            }
+
+            let our_partial_sig =
+                musig_session.partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)?;
+
+            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
+
+            let final_schnorr_sig = Signature {
+                sig: schnorr_sig,
+                hash_ty: TapSighashType::Default,
+            };
+
+            let output_key = self.swap_script.taproot_spendinfo()?.output_key();
+
+            let _ = secp.verify_schnorr(&final_schnorr_sig.sig, &msg, &output_key.to_inner())?;
+
+            let mut witness = Witness::new();
+            witness.push(final_schnorr_sig.to_vec());
+
+            refund_tx.input[0].witness = witness;
+
+            refund_tx.lock_time = LockTime::ZERO; // No locktime for cooperative spend
+        } else {
+            let leaf_hash =
+                TapLeafHash::from_script(&self.swap_script.refund_script(), LeafVersion::TapScript);
+
+            let sighash = SighashCache::new(refund_tx.clone())
+                .taproot_script_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[&self.utxo.1]),
+                    leaf_hash,
+                    TapSighashType::Default,
+                )?;
+
+            let msg = Message::from_digest_slice(sighash.as_byte_array())?;
+
+            let sig = Secp256k1::new().sign_schnorr(&msg, &keys);
+
+            let final_sig = Signature {
+                sig,
+                hash_ty: TapSighashType::Default,
+            };
+
+            let control_block = self
+                .swap_script
+                .taproot_spendinfo()?
+                .control_block(&(
+                    self.swap_script.refund_script().clone(),
+                    LeafVersion::TapScript,
+                ))
+                .expect("Control block calculation failed");
+
+            let mut witness = Witness::new();
+
+            witness.push(final_sig.to_vec());
+            witness.push(self.swap_script.refund_script().as_bytes());
+            witness.push(control_block.serialize());
+
+            refund_tx.input[0].witness = witness;
+        }
+
+        Ok(refund_tx)
     }
 
     /// Calculate the size of a transaction.
@@ -765,11 +866,12 @@ impl BtcSwapTxV2 {
         let dummy_abs_fee = 5_000;
         let tx = match self.kind {
             SwapTxKind::Claim => self.sign_claim(keys, preimage, dummy_abs_fee, None)?, // Can only calculate non-coperative claims
-            SwapTxKind::Refund => self.sign_refund(keys, dummy_abs_fee)?,
+            SwapTxKind::Refund => self.sign_refund(keys, dummy_abs_fee, None)?,
         };
         Ok(tx.vsize())
     }
-    /// Broadcast transaction to the network
+
+    /// Broadcast transaction to the network.
     pub fn broadcast(
         &self,
         signed_tx: &Transaction,

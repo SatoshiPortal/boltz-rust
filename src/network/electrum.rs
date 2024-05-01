@@ -39,10 +39,13 @@ pub struct ElectrumConfig {
 }
 
 impl ElectrumConfig {
-    
     pub fn default(chain: Chain, regtest_url: Option<String>) -> Result<Self, Error> {
-        if (chain == Chain::LiquidRegtest || chain == Chain::BitcoinRegtest ) && regtest_url.is_none() {
-            return Err(Error::Electrum(electrum_client::Error::Message("Regtest requires using a custom url".to_string())))
+        if (chain == Chain::LiquidRegtest || chain == Chain::BitcoinRegtest)
+            && regtest_url.is_none()
+        {
+            return Err(Error::Electrum(electrum_client::Error::Message(
+                "Regtest requires using a custom url".to_string(),
+            )));
         }
         match chain {
             Chain::Bitcoin => Ok(ElectrumConfig::new(

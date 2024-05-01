@@ -119,7 +119,7 @@ fn liquid_v2_submarine() {
                         let swap_tx = LBtcSwapTxV2::new_refund(
                             swap_script.clone(),
                             &refund_address,
-                            &ElectrumConfig::default_bitcoin(),
+                            &ElectrumConfig::default_liquid(),
                         )
                         .unwrap();
 
@@ -146,6 +146,47 @@ fn liquid_v2_submarine() {
                             .post_claim_tx_details(&create_swap_response.id, pub_nonce, partial_sig)
                             .unwrap();
                         log::info!("Successfully Sent partial signature");
+                    }
+
+                    // This means the funding transaction was rejected by Boltz for whatever reason, and we need to get
+                    // fund back via refund.
+                    if update.status == "transaction.lockupFailed"
+                        || update.status == "invoice.failedToPay"
+                    {
+                        let swap_tx = LBtcSwapTxV2::new_refund(
+                            swap_script.clone(),
+                            &refund_address,
+                            &ElectrumConfig::default_liquid(),
+                        )
+                        .unwrap();
+
+                        match swap_tx.sign_refund(
+                            &our_keys,
+                            Amount::from_sat(1000),
+                            Some((&boltz_api_v2, &create_swap_response.id)),
+                        ) {
+                            Ok(tx) => {
+                                let txid = swap_tx
+                                    .broadcast(&tx, &ElectrumConfig::default_liquid(), None)
+                                    .unwrap();
+                                log::info!("Cooperative Refund Successfully broadcasted: {}", txid);
+                            }
+                            Err(e) => {
+                                log::info!("Cooperative refund failed. {:?}", e);
+                                log::info!("Attempting Non-cooperative refund.");
+
+                                let tx = swap_tx
+                                    .sign_refund(&our_keys, Amount::from_sat(1000), None)
+                                    .unwrap();
+                                let txid = swap_tx
+                                    .broadcast(&tx, &ElectrumConfig::default_liquid(), None)
+                                    .unwrap();
+                                log::info!(
+                                    "Non-cooperative Refund Successfully broadcasted: {}",
+                                    txid
+                                );
+                            }
+                        }
                     }
 
                     if update.status == "transaction.claimed" {
@@ -264,7 +305,7 @@ fn liquid_v2_reverse() {
                         let claim_tx = LBtcSwapTxV2::new_claim(
                             swap_script.clone(),
                             claim_address.clone(),
-                            &ElectrumConfig::default_bitcoin(),
+                            &ElectrumConfig::default_liquid(),
                         )
                         .unwrap();
 
@@ -278,8 +319,17 @@ fn liquid_v2_reverse() {
                             .unwrap();
 
                         claim_tx
-                            .broadcast(&tx, &ElectrumConfig::default_bitcoin())
+                            .broadcast(&tx, &ElectrumConfig::default_liquid(), None)
                             .unwrap();
+
+                        // To test Lowball broadcast uncomment below line
+                        // claim_tx
+                        //     .broadcast(
+                        //         &tx,
+                        //         &ElectrumConfig::default_liquid(),
+                        //         Some((&boltz_api_v2, boltz_client::network::Chain::LiquidTestnet)),
+                        //     )
+                        //     .unwrap();
 
                         log::info!("Succesfully broadcasted claim tx!");
                         log::debug!("Claim Tx {:?}", tx);
