@@ -28,7 +28,7 @@ use elements::secp256k1_zkp::Message;
 use crate::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::boltz::{self, SwapTxKind},
-    util::secrets::Preimage,
+    util::{liquid_genesis_hash, secrets::Preimage},
 };
 
 use crate::error::Error;
@@ -418,8 +418,7 @@ impl LBtcSwapTxV2 {
         let (funding_outpoint, funding_utxo) = swap_script.fetch_utxo(network_config)?;
 
         let electrum = network_config.build_client()?;
-        let genesis_hash =
-            elements::BlockHash::from_raw_hash(electrum.block_header(0)?.block_hash().into());
+        let genesis_hash = liquid_genesis_hash(&network_config)?;
 
         Ok(LBtcSwapTxV2 {
             kind: SwapTxKind::Claim,
@@ -447,8 +446,7 @@ impl LBtcSwapTxV2 {
         let (funding_outpoint, funding_utxo) = swap_script.fetch_utxo(network_config)?;
 
         let electrum = network_config.build_client()?;
-        let genesis_hash =
-            elements::BlockHash::from_raw_hash(electrum.block_header(0)?.block_hash().into());
+        let genesis_hash = liquid_genesis_hash(&network_config)?;
 
         Ok(LBtcSwapTxV2 {
             kind: SwapTxKind::Refund,
