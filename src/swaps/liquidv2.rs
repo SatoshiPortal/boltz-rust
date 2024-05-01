@@ -278,10 +278,10 @@ impl LBtcSwapScriptV2 {
                 .push_bytes()
                 .expect("pubkey bytes expected");
 
-            let sender_xonly_pubkey = XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes)?;
+            let lockup_xonly_pubkey = XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes)?;
 
-            if sender_xonly_pubkey != claim_key.into_inner() {
-                return Err(Error::Protocol(format!("Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {:?}", sender_xonly_pubkey, claim_key)));
+            if lockup_xonly_pubkey != claim_key.into_inner() {
+                return Err(Error::Protocol(format!("Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {:?}", lockup_xonly_pubkey, claim_key)));
             }
 
             log::info!("Taproot creation and verification success!");
