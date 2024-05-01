@@ -409,7 +409,9 @@ impl BtcSwapTxV2 {
         };
 
         let address = Address::from_str(&refund_address)?;
-        assert!(address.is_valid_for_network(network));
+        if !address.is_valid_for_network(network){
+            return Err(Error::Address("Address validation failed".to_string()));
+        };
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
         if let Some(utxo) = utxo_info {

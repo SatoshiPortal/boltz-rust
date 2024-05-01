@@ -280,7 +280,9 @@ impl LBtcSwapScriptV2 {
 
             let lockup_xonly_pubkey = XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes)?;
 
-            assert!(lockup_xonly_pubkey == output_key.into_inner());
+            if lockup_xonly_pubkey == output_key.into_inner() {
+                return Err(Error::Taproot("Taproot verification failed".to_string()));
+            }
 
             log::info!("Taproot creation and verification success!");
         }
