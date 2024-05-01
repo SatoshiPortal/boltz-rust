@@ -1,10 +1,9 @@
 use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
-    network::electrum::ElectrumConfig,
+    network::{electrum::ElectrumConfig, Chain},
     swaps::boltzv2::{
-        BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription, SwapUpdate,
-        BOLTZ_TESTNET_URL_V2,
+        BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription, SwapUpdate, BOLTZ_MAINNET_URL_V2, BOLTZ_TESTNET_URL_V2
     },
     util::{secrets::Preimage, setup_logger},
     Bolt11Invoice, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1,
@@ -34,7 +33,7 @@ fn liquid_v2_submarine() {
     };
 
     // Set a new invoice string and refund address for each test.
-    let invoice = "lntb650u1pjut6cfpp5h7dgn6wghmsm8dfky9cjzrlyf5c2xaszk2lxamfqm2w4eurevpwqdq8d3skk6qxqyjw5qcqp2sp5nyk5mtwjf250uv0uf2l2trhyycefndu868dya04zlrvw5gvaev2srzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssqva5tvj5gxfsdmc84hvreme8djgwj3rqr37kwtsa6qttgwzhe7s0yfy482afyje45ppualmatfwnmlmk2py7wc7l3l849jl7vdpa86aqqxmqmws".to_string();
+    let invoice = "lnbc1pnr99axpp53a5yn6g08ual5e2c64z4v0zx9e2f5tkw3wd0lcpff7wnuvw2x0dqcqpjsp5zm36qn2xy2rdh63rzr626mmft2558fws0akg2fs7p3tttl200uzq9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllard4vsfze0gsqqqqlgqqqqqeqqjqswnfqq25xjlwfk3lg4e82w5qkyusa84xhaztqa8sq7kcw35l5f7x9j4ju5z0gagh4kspddwd0r629qjla0rc40twdk9m2uyl9egc9tcq4ncwk6".to_string();
     let refund_address = "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7".to_string();
 
     // Initiate the swap with Boltz
@@ -46,7 +45,7 @@ fn liquid_v2_submarine() {
         referral_id: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
 
     let create_swap_response = boltz_api_v2.post_swap_req(&create_swap_req).unwrap();
 
@@ -57,6 +56,7 @@ fn liquid_v2_submarine() {
     let swap_script =
         LBtcSwapScriptV2::submarine_from_swap_resp(&create_swap_response, refund_public_key)
             .unwrap();
+    swap_script.to_address(Chain::LiquidTestnet).unwrap();
 
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
@@ -240,7 +240,7 @@ fn liquid_v2_reverse() {
         referral_id: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
 
@@ -248,6 +248,7 @@ fn liquid_v2_reverse() {
 
     let swap_script =
         LBtcSwapScriptV2::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
+    swap_script.to_address(Chain::LiquidTestnet).unwrap();
 
     // Subscribe to wss status updates
     let mut socket = boltz_api_v2.connect_ws().unwrap();

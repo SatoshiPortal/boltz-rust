@@ -235,7 +235,7 @@ impl BtcSwapScriptV2 {
         let secp = Secp256k1::new();
 
         // Setup Key Aggregation cache
-        let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
+        // let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
 
         let mut key_agg_cache = self.musig_keyagg_cache();
 
@@ -261,7 +261,7 @@ impl BtcSwapScriptV2 {
         // Verify taproot construction, only if we have funding address previously known.
         // Which will be None only for regtest integration tests, so verification will be skipped for them.
         if let Some(funding_address) = &self.funding_addrs {
-            let output_key = taproot_spend_info.output_key();
+            let claim_key = taproot_spend_info.output_key();
 
             let lockup_spk = funding_address.script_pubkey();
 
@@ -278,8 +278,8 @@ impl BtcSwapScriptV2 {
             let lockup_xonly_pubkey =
                 XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes.as_bytes())?;
 
-            if lockup_xonly_pubkey != output_key.to_inner() {
-                return Err(Error::Protocol(format!("Taproot construction Failed. Boltz's lockup Pubkey: {}, Our computed Pubkey {}", lockup_xonly_pubkey, output_key)));
+            if lockup_xonly_pubkey != claim_key.to_inner() {
+                return Err(Error::Protocol(format!("Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {}", lockup_xonly_pubkey, claim_key)));
             }
 
             log::info!("Taproot creation and verification success!");
