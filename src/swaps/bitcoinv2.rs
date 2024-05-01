@@ -249,9 +249,13 @@ impl BtcSwapScriptV2 {
         let taproot_builder =
             taproot_builder.add_leaf_with_ver(1, self.refund_script(), LeafVersion::TapScript)?;
 
-        let taproot_spend_info = match taproot_builder.finalize(&secp, internal_key){
-            Ok(r)=>r,
-            Err(e)=>return Err(Error::Taproot("Could not finalize taproot constructions".to_string()))
+        let taproot_spend_info = match taproot_builder.finalize(&secp, internal_key) {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(Error::Taproot(
+                    "Could not finalize taproot constructions".to_string(),
+                ))
+            }
         };
 
         // Verify taproot construction, only if we have funding address previously known.
@@ -409,7 +413,7 @@ impl BtcSwapTxV2 {
         };
 
         let address = Address::from_str(&refund_address)?;
-        if !address.is_valid_for_network(network){
+        if !address.is_valid_for_network(network) {
             return Err(Error::Address("Address validation failed".to_string()));
         };
 
