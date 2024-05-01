@@ -279,7 +279,10 @@ impl BtcSwapScriptV2 {
                 XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes.as_bytes())?;
 
             if lockup_xonly_pubkey != claim_key.to_inner() {
-                return Err(Error::Protocol(format!("Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {}", lockup_xonly_pubkey, claim_key)));
+                return Err(Error::Protocol(format!(
+                    "Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {}",
+                    lockup_xonly_pubkey, claim_key
+                )));
             }
 
             log::info!("Taproot creation and verification success!");

@@ -84,7 +84,7 @@ impl BoltzApiClient {
     /// Make a Post request. Returns the Response
     fn post(&self, end_point: &str, data: Value) -> Result<String, Error> {
         let url = format!("{}/{}", self.base_url, end_point);
-        
+
         let response = match native_tls::TlsConnector::new() {
             // If native_tls is available, use that for TLS
             // It has better handling of close_notify, which avoids some POST call failures

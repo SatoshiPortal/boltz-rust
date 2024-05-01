@@ -234,7 +234,7 @@ impl LBtcSwapScriptV2 {
             SwapType::Submarine => {
                 let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
                 MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
-            }   
+            }
 
             SwapType::ReverseSubmarine => {
                 let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
@@ -281,7 +281,10 @@ impl LBtcSwapScriptV2 {
             let lockup_xonly_pubkey = XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes)?;
 
             if lockup_xonly_pubkey != claim_key.into_inner() {
-                return Err(Error::Protocol(format!("Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {:?}", lockup_xonly_pubkey, claim_key)));
+                return Err(Error::Protocol(format!(
+                    "Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {:?}",
+                    lockup_xonly_pubkey, claim_key
+                )));
             }
 
             log::info!("Taproot creation and verification success!");

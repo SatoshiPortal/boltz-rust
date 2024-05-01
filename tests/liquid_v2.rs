@@ -3,7 +3,8 @@ use std::{str::FromStr, time::Duration};
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::boltzv2::{
-        BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription, SwapUpdate, BOLTZ_MAINNET_URL_V2, BOLTZ_TESTNET_URL_V2
+        BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription, SwapUpdate,
+        BOLTZ_MAINNET_URL_V2, BOLTZ_TESTNET_URL_V2,
     },
     util::{secrets::Preimage, setup_logger},
     Bolt11Invoice, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1,

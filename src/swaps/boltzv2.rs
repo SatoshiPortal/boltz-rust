@@ -1,15 +1,15 @@
-use std::{collections::HashMap, fmt::format, net::TcpStream};
-use ureq::{AgentBuilder, TlsConnector};
-use std::str::FromStr;
-use std::sync::Arc;
 use bitcoin::{
     hashes::sha256, hex::DisplayHex, taproot::TapLeaf, PublicKey, ScriptBuf, Transaction,
 };
 use lightning_invoice::Bolt11Invoice;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::{collections::HashMap, fmt::format, net::TcpStream};
 use tungstenite::{connect, http::response, stream::MaybeTlsStream, WebSocket};
 use ureq::json;
+use ureq::{AgentBuilder, TlsConnector};
 
 use crate::{error::Error, network::Chain, util::secrets::Preimage};
 
