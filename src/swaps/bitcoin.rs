@@ -306,7 +306,7 @@ impl BtcSwapTx {
         swap_script: BtcSwapScript,
         output_address: String,
         network_config: &ElectrumConfig,
-    ) -> Result<Option<BtcSwapTx>, Error> {
+    ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::Submarine {
             return Err(Error::Protocol(
                 "Claim transactions can only be constructed for Reverse swaps.".to_string(),
@@ -324,14 +324,16 @@ impl BtcSwapTx {
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
         if let Some(utxo) = utxo_info {
-            Ok(Some(BtcSwapTx {
+            Ok(BtcSwapTx {
                 kind: SwapTxKind::Claim,
                 swap_script,
                 output_address: address.assume_checked(),
                 utxo,
-            }))
+            })
         } else {
-            Ok(None)
+            Err(Error::Protocol(
+                "No utxos detected for this script".to_string(),
+            ))
         }
     }
     /// Construct a RefundTX corresponding to the swap_script. Only works for Normal Swaps.
@@ -340,7 +342,7 @@ impl BtcSwapTx {
         swap_script: BtcSwapScript,
         output_address: String,
         network_config: &ElectrumConfig,
-    ) -> Result<Option<BtcSwapTx>, Error> {
+    ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(Error::Protocol(
                 "Refund Txs can only be constructed for Submarine Swaps.".to_string(),
@@ -358,14 +360,16 @@ impl BtcSwapTx {
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
         if let Some(utxo) = utxo_info {
-            Ok(Some(BtcSwapTx {
+            Ok(BtcSwapTx {
                 kind: SwapTxKind::Refund,
                 swap_script,
                 output_address: address.assume_checked(),
                 utxo,
-            }))
+            })
         } else {
-            Ok(None)
+            Err(Error::Protocol(
+                "No utxos detected for this script".to_string(),
+            ))
         }
     }
     /// Fetch utxo for the script

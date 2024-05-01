@@ -364,7 +364,7 @@ impl BtcSwapTxV2 {
         swap_script: BtcSwapScriptV2,
         claim_address: String,
         network_config: &ElectrumConfig,
-    ) -> Result<Option<BtcSwapTxV2>, Error> {
+    ) -> Result<BtcSwapTxV2, Error> {
         if swap_script.swap_type == SwapType::Submarine {
             return Err(Error::Protocol(
                 "Claim transactions can only be constructed for Reverse swaps.".to_string(),
@@ -382,14 +382,16 @@ impl BtcSwapTxV2 {
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
         if let Some(utxo) = utxo_info {
-            Ok(Some(BtcSwapTxV2 {
+            Ok(BtcSwapTxV2 {
                 kind: SwapTxKind::Claim,
                 swap_script,
                 output_address: address.assume_checked(),
                 utxo,
-            }))
+            })
         } else {
-            Ok(None)
+            Err(Error::Protocol(
+                "No utxos detected for this script".to_string(),
+            ))
         }
     }
 
@@ -399,7 +401,7 @@ impl BtcSwapTxV2 {
         swap_script: BtcSwapScriptV2,
         refund_address: &String,
         network_config: &ElectrumConfig,
-    ) -> Result<Option<BtcSwapTxV2>, Error> {
+    ) -> Result<BtcSwapTxV2, Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(Error::Protocol(
                 "Refund Txs can only be constructed for Submarine Swaps.".to_string(),
@@ -419,14 +421,16 @@ impl BtcSwapTxV2 {
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
         if let Some(utxo) = utxo_info {
-            Ok(Some(BtcSwapTxV2 {
+            Ok(BtcSwapTxV2 {
                 kind: SwapTxKind::Refund,
                 swap_script,
                 output_address: address.assume_checked(),
                 utxo,
-            }))
+            })
         } else {
-            Ok(None)
+            Err(Error::Protocol(
+                "No utxos detected for this script".to_string(),
+            ))
         }
     }
 

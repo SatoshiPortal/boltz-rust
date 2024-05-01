@@ -125,7 +125,6 @@ fn bitcoin_v2_submarine() {
                             &refund_address,
                             &ElectrumConfig::default_bitcoin(),
                         )
-                        .unwrap()
                         .expect("Funding UTXO not found");
 
                         let claim_tx_response = boltz_api_v2
@@ -168,7 +167,6 @@ fn bitcoin_v2_submarine() {
                             &refund_address,
                             &ElectrumConfig::default_bitcoin(),
                         )
-                        .unwrap()
                         .expect("Funding UTXO not found");
 
                         match swap_tx.sign_refund(
@@ -311,7 +309,6 @@ fn bitcoin_v2_reverse() {
                             claim_address.clone(),
                             &ElectrumConfig::default_bitcoin(),
                         )
-                        .unwrap()
                         .expect("Funding tx expected");
 
                         let tx = claim_tx
