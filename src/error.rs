@@ -7,6 +7,7 @@ pub enum Error {
     Key(bitcoin::key::Error),
     Address(String),
     Sighash(bitcoin::sighash::Error),
+    ElSighash(elements::sighash::Error),
     Secp(bitcoin::secp256k1::Error),
     HTTP(ureq::Error),
     JSON(serde_json::Error),
@@ -65,6 +66,11 @@ impl From<elements::address::AddressError> for Error {
 impl From<bitcoin::sighash::Error> for Error {
     fn from(value: bitcoin::sighash::Error) -> Self {
         Self::Sighash(value)
+    }
+}
+impl From<elements::sighash::Error> for Error {
+    fn from(value: elements::sighash::Error) -> Self {
+        Self::ElSighash(value)
     }
 }
 
@@ -234,6 +240,7 @@ impl Error {
             Error::Key(_) => "Key",
             Error::Address(_) => "Address",
             Error::Sighash(_) => "Sighash",
+            Error::ElSighash(_) => "Elements-Sighash",
             Error::Secp(_) => "Secp",
             Error::HTTP(_) => "HTTP",
             Error::JSON(_) => "JSON",
@@ -264,6 +271,7 @@ impl Error {
             Error::Key(e) => e.to_string(),
             Error::Address(e) => e.clone(),
             Error::Sighash(e) => e.to_string(),
+            Error::ElSighash(e) => e.to_string(),
             Error::Secp(e) => e.to_string(),
             Error::HTTP(e) => e.to_string(),
             Error::JSON(e) => e.to_string(),

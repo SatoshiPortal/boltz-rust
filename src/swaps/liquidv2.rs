@@ -255,14 +255,12 @@ impl LBtcSwapScriptV2 {
 
         let taproot_builder = TaprootBuilder::new();
 
-        let taproot_builder = taproot_builder
-            .add_leaf_with_ver(1, self.claim_script(), LeafVersion::default())
-            .unwrap();
-        let taproot_builder = taproot_builder
-            .add_leaf_with_ver(1, self.refund_script(), LeafVersion::default())
-            .unwrap();
+        let taproot_builder =
+            taproot_builder.add_leaf_with_ver(1, self.claim_script(), LeafVersion::default())?;
+        let taproot_builder =
+            taproot_builder.add_leaf_with_ver(1, self.refund_script(), LeafVersion::default())?;
 
-        let taproot_spend_info = taproot_builder.finalize(&secp, internal_key).unwrap();
+        let taproot_spend_info = taproot_builder.finalize(&secp, internal_key)?;
 
         // Verify taproot construction
         if let Some(funding_addrs) = &self.funding_addrs {
@@ -486,9 +484,7 @@ impl LBtcSwapTxV2 {
 
         let session_id = MusigSessionId::new(&mut thread_rng());
 
-        let msg = Message::from_digest_slice(
-            &Vec::from_hex(&claim_tx_response.transaction_hash).unwrap(),
-        )?;
+        let msg = Message::from_digest_slice(&Vec::from_hex(&claim_tx_response.transaction_hash)?)?;
 
         // Step 4: Start the Musig2 Signing session
         let mut extra_rand = [0u8; 32];
@@ -621,8 +617,7 @@ impl LBtcSwapTxV2 {
                     &Prevouts::All(&[&self.funding_utxo]),
                     SchnorrSighashType::Default,
                     self.genesis_hash,
-                )
-                .unwrap();
+                )?;
 
             let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
@@ -718,15 +713,13 @@ impl LBtcSwapTxV2 {
             let claim_script = self.swap_script.claim_script();
             let leaf_hash = TapLeafHash::from_script(&claim_script, LeafVersion::default());
 
-            let sighash = SighashCache::new(&claim_tx)
-                .taproot_script_spend_signature_hash(
-                    0,
-                    &Prevouts::All(&[&self.funding_utxo]),
-                    leaf_hash,
-                    SchnorrSighashType::Default,
-                    self.genesis_hash,
-                )
-                .unwrap();
+            let sighash = SighashCache::new(&claim_tx).taproot_script_spend_signature_hash(
+                0,
+                &Prevouts::All(&[&self.funding_utxo]),
+                leaf_hash,
+                SchnorrSighashType::Default,
+                self.genesis_hash,
+            )?;
 
             let msg = Message::from_digest_slice(sighash.as_byte_array())?;
 
@@ -737,15 +730,18 @@ impl LBtcSwapTxV2 {
                 hash_ty: SchnorrSighashType::Default,
             };
 
-            let control_block = self
+            let control_block = match self
                 .swap_script
                 .taproot_spendinfo()?
                 .control_block(&(claim_script.clone(), LeafVersion::default()))
-                .unwrap();
+            {
+                Some(r) => r,
+                None => return Err(Error::Taproot("Could not create control block".to_string())),
+            };
 
             let mut script_witness = Witness::new();
             script_witness.push(final_sig.to_vec());
-            script_witness.push(&preimage.bytes.unwrap());
+            script_witness.push(&preimage.bytes.unwrap()); // checked for none
             script_witness.push(claim_script.as_bytes());
             script_witness.push(control_block.serialize());
 
@@ -856,7 +852,7 @@ impl LBtcSwapTxV2 {
 
         let refund_script = self.swap_script.refund_script();
 
-        let lock_time = refund_script
+        let lock_time = match refund_script
             .instructions()
             .filter_map(|i| {
                 let ins = i.unwrap();
@@ -871,7 +867,14 @@ impl LBtcSwapTxV2 {
                 }
             })
             .next()
-            .unwrap();
+        {
+            Some(r) => r,
+            None => {
+                return Err(Error::Protocol(
+                    "Error getting timelock from refund script".to_string(),
+                ))
+            }
+        };
 
         let mut refund_tx = Transaction {
             version: 2,
@@ -887,8 +890,7 @@ impl LBtcSwapTxV2 {
                     &Prevouts::All(&[&self.funding_utxo]),
                     SchnorrSighashType::Default,
                     self.genesis_hash,
-                )
-                .unwrap();
+                )?;
 
             let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
@@ -977,15 +979,13 @@ impl LBtcSwapTxV2 {
         } else {
             let leaf_hash = TapLeafHash::from_script(&refund_script, LeafVersion::default());
 
-            let sighash = SighashCache::new(&refund_tx)
-                .taproot_script_spend_signature_hash(
-                    0,
-                    &Prevouts::All(&[&self.funding_utxo]),
-                    leaf_hash,
-                    SchnorrSighashType::Default,
-                    self.genesis_hash,
-                )
-                .unwrap();
+            let sighash = SighashCache::new(&refund_tx).taproot_script_spend_signature_hash(
+                0,
+                &Prevouts::All(&[&self.funding_utxo]),
+                leaf_hash,
+                SchnorrSighashType::Default,
+                self.genesis_hash,
+            )?;
 
             let msg = Message::from_digest_slice(sighash.as_byte_array())?;
 
@@ -996,11 +996,14 @@ impl LBtcSwapTxV2 {
                 hash_ty: SchnorrSighashType::Default,
             };
 
-            let control_block = self
+            let control_block = match self
                 .swap_script
                 .taproot_spendinfo()?
                 .control_block(&(refund_script.clone(), LeafVersion::default()))
-                .unwrap();
+            {
+                Some(r) => r,
+                None => return Err(Error::Taproot("Could not create control block".to_string())),
+            };
 
             let mut script_witness = Witness::new();
             script_witness.push(final_sig.to_vec());

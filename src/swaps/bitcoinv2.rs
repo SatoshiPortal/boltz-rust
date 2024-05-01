@@ -249,7 +249,10 @@ impl BtcSwapScriptV2 {
         let taproot_builder =
             taproot_builder.add_leaf_with_ver(1, self.refund_script(), LeafVersion::TapScript)?;
 
-        let taproot_spend_info = taproot_builder.finalize(&secp, internal_key).unwrap();
+        let taproot_spend_info = match taproot_builder.finalize(&secp, internal_key){
+            Ok(r)=>r,
+            Err(e)=>return Err(Error::Taproot("Could not finalize taproot constructions".to_string()))
+        };
 
         // Verify taproot construction, only if we have funding address previously known.
         // Which will be None only for regtest integration tests, so verification will be skipped for them.
@@ -696,7 +699,7 @@ impl BtcSwapTxV2 {
             witness: Witness::new(),
         };
 
-        let lock_time = self
+        let lock_time = match self
             .swap_script
             .refund_script()
             .instructions()
@@ -715,7 +718,14 @@ impl BtcSwapTxV2 {
                 }
             })
             .next()
-            .unwrap();
+        {
+            Some(r) => r,
+            None => {
+                return Err(Error::Protocol(
+                    "Error getting timelock from refund script".to_string(),
+                ))
+            }
+        };
 
         let mut refund_tx = Transaction {
             version: Version::TWO,
