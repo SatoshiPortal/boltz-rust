@@ -1,12 +1,13 @@
 use std::{str::FromStr, time::Duration};
 
+use bip21::Uri;
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::boltzv2::{
         BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription, SwapUpdate,
         BOLTZ_MAINNET_URL_V2, BOLTZ_TESTNET_URL_V2,
     },
-    util::{secrets::Preimage, setup_logger},
+    util::{find_magic_routing_hint, secrets::Preimage, setup_logger},
     Bolt11Invoice, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1,
 };
 
@@ -14,7 +15,7 @@ use bitcoin::{
     hashes::{sha256, Hash},
     hex::FromHex,
     key::rand::thread_rng,
-    secp256k1::Keypair,
+    secp256k1::{Keypair, Message},
     Amount, PublicKey,
 };
 
@@ -36,6 +37,41 @@ fn liquid_v2_submarine() {
     // Set a new invoice string and refund address for each test.
     let invoice = "lnbc1pnr99axpp53a5yn6g08ual5e2c64z4v0zx9e2f5tkw3wd0lcpff7wnuvw2x0dqcqpjsp5zm36qn2xy2rdh63rzr626mmft2558fws0akg2fs7p3tttl200uzq9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllard4vsfze0gsqqqqlgqqqqqeqqjqswnfqq25xjlwfk3lg4e82w5qkyusa84xhaztqa8sq7kcw35l5f7x9j4ju5z0gagh4kspddwd0r629qjla0rc40twdk9m2uyl9egc9tcq4ncwk6".to_string();
     let refund_address = "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7".to_string();
+
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
+
+    // Check for magic routing hint in invoice.
+    if let Some(route_hint) = find_magic_routing_hint(&invoice).unwrap() {
+        let mrh_resp = boltz_api_v2.get_mrh_bip21(&invoice).unwrap();
+
+        let bip21 = mrh_resp
+            .bip21
+            .parse::<Uri<'_, _>>()
+            .unwrap()
+            .require_network(bitcoin::Network::Testnet)
+            .unwrap();
+
+        log::info!("Received BIP21: {:?}", bip21);
+
+        let address_hash = sha256::Hash::hash(&Vec::from_hex(&bip21.address.to_string()).unwrap());
+        let msg = Message::from_digest_slice(address_hash.as_byte_array()).unwrap();
+
+        let receiver_sig = bitcoin::secp256k1::schnorr::Signature::from_slice(
+            &Vec::from_hex(&mrh_resp.signature).unwrap(),
+        )
+        .unwrap();
+
+        let receiver_pubkey = PublicKey::from_str(&route_hint.src_node_id.to_string())
+            .unwrap()
+            .inner;
+
+        secp.verify_schnorr(&receiver_sig, &msg, &receiver_pubkey.x_only_public_key().0)
+            .unwrap();
+
+        // TODO: verify liquid asset id.
+
+        log::info!("Magic Routing hint found and verification succeeded");
+    }
 
     // Initiate the swap with Boltz
     let create_swap_req = CreateSubmarineRequest {
@@ -232,11 +268,17 @@ fn liquid_v2_reverse() {
     // Give a valid claim address or else funds will be lost.
     let claim_address = "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7".to_string();
 
+    // Sign the address signature by claim priv key.
+    let address_hash = sha256::Hash::hash(&Vec::from_hex(&claim_address).unwrap());
+    let msg = Message::from_digest_slice(address_hash.as_byte_array()).unwrap();
+    let addrs_sig = Secp256k1::new().sign_schnorr(&msg, &our_keys);
+
     let create_reverse_req = CreateReverseRequest {
         invoice_amount,
         from: "BTC".to_string(),
         to: "L-BTC".to_string(),
         preimage_hash: preimage.sha256,
+        address_signature: addrs_sig.to_string(),
         claim_public_key,
         referral_id: None,
     };
