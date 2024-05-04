@@ -26,7 +26,6 @@ ureq = { version = "2.9.7", features = ["json", "native-tls"] }
 bip39 = "2.0.0"
 electrum-client = "0.19.0"
 bitcoin = {version = "0.31.2", features = ["rand", "base64", "rand-std"]}
-bip21 = "0.4.0"
 elements = { version = "0.24.0", features = ["serde"] }
 lightning-invoice = "0.30.0"
 tungstenite = { version = "0.21.0", features = ["native-tls-vendored"] }
