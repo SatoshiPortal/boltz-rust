@@ -87,7 +87,7 @@ pub fn check_for_mrh(
     boltz_api_v2: &BoltzApiClientV2,
     invoice: &str,
     network: Chain,
-) -> Result<(String, f64), Error> {
+) -> Result<Option<(String, f64)>, Error> {
     if let Some(route_hint) = find_magic_routing_hint(&invoice)? {
         let mrh_resp = boltz_api_v2.get_mrh_bip21(&invoice)?;
 
@@ -123,10 +123,9 @@ pub fn check_for_mrh(
             _ => (),
         }
 
-
-        Ok((address, amount))
+        Ok(Some((address, amount)))
     } else {
-        Err(Error::Generic("No routing hint found in invoice".to_string()))
+        Ok(None)
     }
 }
 

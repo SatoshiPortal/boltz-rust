@@ -260,7 +260,7 @@ fn bitcoin_v2_reverse() {
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
 
-    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet).unwrap();
+    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet).unwrap().unwrap();
 
     log::debug!("Got Reverse swap response: {:?}", reverse_resp);
 
