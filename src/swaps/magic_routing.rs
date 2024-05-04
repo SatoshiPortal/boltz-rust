@@ -13,7 +13,7 @@ use lightning_invoice::{Bolt11Invoice, RouteHintHop};
 
 use super::boltzv2::BoltzApiClientV2;
 
-const MAGIC_ROUTING_HINT_CONSTANT: &str = "0846c900051c0000";
+const MAGIC_ROUTING_HINT_CONSTANT: u64 = 596385002596073472;
 const LBTC_TESTNET_ASSET_HASH: &str =
     "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const LBTC_MAINNET_ASSET_HASH: &str = "";
@@ -26,7 +26,7 @@ pub fn find_magic_routing_hint(invoice: &str) -> Result<Option<RouteHintHop>, Er
         .iter()
         .map(|route| &route.0)
         .flatten()
-        .find(|hint| hint.short_channel_id.to_hex() == MAGIC_ROUTING_HINT_CONSTANT)
+        .find(|hint| hint.short_channel_id == MAGIC_ROUTING_HINT_CONSTANT)
         .cloned())
 }
 
@@ -68,7 +68,7 @@ pub fn check_for_mrh(
         let mrh_resp = boltz_api_v2.get_mrh_bip21(&invoice).unwrap();
 
         let (network_found, address, amount, assetid) = parse_bip21(&mrh_resp.bip21);
-        let address_hash = sha256::Hash::hash(&Vec::from_hex(&address).unwrap());
+        let address_hash = sha256::Hash::hash(address.as_bytes());
         let msg = Message::from_digest_slice(address_hash.as_byte_array()).unwrap();
 
         let receiver_sig = bitcoin::secp256k1::schnorr::Signature::from_slice(
@@ -135,4 +135,10 @@ fn test_bip21_parsing() {
         assetid,
         Some("144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a4".to_string())
     );
+}
+
+#[test]
+fn test_mrh() {
+    let route_hint = find_magic_routing_hint("lntb1m1pnrv328pp5zymney8y48234em5lakrkuk8rfrftn5dkwfys7zghe2c40hxfmusdpz2djkuepqw3hjqnpdgf2yxgrpv3j8yetnwvcqz95xqyp2xqrzjqwyg6p2yhhqvq5d97kkwuk0mnrp3su6sn5fvtxn63gppms9fkegajzzxeyqq28qqqqqqqqqqqqqqq9gq2ysp5znw62my456pnzq7vyfgje2yjfat8gzgf88q8rl30dt3cgpmpk9eq9qyyssq55qds9y2vrtmqxq00fgrnartdhs0wwlt7u5uflzs5wnx8wad8y3y86y8lgre4qaszhvhesa6ts99g7m088j6dgjfe6hhtkfglqfqwjcp03v2nh").unwrap().expect("route hint expected");
+    assert_eq!(route_hint.short_channel_id, MAGIC_ROUTING_HINT_CONSTANT);
 }
