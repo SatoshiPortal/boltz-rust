@@ -22,6 +22,7 @@ pub use elements::{
     address::Address as ElementsAddress,
     locktime::LockTime as ElementsLockTime,
     secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1},
+    hex::ToHex, pset::serialize::Serialize
 };
 pub use lightning_invoice::Bolt11Invoice;
 
