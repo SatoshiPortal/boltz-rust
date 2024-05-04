@@ -251,8 +251,8 @@ fn liquid_v2_reverse() {
         from: "BTC".to_string(),
         to: "L-BTC".to_string(),
         preimage_hash: preimage.sha256,
-        address_signature: addrs_sig.to_string(),
-        address: claim_address.clone(),
+        address_signature: Some(addrs_sig.to_string()),
+        address: Some(claim_address.clone()),
         claim_public_key,
         referral_id: None,
     };
