@@ -245,7 +245,7 @@ fn bitcoin_v2_reverse() {
     // Give a valid claim address or else funds will be lost.
     let claim_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
 
-    let addrs_sig = sign_address(&claim_address, &our_keys);
+    let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
     let create_reverse_req = CreateReverseRequest {
         invoice_amount,
         from: "BTC".to_string(),

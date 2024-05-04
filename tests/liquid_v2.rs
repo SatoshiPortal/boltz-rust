@@ -244,7 +244,7 @@ fn liquid_v2_reverse() {
     // Give a valid claim address or else funds will be lost.
     let claim_address = "tlq1qqtzkefxathskcl5svkfwscd6eyhua8f8v9snpxdy7fe8lu3x6c0v93k3stc4e79avd4d9z76vm30yc3564z6wl5wcs2v409fl".to_string();
 
-    let addrs_sig = sign_address(&claim_address, &our_keys);
+    let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
 
     let create_reverse_req = CreateReverseRequest {
         invoice_amount,

@@ -25,6 +25,7 @@ pub enum Error {
     WebSocket(tungstenite::Error),
     Taproot(String),
     Musig2(String),
+    Generic(String),
 }
 
 impl From<electrum_client::Error> for Error {
@@ -258,6 +259,7 @@ impl Error {
             Error::WebSocket(_) => "WebSocket",
             Error::Taproot(_) => "Taproot",
             Error::Musig2(_) => "Musig2",
+            Error::Generic(_) => "Generic",
         }
         .to_string()
     }
@@ -289,6 +291,7 @@ impl Error {
             Error::WebSocket(e) => e.to_string(),
             Error::Taproot(e) => e.clone(),
             Error::Musig2(e) => e.clone(),
+            Error::Generic(e) => e.clone(),
         }
     }
 }
