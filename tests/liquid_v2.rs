@@ -42,7 +42,14 @@ fn liquid_v2_submarine() {
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
-    let _ = check_for_mrh(&boltz_api_v2, &invoice, Chain::LiquidTestnet).unwrap();
+    // If there is MRH send directly to that address
+    if let Some((bip21_addrs, amount)) =
+        check_for_mrh(&boltz_api_v2, &invoice, Chain::BitcoinTestnet).unwrap()
+    {
+        log::info!("Found MRH in invoice");
+        log::info!("Send {} to {}", amount, bip21_addrs);
+        return;
+    }
 
     // Initiate the swap with Boltz
     let create_swap_req = CreateSubmarineRequest {
@@ -253,6 +260,8 @@ fn liquid_v2_reverse() {
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
+
+    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet).unwrap();
 
     log::debug!("Got Reverse swap response: {:?}", reverse_resp);
 

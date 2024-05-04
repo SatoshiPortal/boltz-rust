@@ -59,11 +59,12 @@ pub fn parse_bip21(uri: &str) -> (String, String, f64, Option<String>) {
 }
 
 /// Check for magic routing hint in invoice. If present, get the BIP21 from Boltz and verify it.
+/// Returns the BIP21 (address, amount) tupple.
 pub fn check_for_mrh(
     boltz_api_v2: &BoltzApiClientV2,
     invoice: &str,
     network: Chain,
-) -> Result<(), Error> {
+) -> Result<Option<(String, f64)>, Error> {
     if let Some(route_hint) = find_magic_routing_hint(&invoice).unwrap() {
         let mrh_resp = boltz_api_v2.get_mrh_bip21(&invoice).unwrap();
 
@@ -90,8 +91,6 @@ pub fn check_for_mrh(
                     return Err(Error::Protocol(
                         "Asset Id missmatch in Magic Routing Hint".to_string(),
                     ));
-                } else {
-                    return Ok(());
                 }
             }
 
@@ -100,8 +99,6 @@ pub fn check_for_mrh(
                     return Err(Error::Protocol(
                         "Asset Id missmatch in Magic Routing Hint".to_string(),
                     ));
-                } else {
-                    return Ok(());
                 }
             }
             _ => (),
@@ -109,10 +106,10 @@ pub fn check_for_mrh(
 
         log::info!("Magic Routing hint found and verification succeeded");
 
-        Ok(())
+        Ok(Some((address, amount)))
     } else {
         log::info!("No Magic Routing Hint in the invoice");
-        Ok(())
+        Ok(None)
     }
 }
 
