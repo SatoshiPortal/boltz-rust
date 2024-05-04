@@ -322,6 +322,7 @@ pub struct CreateReverseRequest {
     pub from: String,
     pub to: String,
     pub preimage_hash: sha256::Hash,
+    pub address: String,
     pub address_signature: String,
     pub claim_public_key: PublicKey,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -4,8 +4,8 @@ use crate::{error::Error, network::Chain};
 use bitcoin::{
     hashes::{sha256, Hash},
     hex::FromHex,
-    key::Secp256k1,
-    secp256k1::Message,
+    key::{Keypair, Secp256k1},
+    secp256k1::{schnorr::Signature, Message},
     PublicKey,
 };
 use elements::hex::ToHex;
@@ -114,6 +114,13 @@ pub fn check_for_mrh(
         log::info!("No Magic Routing Hint in the invoice");
         Ok(())
     }
+}
+
+/// Sign the address signature by a priv key.
+pub fn sign_address(addr: &str, keys: &Keypair) -> Signature {
+    let address_hash = sha256::Hash::hash(&Vec::from_hex(&addr).unwrap());
+    let msg = Message::from_digest_slice(address_hash.as_byte_array()).unwrap();
+    Secp256k1::new().sign_schnorr(&msg, &keys)
 }
 
 #[test]

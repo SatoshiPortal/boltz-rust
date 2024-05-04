@@ -1,13 +1,15 @@
 use std::{str::FromStr, time::Duration};
 
-use bip21::Uri;
 use boltz_client::{
-    network::electrum::ElectrumConfig,
-    swaps::boltzv2::{
-        BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription, SwapUpdate,
-        BOLTZ_TESTNET_URL_V2,
+    network::{electrum::ElectrumConfig, Chain},
+    swaps::{
+        boltzv2::{
+            BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription,
+            SwapUpdate, BOLTZ_TESTNET_URL_V2,
+        },
+        magic_routing::{check_for_mrh, sign_address},
     },
-    util::{find_magic_routing_hint, secrets::Preimage, setup_logger},
+    util::{secrets::Preimage, setup_logger},
     Bolt11Invoice, BtcSwapScriptV2, BtcSwapTxV2, Secp256k1,
 };
 
@@ -15,7 +17,7 @@ use bitcoin::{
     hashes::{sha256, Hash},
     hex::FromHex,
     key::rand::thread_rng,
-    secp256k1::{Keypair, Message},
+    secp256k1::Keypair,
     PublicKey,
 };
 
@@ -40,33 +42,7 @@ fn bitcoin_v2_submarine() {
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
-    // Check for magic routing hint in invoice.
-    if let Some(route_hint) = find_magic_routing_hint(&invoice).unwrap() {
-        let mrh_resp = boltz_api_v2.get_mrh_bip21(&invoice).unwrap();
-
-        let bip21 = mrh_resp
-            .bip21
-            .parse::<Uri<'_, _>>()
-            .unwrap()
-            .require_network(bitcoin::Network::Testnet)
-            .unwrap();
-        let address_hash = sha256::Hash::hash(&Vec::from_hex(&bip21.address.to_string()).unwrap());
-        let msg = Message::from_digest_slice(address_hash.as_byte_array()).unwrap();
-
-        let receiver_sig = bitcoin::secp256k1::schnorr::Signature::from_slice(
-            &Vec::from_hex(&mrh_resp.signature).unwrap(),
-        )
-        .unwrap();
-
-        let receiver_pubkey = PublicKey::from_str(&route_hint.src_node_id.to_string())
-            .unwrap()
-            .inner;
-
-        secp.verify_schnorr(&receiver_sig, &msg, &receiver_pubkey.x_only_public_key().0)
-            .unwrap();
-
-        log::info!("Magic Routing hint found and verification succeeded");
-    }
+    let _ = check_for_mrh(&boltz_api_v2, &invoice, Chain::BitcoinTestnet).unwrap();
 
     // Initiate the swap with Boltz
     let create_swap_req = CreateSubmarineRequest {
@@ -262,17 +238,14 @@ fn bitcoin_v2_reverse() {
     // Give a valid claim address or else funds will be lost.
     let claim_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
 
-    // Sign the address signature by claim priv key.
-    let address_hash = sha256::Hash::hash(&Vec::from_hex(&claim_address).unwrap());
-    let msg = Message::from_digest_slice(address_hash.as_byte_array()).unwrap();
-    let addrs_sig = Secp256k1::new().sign_schnorr(&msg, &our_keys);
-
+    let addrs_sig = sign_address(&claim_address, &our_keys);
     let create_reverse_req = CreateReverseRequest {
         invoice_amount,
         from: "BTC".to_string(),
         to: "BTC".to_string(),
         preimage_hash: preimage.sha256,
         address_signature: addrs_sig.to_string(),
+        address: claim_address.clone(),
         claim_public_key,
         referral_id: None, // Add address signature here.
     };
@@ -282,14 +255,6 @@ fn bitcoin_v2_reverse() {
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
 
     log::debug!("Got Reverse swap response: {:?}", reverse_resp);
-
-    if let Some(route_hint) = find_magic_routing_hint(&reverse_resp.invoice).unwrap() {
-        assert_eq!(
-            route_hint.src_node_id.to_string(),
-            our_keys.public_key().to_string()
-        );
-        log::info!("Magic Routing Hint spotted in invoice {:?}", route_hint);
-    }
 
     let swap_script =
         BtcSwapScriptV2::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
