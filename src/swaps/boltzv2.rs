@@ -222,6 +222,11 @@ impl BoltzApiClientV2 {
         Ok(serde_json::from_str(&self.post(&endpoint, data)?)?)
     }
 
+    pub fn get_mrh_bip21(&self, invoice: &str) -> Result<MrhResponse, Error> {
+        let request = format!("swap/reverse/{}/bip21", invoice);
+        Ok(serde_json::from_str(&self.get(&request)?)?)
+    }
+
     pub fn broadcast_tx(&self, chain: Chain, tx_hex: &String) -> Result<Value, Error> {
         let data = json!(
             {
@@ -246,6 +251,13 @@ pub struct ClaimTxResponse {
     pub pub_nonce: String,
     pub public_key: PublicKey,
     pub transaction_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MrhResponse {
+    pub bip21: String,
+    pub signature: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -310,6 +322,8 @@ pub struct CreateReverseRequest {
     pub from: String,
     pub to: String,
     pub preimage_hash: sha256::Hash,
+    pub address: String,
+    pub address_signature: String,
     pub claim_public_key: PublicKey,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,

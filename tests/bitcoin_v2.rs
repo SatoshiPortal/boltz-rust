@@ -1,10 +1,13 @@
 use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
-    network::electrum::ElectrumConfig,
-    swaps::boltzv2::{
-        BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription, SwapUpdate,
-        BOLTZ_TESTNET_URL_V2,
+    network::{electrum::ElectrumConfig, Chain},
+    swaps::{
+        boltzv2::{
+            BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription,
+            SwapUpdate, BOLTZ_TESTNET_URL_V2,
+        },
+        magic_routing::{check_for_mrh, sign_address},
     },
     util::{secrets::Preimage, setup_logger},
     Bolt11Invoice, BtcSwapScriptV2, BtcSwapTxV2, Secp256k1,
@@ -25,7 +28,7 @@ pub mod test_utils;
 fn bitcoin_v2_submarine() {
     setup_logger();
 
-    let secp = Secp256k1::new();
+    let secp = bitcoin::secp256k1::Secp256k1::new();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
 
     let refund_public_key = PublicKey {
@@ -37,6 +40,17 @@ fn bitcoin_v2_submarine() {
     let invoice = "lntb510u1pnpuwgxpp5arh2aw92wv5vxmndm0704zu2qhj6k8xhg38dlylt2atcc3vcs88qdqgdverzvm2xqyjw5qcqp2sp52vgwm4s6pc2q38hxrma9h4ycgtn4kzaq0we0d4mjtq030fu6zsfqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssq6frgq8gly29thefxg83y57hv564npas5dqc0cslml2q3cj0usrdptqa5p2el3df0c0xc6raxnty06m745l87v4qausuq9xh0wj2x57cpxsxxcz".to_string();
     let refund_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
 
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
+
+    // If there is MRH send directly to that address
+    if let Some((bip21_addrs, amount)) =
+        check_for_mrh(&boltz_api_v2, &invoice, Chain::BitcoinTestnet).unwrap()
+    {
+        log::info!("Found MRH in invoice");
+        log::info!("Send {} to {}", amount, bip21_addrs);
+        return;
+    }
+
     // Initiate the swap with Boltz
     let create_swap_req = CreateSubmarineRequest {
         from: "BTC".to_string(),
@@ -45,8 +59,6 @@ fn bitcoin_v2_submarine() {
         refund_public_key,
         referral_id: None,
     };
-
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
     let create_swap_response = boltz_api_v2.post_swap_req(&create_swap_req).unwrap();
 
@@ -233,18 +245,23 @@ fn bitcoin_v2_reverse() {
     // Give a valid claim address or else funds will be lost.
     let claim_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
 
+    let addrs_sig = sign_address(&claim_address, &our_keys);
     let create_reverse_req = CreateReverseRequest {
         invoice_amount,
         from: "BTC".to_string(),
         to: "BTC".to_string(),
         preimage_hash: preimage.sha256,
+        address_signature: addrs_sig.to_string(),
+        address: claim_address.clone(),
         claim_public_key,
-        referral_id: None,
+        referral_id: None, // Add address signature here.
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
+
+    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet).unwrap();
 
     log::debug!("Got Reverse swap response: {:?}", reverse_resp);
 
