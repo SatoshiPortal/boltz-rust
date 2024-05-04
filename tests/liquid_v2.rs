@@ -5,7 +5,7 @@ use boltz_client::{
     swaps::{
         boltzv2::{
             BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription,
-            SwapUpdate, BOLTZ_MAINNET_URL_V2, BOLTZ_TESTNET_URL_V2,
+            SwapUpdate, BOLTZ_TESTNET_URL_V2,
         },
         magic_routing::{check_for_mrh, sign_address},
     },
@@ -37,8 +37,8 @@ fn liquid_v2_submarine() {
     };
 
     // Set a new invoice string and refund address for each test.
-    let invoice = "lnbc1pnr99axpp53a5yn6g08ual5e2c64z4v0zx9e2f5tkw3wd0lcpff7wnuvw2x0dqcqpjsp5zm36qn2xy2rdh63rzr626mmft2558fws0akg2fs7p3tttl200uzq9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllard4vsfze0gsqqqqlgqqqqqeqqjqswnfqq25xjlwfk3lg4e82w5qkyusa84xhaztqa8sq7kcw35l5f7x9j4ju5z0gagh4kspddwd0r629qjla0rc40twdk9m2uyl9egc9tcq4ncwk6".to_string();
-    let refund_address = "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7".to_string();
+    let invoice = "lntb1m1pnrv328pp5zymney8y48234em5lakrkuk8rfrftn5dkwfys7zghe2c40hxfmusdpz2djkuepqw3hjqnpdgf2yxgrpv3j8yetnwvcqz95xqyp2xqrzjqwyg6p2yhhqvq5d97kkwuk0mnrp3su6sn5fvtxn63gppms9fkegajzzxeyqq28qqqqqqqqqqqqqqq9gq2ysp5znw62my456pnzq7vyfgje2yjfat8gzgf88q8rl30dt3cgpmpk9eq9qyyssq55qds9y2vrtmqxq00fgrnartdhs0wwlt7u5uflzs5wnx8wad8y3y86y8lgre4qaszhvhesa6ts99g7m088j6dgjfe6hhtkfglqfqwjcp03v2nh".to_string();
+    let refund_address = "tlq1qq0aa3lhat3r4auhstr0fsevj70gcwvvlsannf0ymlytelya2ylak7e69hksrk42fnl26wyk460ehy3pncxagy0ck47grlta62".to_string();
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
@@ -52,8 +52,6 @@ fn liquid_v2_submarine() {
         refund_public_key,
         referral_id: None,
     };
-
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
 
     let create_swap_response = boltz_api_v2.post_swap_req(&create_swap_req).unwrap();
 
@@ -237,7 +235,7 @@ fn liquid_v2_reverse() {
     };
 
     // Give a valid claim address or else funds will be lost.
-    let claim_address = "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7".to_string();
+    let claim_address = "tlq1qqtzkefxathskcl5svkfwscd6eyhua8f8v9snpxdy7fe8lu3x6c0v93k3stc4e79avd4d9z76vm30yc3564z6wl5wcs2v409fl".to_string();
 
     let addrs_sig = sign_address(&claim_address, &our_keys);
 
@@ -252,7 +250,7 @@ fn liquid_v2_reverse() {
         referral_id: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
 

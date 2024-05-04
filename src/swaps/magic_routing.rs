@@ -118,7 +118,7 @@ pub fn check_for_mrh(
 
 /// Sign the address signature by a priv key.
 pub fn sign_address(addr: &str, keys: &Keypair) -> Signature {
-    let address_hash = sha256::Hash::hash(&Vec::from_hex(&addr).unwrap());
+    let address_hash = sha256::Hash::hash(addr.as_bytes());
     let msg = Message::from_digest_slice(address_hash.as_byte_array()).unwrap();
     Secp256k1::new().sign_schnorr(&msg, &keys)
 }
