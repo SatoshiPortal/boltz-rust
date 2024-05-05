@@ -125,7 +125,7 @@ copy:
 	cp target/universal/release/libboltz_rust.a boltz-rust/ios
 	tar -cvzf boltz-rust.tar.gz boltz-rust
 
-	mv boltz-rust.tar.gz boltz-rust-0.1.5.tar.gz
+	mv boltz-rust.tar.gz boltz-rust-0.1.6.tar.gz
 
 ## :
 

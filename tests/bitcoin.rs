@@ -343,7 +343,6 @@ fn test_bitcoin_rsi() {
         RETURN_ADDRESS.to_string(),
         &network_config,
     )
-    .unwrap()
     .unwrap();
     let signed_tx = rv_claim_tx
         .sign_claim(&keypair, &preimage, absolute_fees)
@@ -389,7 +388,6 @@ fn test_recover_bitcoin_rsi() {
         RETURN_ADDRESS.to_string(),
         &network_config,
     )
-    .unwrap()
     .unwrap();
 
     let signed_tx = rev_swap_tx.sign_refund(&keypair, absolute_fees).unwrap();

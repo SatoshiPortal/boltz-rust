@@ -5,7 +5,7 @@
 #![allow(E0382)]
 
 /// Error Module
-mod error;
+pub mod error;
 /// Blockchain Network module. Currently only contains electrum interface.
 pub mod network;
 /// core swap logic
@@ -13,32 +13,48 @@ pub mod swaps;
 /// utilities (key, preimage, error)
 pub mod util;
 
-use bitcoin::secp256k1::rand::thread_rng;
-// use bitcoin::key;
-pub use bitcoin::secp256k1::{Keypair, Message, Secp256k1, XOnlyPublicKey};
-pub use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
-pub use lightning_invoice::Bolt11Invoice;
-use std::panic::{self, AssertUnwindSafe};
-
-use crate::util::secrets::Preimage;
-use bitcoin::secp256k1::hashes::{sha256, Hash};
-use bitcoin::secp256k1::schnorr::Signature;
-use elements::bitcoin::hashes::ripemd160;
-use elements::bitcoin::PublicKey;
-use elements::encode::Encodable;
-use elements::hex::{FromHex, ToHex};
-use elements::{
-    address::Address as EAddress, opcodes::all::*, script::Builder as EBuilder, AddressParams,
-    LockTime,
+pub use bitcoin::{
+    blockdata::locktime::absolute::LockTime,
+    hashes::{hash160, sha256, ripemd160, Hash},
+    secp256k1::rand::thread_rng,
+    secp256k1::schnorr::Signature,
+    secp256k1::{Keypair, Message, Secp256k1, XOnlyPublicKey},
+    Address, Amount, PublicKey,
 };
-use hex::decode;
-use network::electrum::ElectrumConfig;
+
+pub use elements::{
+    address::Address as ElementsAddress,
+    address::Address as EAddress,
+    encode::Encodable,
+    hex::{FromHex, ToHex},
+    locktime::LockTime as ElementsLockTime,
+    opcodes::all::*,
+    pset::serialize::Serialize,
+    script::Builder as EBuilder,
+    secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1},
+    AddressParams,
+};
+
+pub use lightning_invoice::Bolt11Invoice;
 use std::cell::RefCell;
 use std::ffi::{c_char, CStr, CString};
+use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
 use std::str::FromStr;
-use swaps::liquid::LBtcSwapScript;
-use swaps::liquid::LBtcSwapTx;
+
+use crate::util::secrets::Preimage;
+
+use hex::decode;
+use network::electrum::ElectrumConfig;
+
+pub use swaps::{
+    bitcoin::{BtcSwapScript, BtcSwapTx},
+    bitcoinv2::{BtcSwapScriptV2, BtcSwapTxV2},
+    boltz::{SwapTxKind, SwapType},
+    liquid::LBtcSwapScript,
+    liquid::LBtcSwapTx,
+    liquidv2::{LBtcSwapScriptV2, LBtcSwapTxV2},
+};
 
 #[no_mangle]
 pub extern "C" fn validate_submarine(

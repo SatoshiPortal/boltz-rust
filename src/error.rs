@@ -7,18 +7,25 @@ pub enum Error {
     Key(bitcoin::key::Error),
     Address(String),
     Sighash(bitcoin::sighash::Error),
+    ElSighash(elements::sighash::Error),
     Secp(bitcoin::secp256k1::Error),
     HTTP(ureq::Error),
     JSON(serde_json::Error),
     IO(std::io::Error),
     Bolt11(lightning_invoice::ParseOrSemanticError),
     LiquidEncode(elements::encode::Error),
+    BitcoinEncode(bitcoin::consensus::encode::Error),
     Blind(String),
     ConfidentialTx(elements::ConfidentialTxOutError),
     BIP32(bitcoin::bip32::Error),
     BIP39(bip39::Error),
     Hash(bitcoin::hashes::FromSliceError),
     Locktime(String),
+    Url(url::ParseError),
+    WebSocket(tungstenite::Error),
+    Taproot(String),
+    Musig2(String),
+    Generic(String),
 }
 
 impl From<electrum_client::Error> for Error {
@@ -60,6 +67,11 @@ impl From<elements::address::AddressError> for Error {
 impl From<bitcoin::sighash::Error> for Error {
     fn from(value: bitcoin::sighash::Error) -> Self {
         Self::Sighash(value)
+    }
+}
+impl From<elements::sighash::Error> for Error {
+    fn from(value: elements::sighash::Error) -> Self {
+        Self::ElSighash(value)
     }
 }
 
@@ -150,5 +162,136 @@ impl From<bitcoin::absolute::Error> for Error {
 impl From<elements::locktime::Error> for Error {
     fn from(value: elements::locktime::Error) -> Self {
         Self::Locktime(value.to_string())
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(value: url::ParseError) -> Self {
+        Self::Url(value)
+    }
+}
+
+impl From<tungstenite::Error> for Error {
+    fn from(value: tungstenite::Error) -> Self {
+        Self::WebSocket(value)
+    }
+}
+
+impl From<bitcoin::taproot::TaprootError> for Error {
+    fn from(value: bitcoin::taproot::TaprootError) -> Self {
+        Self::Taproot(value.to_string())
+    }
+}
+
+impl From<elements::taproot::TaprootError> for Error {
+    fn from(value: elements::taproot::TaprootError) -> Self {
+        Self::Taproot(value.to_string())
+    }
+}
+
+impl From<elements::taproot::TaprootBuilderError> for Error {
+    fn from(value: elements::taproot::TaprootBuilderError) -> Self {
+        Self::Taproot(value.to_string())
+    }
+}
+
+impl From<bitcoin::taproot::TaprootBuilderError> for Error {
+    fn from(value: bitcoin::taproot::TaprootBuilderError) -> Self {
+        Self::Taproot(value.to_string())
+    }
+}
+
+impl From<elements::secp256k1_zkp::MusigTweakErr> for Error {
+    fn from(value: elements::secp256k1_zkp::MusigTweakErr) -> Self {
+        Self::Musig2(value.to_string())
+    }
+}
+
+impl From<elements::secp256k1_zkp::MusigNonceGenError> for Error {
+    fn from(value: elements::secp256k1_zkp::MusigNonceGenError) -> Self {
+        Self::Musig2(value.to_string())
+    }
+}
+
+impl From<elements::secp256k1_zkp::ParseError> for Error {
+    fn from(value: elements::secp256k1_zkp::ParseError) -> Self {
+        Self::Musig2(value.to_string())
+    }
+}
+
+impl From<elements::secp256k1_zkp::MusigSignError> for Error {
+    fn from(value: elements::secp256k1_zkp::MusigSignError) -> Self {
+        Self::Musig2(value.to_string())
+    }
+}
+
+impl From<bitcoin::consensus::encode::Error> for Error {
+    fn from(value: bitcoin::consensus::encode::Error) -> Self {
+        Self::BitcoinEncode(value)
+    }
+}
+
+impl Error {
+    // Returns the name of the enum variant as a string
+    pub fn name(&self) -> String {
+        match self {
+            Error::Electrum(_) => "Electrum",
+            Error::Hex(_) => "Hex",
+            Error::Protocol(_) => "Protocol",
+            Error::Key(_) => "Key",
+            Error::Address(_) => "Address",
+            Error::Sighash(_) => "Sighash",
+            Error::ElSighash(_) => "Elements-Sighash",
+            Error::Secp(_) => "Secp",
+            Error::HTTP(_) => "HTTP",
+            Error::JSON(_) => "JSON",
+            Error::IO(_) => "IO",
+            Error::Bolt11(_) => "Bolt11",
+            Error::LiquidEncode(_) => "LiquidEncode",
+            Error::BitcoinEncode(_) => "BitcoinEncode",
+            Error::Blind(_) => "Blind",
+            Error::ConfidentialTx(_) => "ConfidentialTx",
+            Error::BIP32(_) => "BIP32",
+            Error::BIP39(_) => "BIP39",
+            Error::Hash(_) => "Hash",
+            Error::Locktime(_) => "Locktime",
+            Error::Url(_) => "Url",
+            Error::WebSocket(_) => "WebSocket",
+            Error::Taproot(_) => "Taproot",
+            Error::Musig2(_) => "Musig2",
+            Error::Generic(_) => "Generic",
+        }
+        .to_string()
+    }
+
+    // Returns the error message as a string
+    pub fn message(&self) -> String {
+        match self {
+            Error::Electrum(e) => e.to_string(),
+            Error::Hex(e) => e.clone(),
+            Error::Protocol(e) => e.clone(),
+            Error::Key(e) => e.to_string(),
+            Error::Address(e) => e.clone(),
+            Error::Sighash(e) => e.to_string(),
+            Error::ElSighash(e) => e.to_string(),
+            Error::Secp(e) => e.to_string(),
+            Error::HTTP(e) => e.to_string(),
+            Error::JSON(e) => e.to_string(),
+            Error::IO(e) => e.to_string(),
+            Error::Bolt11(e) => e.to_string(),
+            Error::LiquidEncode(e) => e.to_string(),
+            Error::BitcoinEncode(e) => e.to_string(),
+            Error::Blind(e) => e.clone(),
+            Error::ConfidentialTx(e) => e.to_string(),
+            Error::BIP32(e) => e.to_string(),
+            Error::BIP39(e) => e.to_string(),
+            Error::Hash(e) => e.to_string(),
+            Error::Locktime(e) => e.clone(),
+            Error::Url(e) => e.to_string(),
+            Error::WebSocket(e) => e.to_string(),
+            Error::Taproot(e) => e.clone(),
+            Error::Musig2(e) => e.clone(),
+            Error::Generic(e) => e.clone(),
+        }
     }
 }

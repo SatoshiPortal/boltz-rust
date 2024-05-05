@@ -7,6 +7,7 @@ use super::Chain;
 pub const DEFAULT_TESTNET_NODE: &str = "electrum.bullbitcoin.com:60002";
 pub const DEFAULT_LIQUID_TESTNET_NODE: &str = "blockstream.info:465";
 pub const DEFAULT_MAINNET_NODE: &str = "electrum.blockstream.info:50002";
+pub const DEFAULT_LIQUID_MAINNET_NODE: &str = "blockstream.info:995";
 pub const DEFAULT_ELECTRUM_TIMEOUT: u8 = 10;
 
 #[derive(Debug, Clone)]
@@ -38,6 +39,60 @@ pub struct ElectrumConfig {
 }
 
 impl ElectrumConfig {
+    pub fn default(chain: Chain, regtest_url: Option<String>) -> Result<Self, Error> {
+        if (chain == Chain::LiquidRegtest || chain == Chain::BitcoinRegtest)
+            && regtest_url.is_none()
+        {
+            return Err(Error::Electrum(electrum_client::Error::Message(
+                "Regtest requires using a custom url".to_string(),
+            )));
+        }
+        match chain {
+            Chain::Bitcoin => Ok(ElectrumConfig::new(
+                Chain::Bitcoin,
+                DEFAULT_MAINNET_NODE,
+                true,
+                true,
+                DEFAULT_ELECTRUM_TIMEOUT,
+            )),
+            Chain::BitcoinTestnet => Ok(ElectrumConfig::new(
+                Chain::BitcoinTestnet,
+                DEFAULT_TESTNET_NODE,
+                true,
+                true,
+                DEFAULT_ELECTRUM_TIMEOUT,
+            )),
+            Chain::BitcoinRegtest => Ok(ElectrumConfig::new(
+                Chain::BitcoinTestnet,
+                &regtest_url.unwrap(),
+                true,
+                true,
+                DEFAULT_ELECTRUM_TIMEOUT,
+            )),
+            Chain::Liquid => Ok(ElectrumConfig::new(
+                Chain::Liquid,
+                DEFAULT_LIQUID_MAINNET_NODE,
+                true,
+                true,
+                DEFAULT_ELECTRUM_TIMEOUT,
+            )),
+            Chain::LiquidTestnet => Ok(ElectrumConfig::new(
+                Chain::LiquidTestnet,
+                DEFAULT_LIQUID_TESTNET_NODE,
+                true,
+                true,
+                DEFAULT_ELECTRUM_TIMEOUT,
+            )),
+            Chain::LiquidRegtest => Ok(ElectrumConfig::new(
+                Chain::BitcoinTestnet,
+                &regtest_url.unwrap(),
+                true,
+                true,
+                DEFAULT_ELECTRUM_TIMEOUT,
+            )),
+        }
+    }
+
     pub fn default_bitcoin() -> Self {
         ElectrumConfig::new(
             Chain::BitcoinTestnet,

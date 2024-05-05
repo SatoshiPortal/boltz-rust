@@ -282,7 +282,7 @@ impl BtcSwapScript {
     }
 }
 
-fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
+pub fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
     let mut result = 0u32;
     for (i, &byte) in bytes.iter().enumerate() {
         result |= (byte as u32) << (8 * i);
@@ -306,11 +306,13 @@ impl BtcSwapTx {
         swap_script: BtcSwapScript,
         output_address: String,
         network_config: &ElectrumConfig,
-    ) -> Result<Option<BtcSwapTx>, Error> {
-        debug_assert!(
-            swap_script.swap_type != SwapType::Submarine,
-            "Claim transactions can only be constructed for Reverse swaps."
-        );
+    ) -> Result<BtcSwapTx, Error> {
+        if swap_script.swap_type == SwapType::Submarine {
+            return Err(Error::Protocol(
+                "Claim transactions can only be constructed for Reverse swaps.".to_string(),
+            ));
+        }
+
         let network = if network_config.network() == Chain::Bitcoin {
             Network::Bitcoin
         } else {
@@ -322,14 +324,16 @@ impl BtcSwapTx {
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
         if let Some(utxo) = utxo_info {
-            Ok(Some(BtcSwapTx {
+            Ok(BtcSwapTx {
                 kind: SwapTxKind::Claim,
                 swap_script,
                 output_address: address.assume_checked(),
                 utxo,
-            }))
+            })
         } else {
-            Ok(None)
+            Err(Error::Protocol(
+                "No utxos detected for this script".to_string(),
+            ))
         }
     }
     /// Construct a RefundTX corresponding to the swap_script. Only works for Normal Swaps.
@@ -338,11 +342,13 @@ impl BtcSwapTx {
         swap_script: BtcSwapScript,
         output_address: String,
         network_config: &ElectrumConfig,
-    ) -> Result<Option<BtcSwapTx>, Error> {
-        debug_assert!(
-            swap_script.swap_type != SwapType::ReverseSubmarine,
-            "Refund Txs can only be constructed for Normal Swaps"
-        );
+    ) -> Result<BtcSwapTx, Error> {
+        if swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(Error::Protocol(
+                "Refund Txs can only be constructed for Submarine Swaps.".to_string(),
+            ));
+        }
+
         let network = if network_config.network() == Chain::Bitcoin {
             Network::Bitcoin
         } else {
@@ -354,14 +360,16 @@ impl BtcSwapTx {
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
         if let Some(utxo) = utxo_info {
-            Ok(Some(BtcSwapTx {
+            Ok(BtcSwapTx {
                 kind: SwapTxKind::Refund,
                 swap_script,
                 output_address: address.assume_checked(),
                 utxo,
-            }))
+            })
         } else {
-            Ok(None)
+            Err(Error::Protocol(
+                "No utxos detected for this script".to_string(),
+            ))
         }
     }
     /// Fetch utxo for the script
@@ -374,15 +382,17 @@ impl BtcSwapTx {
         preimage: &Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, Error> {
-        debug_assert!(
-            self.swap_script.swap_type != SwapType::Submarine,
-            "Cannot sign claim tx, for a normal-swap, refund-type"
-        );
+        if self.swap_script.swap_type == SwapType::Submarine {
+            return Err(Error::Protocol(
+                "Claim Tx signing is only applicable for Reverse Swap Type".to_string(),
+            ));
+        }
 
-        debug_assert!(
-            self.kind != SwapTxKind::Refund,
-            "Cannot sign claim with Refund type BTCSwapTx"
-        );
+        if self.kind == SwapTxKind::Refund {
+            return Err(Error::Protocol(
+                "Cannot sign claim with Refund type BTCSwapTx".to_string(),
+            ));
+        }
 
         let preimage_bytes = if let Some(value) = preimage.bytes {
             value
@@ -443,15 +453,17 @@ impl BtcSwapTx {
     /// Sign a submarine swap refund transaction.
     /// Panics if called on Reverse Swap, Claim type.
     pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, Error> {
-        debug_assert!(
-            self.swap_script.swap_type != SwapType::ReverseSubmarine,
-            "Cannot sign refund tx, for a reverse-swap"
-        );
+        if self.swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(Error::Protocol(
+                "Cannot sign refund tx, for a reverse-swap".to_string(),
+            ));
+        }
 
-        debug_assert!(
-            self.kind != SwapTxKind::Claim,
-            "Cannot sign refund with a claim-type BtcSwapTx"
-        );
+        if self.kind == SwapTxKind::Claim {
+            return Err(Error::Protocol(
+                "Cannot sign refund with a claim-type BtcSwapTx".to_string(),
+            ));
+        }
 
         let unsigned_input: TxIn = TxIn {
             sequence: Sequence::ZERO, // enables absolute locktime

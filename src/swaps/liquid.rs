@@ -338,7 +338,6 @@ impl LBtcSwapScript {
                 return Err(Error::Protocol("No Transaction History".to_string()));
             }
             let bitcoin_txid = history.last().expect("txid expected").tx_hash;
-            println!("{}", bitcoin_txid);
             let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid)?;
             raw_tx
         };
@@ -419,10 +418,11 @@ impl LBtcSwapTx {
         tx: String,
         network_config: &ElectrumConfig,
     ) -> Result<LBtcSwapTx, Error> {
-        debug_assert!(
-            swap_script.swap_type != SwapType::Submarine,
-            "Claim transactions can only be constructed for Reverse swaps."
-        );
+        if swap_script.swap_type == SwapType::Submarine {
+            return Err(Error::Protocol(
+                "Claim transactions can only be constructed for Reverse swaps.".to_string(),
+            ));
+        }
 
         let tx_bytes = hex::decode(&tx).map_err(|e| Error::Protocol(format!("Could not decode tx: {}", e)))?;
 
@@ -446,10 +446,12 @@ impl LBtcSwapTx {
         tx: String,
         network_config: &ElectrumConfig,
     ) -> Result<LBtcSwapTx, Error> {
-        debug_assert!(
-            swap_script.swap_type != SwapType::ReverseSubmarine,
-            "Refund transactions can only be constructed for Submarine swaps."
-        );
+        if swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(Error::Protocol(
+                "Refund Txs can only be constructed for Submarine Swaps.".to_string(),
+            ));
+        }
+
         let address = Address::from_str(&output_address)?;
 
         let tx_bytes = hex::decode(&tx).map_err(|e| Error::Protocol(format!("Could not decode tx: {}", e)))?;
@@ -480,14 +482,18 @@ impl LBtcSwapTx {
         preimage: &Preimage,
         absolute_fees: u64,
     ) -> Result<Transaction, Error> {
-        debug_assert!(
-            self.swap_script.swap_type != SwapType::Submarine,
-            "Claim transactions can only be constructed for Reverse swaps."
-        );
-        debug_assert!(
-            self.kind != SwapTxKind::Refund,
-            "Constructed transaction is a refund. Cannot claim."
-        );
+        if self.swap_script.swap_type == SwapType::Submarine {
+            return Err(Error::Protocol(
+                "Claim Tx signing is only applicable for Reverse Swap Type".to_string(),
+            ));
+        }
+
+        if self.kind == SwapTxKind::Refund {
+            return Err(Error::Protocol(
+                "Cannot sign claim with Refund type BTCSwapTx".to_string(),
+            ));
+        }
+
         let preimage_bytes = preimage
             .bytes
             .ok_or(Error::Protocol("No preimage provided".to_string()))?;
@@ -632,14 +638,17 @@ impl LBtcSwapTx {
 
     /// Sign a refund transaction for a submarine swap
     pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, Error> {
-        debug_assert!(
-            self.swap_script.swap_type != SwapType::ReverseSubmarine,
-            "Refund transactions can only be constructed for Submarine swaps."
-        );
-        debug_assert!(
-            self.kind != SwapTxKind::Claim,
-            "Constructed transaction is a claim. Cannot refund."
-        );
+        if self.swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(Error::Protocol(
+                "Cannot sign refund tx, for a reverse-swap".to_string(),
+            ));
+        }
+
+        if self.kind == SwapTxKind::Claim {
+            return Err(Error::Protocol(
+                "Cannot sign refund with a claim-type BtcSwapTx".to_string(),
+            ));
+        }
 
         let redeem_script = self.swap_script.to_script()?;
         let sequence = Sequence::ZERO;

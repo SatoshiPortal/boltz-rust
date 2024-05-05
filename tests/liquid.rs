@@ -191,15 +191,16 @@ fn test_liquid_rsi() {
 fn test_recover_liquid_rsi() {
     const RETURN_ADDRESS: &str =
     "tlq1qqv4z28utgwunvn62s3aw0qjuw3sqgfdq6q8r8fesnawwnuctl70kdyedxw6tmxgqpq83x6ldsyr4n6cj0dm875k8g9k85w2s7";
+    // let preimage = "27c0a0b0b10f02279cb38ea15951cbcdf2d12560";
     let recovery = &LBtcReverseRecovery {
-        id: "aSdpTM".to_string(),
-        preimage: "0ce4d443977cbe07525afad157ef4ba58f1a99379f3b8272f9e95679b3fb930b".to_string(),
-        claim_key: "aecbc2bddfcd3fa6953d257a9f369dc20cdc66f2605c73efb4c91b90703506b6".to_string(),
-        blinding_key: "a0fb6b9a35b6e3aae715ca17528117643cff06efeaa214c9b086ade906e6b306".to_string(),
-        redeem_script: "8201208763a914e8d81e2486862df348f4a4174ea802ce907b2b09882102ccbab5f97c89afb97d814831c5355ef5ba96a18c9dcd1b5c8cfd42c697bfe53c677503d32e13b17521031ac3709775ccdbffc87f32e1a8c6d28359558e2d2c094575ae74f0ff3ab6978768ac".to_string(),
+        id: "dGC9gR".to_string(),
+        preimage: "b949018e603ae574343e2c19878e41e6ee6e34191d72d3fe99034f20904354cc".to_string(),
+        claim_key: "fca9a09c00f3b7123dcac080a17aacff1612547285074597221134090b3983b4".to_string(),
+        blinding_key: "4e8b1978f61f46a3c28323ed69e81545615ec1cd497ee1c1020df24c6a0ead5d".to_string(),
+        redeem_script: "8201208763a91427c0a0b0b10f02279cb38ea15951cbcdf2d125608821033a0caf01d21eedf04644e497deea2483092ac1c07abfd9792d3c158b2addf0266775034caf14b1752103c1c7ccb72969d118ec67162460aa29e16ed0247cc77e2a3ea5d051de0e8a50f668ac".to_string(),
     };
     let script: LBtcSwapScript = recovery.try_into().unwrap();
-    let network_config = ElectrumConfig::default_liquid();
+    let network_config = ElectrumConfig::default(Chain::LiquidTestnet, None).unwrap();
     println!("{:?}", script.fetch_utxo(&network_config));
 
     let tx =
