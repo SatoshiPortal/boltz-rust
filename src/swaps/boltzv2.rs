@@ -72,9 +72,9 @@ pub struct SwapParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapResponse {
     #[serde(rename = "BTC")]
-    btc: HashMap<String, SwapParams>,
+    pub btc: HashMap<String, SwapParams>,
     #[serde(rename = "L-BTC")]
-    lbtc: HashMap<String, SwapParams>,
+    pub lbtc: HashMap<String, SwapParams>,
 }
 
 /// Reference Documnetation: https://api.boltz.exchange/swagger
