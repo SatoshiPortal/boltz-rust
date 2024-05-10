@@ -384,7 +384,7 @@ impl LBtcSwapScriptV2 {
         let boltz_client = BoltzApiClientV2::new(boltz_url);
         let transaction = boltz_client.get_reverse_tx(swap_id)?;
         let address = self.to_address(network_config.network())?;
-        let tx: Transaction = elements::encode::deserialize(transaction.hex.as_bytes())?;
+        let tx: Transaction = elements::encode::deserialize(&hex_to_bytes(&transaction.hex)?)?;
         let mut vout = 0;
         for output in tx.clone().output {
             if output.script_pubkey == address.script_pubkey() {
@@ -1105,4 +1105,27 @@ impl LBtcSwapTxV2 {
                 .to_string())
         }
     }
+}
+
+fn hex_to_bytes(hex_str: &str) -> Result<Vec<u8>, Error> {
+    if hex_str.len() % 2 != 0 {
+        return Err(Error::Hex(
+            "Hex string must have an even length".to_string(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    for i in (0..hex_str.len()).step_by(2) {
+        let hex_pair = &hex_str[i..i + 2];
+        match u8::from_str_radix(hex_pair, 16) {
+            Ok(byte) => bytes.push(byte),
+            Err(_) => {
+                return Err(Error::Hex(format!(
+                    "Invalid hexadecimal pair: {}",
+                    hex_pair
+                )))
+            }
+        }
+    }
+
+    Ok(bytes)
 }
