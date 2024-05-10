@@ -242,7 +242,7 @@ fn liquid_v2_reverse() {
     };
 
     // Give a valid claim address or else funds will be lost.
-    let claim_address = "tlq1qqtzkefxathskcl5svkfwscd6eyhua8f8v9snpxdy7fe8lu3x6c0v93k3stc4e79avd4d9z76vm30yc3564z6wl5wcs2v409fl".to_string();
+    let claim_address = "tlq1qqtruxmfwfaun99rw2qj2qk6nev57tssyakn0sz292j9xly2c9ks89d4tn9xj925t644lhzk0n67zv5vgh8tewt070qnc9jlmx".to_string();
 
     let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
 
@@ -260,8 +260,11 @@ fn liquid_v2_reverse() {
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
+    let swap_id = reverse_resp.clone().id;
 
-    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet).unwrap().unwrap();
+    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet)
+        .unwrap()
+        .unwrap();
 
     log::debug!("Got Reverse swap response: {:?}", reverse_resp);
 
@@ -272,7 +275,7 @@ fn liquid_v2_reverse() {
     // Subscribe to wss status updates
     let mut socket = boltz_api_v2.connect_ws().unwrap();
 
-    let subscription = Subscription::new(&reverse_resp.id);
+    let subscription = Subscription::new(&swap_id);
 
     socket
         .send(tungstenite::Message::Text(
@@ -297,8 +300,8 @@ fn liquid_v2_reverse() {
                 } => {
                     assert!(event == "subscribe");
                     assert!(channel == "swap.update");
-                    assert!(args.get(0).expect("expected") == &reverse_resp.id);
-                    log::info!("Subscription successful for swap : {}", &reverse_resp.id);
+                    assert!(args.get(0).expect("expected") == &swap_id);
+                    log::info!("Subscription successful for swap : {}", &swap_id);
                 }
 
                 SwapUpdate::Update {
@@ -309,7 +312,7 @@ fn liquid_v2_reverse() {
                     assert!(event == "update");
                     assert!(channel == "swap.update");
                     let update = args.get(0).expect("expected");
-                    assert!(&update.id == &reverse_resp.id);
+                    assert!(&update.id == &swap_id);
                     log::info!("Got Update from server: {}", update.status);
 
                     if update.status == "swap.created" {
@@ -326,6 +329,8 @@ fn liquid_v2_reverse() {
                             swap_script.clone(),
                             claim_address.clone(),
                             &ElectrumConfig::default_liquid(),
+                            BOLTZ_TESTNET_URL_V2.to_string(),
+                            swap_id.clone(),
                         )
                         .unwrap();
 
@@ -334,7 +339,7 @@ fn liquid_v2_reverse() {
                                 &our_keys,
                                 &preimage,
                                 Amount::from_sat(1000),
-                                Some((&boltz_api_v2, reverse_resp.id.clone())),
+                                Some((&boltz_api_v2, swap_id.clone())),
                             )
                             .unwrap();
 

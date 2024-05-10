@@ -172,7 +172,7 @@ impl BoltzApiClientV2 {
         Ok(serde_json::from_str(&self.post("swap/reverse", req)?)?)
     }
 
-    pub fn get_reverse_tx(&self, id: &String) -> Result<ReverseSwapTxResp, Error> {
+    pub fn get_reverse_tx(&self, id: &str) -> Result<ReverseSwapTxResp, Error> {
         Ok(serde_json::from_str(
             &self.get(&format!("swap/reverse/{}/transaction", id))?,
         )?)

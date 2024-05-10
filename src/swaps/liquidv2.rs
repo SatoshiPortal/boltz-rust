@@ -344,7 +344,7 @@ impl LBtcSwapScriptV2 {
         Ok((balance.confirmed, balance.unconfirmed))
     }
 
-    /// Fetch utxo for script
+    /// Fetch utxo for script from Electrum
     pub fn fetch_utxo(&self, network_config: &ElectrumConfig) -> Result<(OutPoint, TxOut), Error> {
         let electrum_client = network_config.clone().build_client()?;
         let address = self.to_address(network_config.network())?;
@@ -360,6 +360,31 @@ impl LBtcSwapScriptV2 {
         let bitcoin_txid = history.last().expect("txid expected").tx_hash;
         let raw_tx = electrum_client.transaction_get_raw(&bitcoin_txid)?;
         let tx: Transaction = elements::encode::deserialize(&raw_tx)?;
+        let mut vout = 0;
+        for output in tx.clone().output {
+            if output.script_pubkey == address.script_pubkey() {
+                let outpoint_0 = OutPoint::new(tx.txid(), vout);
+
+                return Ok((outpoint_0, output));
+            }
+            vout += 1;
+        }
+        return Err(Error::Protocol(
+            "Could not find utxos for script".to_string(),
+        ));
+    }
+
+    /// Fetch utxo for script from BoltzApi
+    pub fn fetch_utxo_boltz(
+        &self,
+        network_config: &ElectrumConfig,
+        boltz_url: &str,
+        swap_id: &str,
+    ) -> Result<(OutPoint, TxOut), Error> {
+        let boltz_client = BoltzApiClientV2::new(boltz_url);
+        let transaction = boltz_client.get_reverse_tx(swap_id)?;
+        let address = self.to_address(network_config.network())?;
+        let tx: Transaction = elements::encode::deserialize(transaction.hex.as_bytes())?;
         let mut vout = 0;
         for output in tx.clone().output {
             if output.script_pubkey == address.script_pubkey() {
@@ -411,6 +436,8 @@ impl LBtcSwapTxV2 {
         swap_script: LBtcSwapScriptV2,
         output_address: String,
         network_config: &ElectrumConfig,
+        boltz_url: String,
+        swap_id: String,
     ) -> Result<LBtcSwapTxV2, Error> {
         if swap_script.swap_type == SwapType::Submarine {
             return Err(Error::Protocol(
@@ -418,7 +445,10 @@ impl LBtcSwapTxV2 {
             ));
         }
 
-        let (funding_outpoint, funding_utxo) = swap_script.fetch_utxo(network_config)?;
+        let (funding_outpoint, funding_utxo) = match swap_script.fetch_utxo(&network_config) {
+            Ok(r) => r,
+            Err(_) => swap_script.fetch_utxo_boltz(&network_config, &boltz_url, &swap_id)?,
+        };
 
         let electrum = network_config.build_client()?;
         let genesis_hash = liquid_genesis_hash(&network_config)?;
