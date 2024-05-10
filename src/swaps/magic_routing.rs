@@ -16,7 +16,8 @@ use super::boltzv2::BoltzApiClientV2;
 const MAGIC_ROUTING_HINT_CONSTANT: u64 = 596385002596073472;
 const LBTC_TESTNET_ASSET_HASH: &str =
     "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const LBTC_MAINNET_ASSET_HASH: &str = "";
+const LBTC_MAINNET_ASSET_HASH: &str =
+    "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d";
 
 /// Decodes the provided invoice to find the magic routing hint.
 pub fn find_magic_routing_hint(invoice: &str) -> Result<Option<RouteHintHop>, Error> {
