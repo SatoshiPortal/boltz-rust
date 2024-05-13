@@ -281,9 +281,7 @@ impl Fees {
     }
     /// Get claim miner fees for a submarine swap
     pub fn submarine_claim(&self) -> u64 {
-        let ln_fee = (self.miner_fees.quote_asset.normal) as u64;
-        let claim_miner_fees = (self.miner_fees.base_asset.normal) as u64;
-        claim_miner_fees + ln_fee
+        self.miner_fees.base_asset.normal as u64
     }
     /// Get onchain lockup miner fees for a submarine swap
     pub fn submarine_lockup_estimate(&self) -> u64 {
