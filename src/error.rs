@@ -9,7 +9,7 @@ pub enum Error {
     Sighash(bitcoin::sighash::Error),
     ElSighash(elements::sighash::Error),
     Secp(bitcoin::secp256k1::Error),
-    HTTP(ureq::Error),
+    HTTP(String),
     JSON(serde_json::Error),
     IO(std::io::Error),
     Bolt11(lightning_invoice::ParseOrSemanticError),
@@ -83,7 +83,7 @@ impl From<bitcoin::secp256k1::Error> for Error {
 
 impl From<ureq::Error> for Error {
     fn from(value: ureq::Error) -> Self {
-        Self::HTTP(value)
+        Self::HTTP(value.to_string())
     }
 }
 

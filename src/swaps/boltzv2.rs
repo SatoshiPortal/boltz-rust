@@ -112,12 +112,22 @@ impl BoltzApiClientV2 {
             // If native_tls is available, use that for TLS
             // It has better handling of close_notify, which avoids some POST call failures
             // See https://github.com/SatoshiPortal/boltz-rust/issues/39
-            Ok(tls_connector) => AgentBuilder::new()
+            Ok(tls_connector) => {
+                let response = match AgentBuilder::new()
                 .tls_connector(Arc::new(tls_connector))
                 .build()
                 .request("POST", &url)
-                .send_json(data)?
-                .into_string()?,
+                .send_json(data)
+                    {
+                        Ok(r)=>r.into_string()?,
+                        Err(ureq::Error::Status(code, response)) => {
+                            let error: Value= serde_json::from_str(&response.into_string()?)?;
+                            error.get("error").unwrap_or(&Value::Null).to_string()
+                        }
+                        Err(e) => { return Err(e.into()) }
+                    };
+                    response
+            },
             // If native_tls is not available, fallback to the default (rustls)
             Err(_) => ureq::post(&url).send_json(data)?.into_string()?,
         };

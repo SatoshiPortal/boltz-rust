@@ -37,7 +37,7 @@ fn liquid_v2_submarine() {
     };
 
     // Set a new invoice string and refund address for each test.
-    let invoice = "lntb1m1pnrv328pp5zymney8y48234em5lakrkuk8rfrftn5dkwfys7zghe2c40hxfmusdpz2djkuepqw3hjqnpdgf2yxgrpv3j8yetnwvcqz95xqyp2xqrzjqwyg6p2yhhqvq5d97kkwuk0mnrp3su6sn5fvtxn63gppms9fkegajzzxeyqq28qqqqqqqqqqqqqqq9gq2ysp5znw62my456pnzq7vyfgje2yjfat8gzgf88q8rl30dt3cgpmpk9eq9qyyssq55qds9y2vrtmqxq00fgrnartdhs0wwlt7u5uflzs5wnx8wad8y3y86y8lgre4qaszhvhesa6ts99g7m088j6dgjfe6hhtkfglqfqwjcp03v2nh".to_string();
+    let invoice = "lntb11300n1pnyfu6jpp5f8qsaxf39qsr2y9hj9dvqn2fzrjrsapkturl6v68dq05fjhqtq7sdq2v9ekgctnvsxqyjw5qcqp2sp5axgq9xqg8uagudwvqnvcgdc4custjf2kxeg29pcdansyl3m4672qrzjq0cxp9fmaadhwlw80ez2lgu9n5pzlsd803238r0tyv4dwf27s6wqq2hfgyqp9ucqqyqqqqlgqqqqqqgq2q9qyyssqrtye0tu53w3q7s6w5jl2fqh8e9tull0f2j0jj47z7dhmgkg0zyunyx2dqsw2ekumq9j3guf8etm9dq6z7vndxkz3742humjsrvljlnqptsdxhs".to_string();
     let refund_address = "tlq1qq0aa3lhat3r4auhstr0fsevj70gcwvvlsannf0ymlytelya2ylak7e69hksrk42fnl26wyk460ehy3pncxagy0ck47grlta62".to_string();
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
@@ -135,6 +135,7 @@ fn liquid_v2_submarine() {
                             &ElectrumConfig::default_liquid(),
                         )
                         .unwrap();
+                        // why? ^^^s
 
                         let claim_tx_response = boltz_api_v2
                             .get_claim_tx_details(&create_swap_response.id)
