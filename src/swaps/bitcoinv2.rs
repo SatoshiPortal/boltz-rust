@@ -693,12 +693,12 @@ impl BtcSwapTxV2 {
             ));
         }
 
-        let unsigned_input: TxIn = TxIn {
-            sequence: Sequence::ZERO, // enables absolute locktime
-            previous_output: self.utxo.0,
-            script_sig: ScriptBuf::new(),
-            witness: Witness::new(),
-        };
+        // let unsigned_input: TxIn = TxIn {
+        //     sequence: Sequence::ZERO, // enables absolute locktime
+        //     previous_output: self.utxo.0,
+        //     script_sig: ScriptBuf::new(),
+        //     witness: Witness::new(),
+        // };
         let output_amount: Amount = Amount::from_sat(self.utxo.1.value.to_sat() - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
@@ -708,7 +708,7 @@ impl BtcSwapTxV2 {
         let input = TxIn {
             previous_output: self.utxo.0,
             script_sig: ScriptBuf::new(),
-            sequence: Sequence::ENABLE_LOCKTIME_NO_RBF,
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             witness: Witness::new(),
         };
 

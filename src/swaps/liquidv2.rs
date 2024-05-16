@@ -814,7 +814,7 @@ impl LBtcSwapTxV2 {
 
         // Create unsigned refund transaction
         let refund_txin = TxIn {
-            sequence: Sequence::ENABLE_LOCKTIME_NO_RBF,
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             previous_output: self.funding_outpoint,
             script_sig: Script::new(),
             witness: TxInWitness::default(),
