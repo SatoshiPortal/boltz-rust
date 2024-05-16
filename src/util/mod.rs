@@ -14,12 +14,12 @@ pub mod secrets;
 
 pub fn liquid_genesis_hash(electrum_config: &ElectrumConfig) -> Result<elements::BlockHash, Error> {
     let electrum = electrum_config.build_client()?;
-    println!("ELECTRUM NETWORK: {:?}", electrum_config.network());
+    // println!("ELECTRUM NETWORK: {:?}", electrum_config.network());
 
     let response = electrum.block_header_raw(0)?;
-    println!("{:#?}", response);
+    // println!("{:#?}", response);
     let block_header = elements::BlockHeader::consensus_decode(&*response)?;
-    println!("{:#?}", block_header);
+    // println!("{:#?}", block_header);
 
     Ok(elements::BlockHash::from_raw_hash(
         block_header.block_hash().into(),

@@ -382,9 +382,13 @@ impl LBtcSwapScriptV2 {
         swap_id: &str,
     ) -> Result<(OutPoint, TxOut), Error> {
         let boltz_client = BoltzApiClientV2::new(boltz_url);
-        let transaction = boltz_client.get_reverse_tx(swap_id)?;
+        let hex = if self.swap_type == SwapType::ReverseSubmarine {
+            boltz_client.get_reverse_tx(swap_id)?.hex}else{
+                boltz_client.get_submarine_tx(swap_id)?.hex
+            };
+
         let address = self.to_address(network_config.network())?;
-        let tx: Transaction = elements::encode::deserialize(&hex_to_bytes(&transaction.hex)?)?;
+        let tx: Transaction = elements::encode::deserialize(&hex_to_bytes(&hex)?)?;
         let mut vout = 0;
         for output in tx.clone().output {
             if output.script_pubkey == address.script_pubkey() {
@@ -467,6 +471,8 @@ impl LBtcSwapTxV2 {
         swap_script: LBtcSwapScriptV2,
         output_address: &String,
         network_config: &ElectrumConfig,
+        boltz_url: String,
+        swap_id: String,
     ) -> Result<LBtcSwapTxV2, Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(Error::Protocol(
@@ -475,8 +481,10 @@ impl LBtcSwapTxV2 {
         }
 
         let address = Address::from_str(&output_address)?;
-
-        let (funding_outpoint, funding_utxo) = swap_script.fetch_utxo(network_config)?;
+        let (funding_outpoint, funding_utxo) = match swap_script.fetch_utxo(&network_config) {
+            Ok(r) => r,
+            Err(_) => swap_script.fetch_utxo_boltz(&network_config, &boltz_url, &swap_id)?,
+        };
 
         let electrum = network_config.build_client()?;
         let genesis_hash = liquid_genesis_hash(&network_config)?;
@@ -566,7 +574,7 @@ impl LBtcSwapTxV2 {
             .ok_or(Error::Protocol("No preimage provided".to_string()))?;
 
         let claim_txin = TxIn {
-            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            sequence: Sequence::MAX,
             previous_output: self.funding_outpoint,
             script_sig: Script::new(),
             witness: TxInWitness::default(),
@@ -706,7 +714,7 @@ impl LBtcSwapTxV2 {
                 &key_agg_cache,
                 boltz_partial_sig,
                 boltz_public_nonce,
-                self.swap_script.sender_pubkey.inner,
+                self.swap_script.sender_pubkey.inner, //boltz key
             );
 
             if (!boltz_partial_sig_verify) {
@@ -741,7 +749,6 @@ impl LBtcSwapTxV2 {
 
             claim_tx.input[0].witness = witness;
 
-            let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
         } else {
             // If Non-Cooperative claim use the Script Path spending
 
@@ -919,6 +926,8 @@ impl LBtcSwapTxV2 {
         };
 
         if let Some((boltz_api, swap_id)) = is_cooperative {
+            refund_tx.lock_time = LockTime::ZERO;
+
             let claim_tx_taproot_hash = SighashCache::new(&refund_tx)
                 .taproot_key_spend_signature_hash(
                     0,
@@ -975,7 +984,7 @@ impl LBtcSwapTxV2 {
                 &key_agg_cache,
                 boltz_partial_sig,
                 boltz_public_nonce,
-                self.swap_script.receiver_pubkey.inner,
+                self.swap_script.receiver_pubkey.inner, //boltz key
             );
 
             if (!boltz_partial_sig_verify) {
@@ -1009,7 +1018,6 @@ impl LBtcSwapTxV2 {
             };
 
             refund_tx.input[0].witness = witness;
-            refund_tx.lock_time = LockTime::ZERO;
         } else {
             refund_tx.input[0].sequence = Sequence::ZERO;
 

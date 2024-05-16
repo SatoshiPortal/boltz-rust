@@ -4,22 +4,24 @@ use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltzv2::{
-            BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription,
-            SwapUpdate, BOLTZ_TESTNET_URL_V2,
+            BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest,
+            CreateSubmarineResponse, Subscription, SwapUpdate, BOLTZ_MAINNET_URL_V2,
+            BOLTZ_TESTNET_URL_V2,
         },
         magic_routing::{check_for_mrh, sign_address},
     },
     util::{secrets::Preimage, setup_logger},
-    Bolt11Invoice, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1,
+    Bolt11Invoice, Hash as BCHash, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1, SwapType,
 };
 
 use bitcoin::{
     hashes::{sha256, Hash},
-    hex::FromHex,
-    key::rand::thread_rng,
+    hex::{DisplayHex, FromHex},
+    key::{self, rand::thread_rng},
     secp256k1::Keypair,
     Amount, PublicKey,
 };
+use elements::{encode::serialize, Address};
 
 pub mod test_utils;
 
@@ -39,8 +41,8 @@ fn liquid_v2_submarine() {
     // Set a new invoice string and refund address for each test.
     let invoice = "lntb11300n1pnyfu6jpp5f8qsaxf39qsr2y9hj9dvqn2fzrjrsapkturl6v68dq05fjhqtq7sdq2v9ekgctnvsxqyjw5qcqp2sp5axgq9xqg8uagudwvqnvcgdc4custjf2kxeg29pcdansyl3m4672qrzjq0cxp9fmaadhwlw80ez2lgu9n5pzlsd803238r0tyv4dwf27s6wqq2hfgyqp9ucqqyqqqqlgqqqqqqgq2q9qyyssqrtye0tu53w3q7s6w5jl2fqh8e9tull0f2j0jj47z7dhmgkg0zyunyx2dqsw2ekumq9j3guf8etm9dq6z7vndxkz3742humjsrvljlnqptsdxhs".to_string();
     let refund_address = "tlq1qq0aa3lhat3r4auhstr0fsevj70gcwvvlsannf0ymlytelya2ylak7e69hksrk42fnl26wyk460ehy3pncxagy0ck47grlta62".to_string();
-
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
+    let boltz_url = BOLTZ_TESTNET_URL_V2;
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
 
     // If there is MRH send directly to that address
     // if let Some((bip21_addrs, amount)) =
@@ -99,10 +101,10 @@ fn liquid_v2_submarine() {
                 } => {
                     assert!(event == "subscribe");
                     assert!(channel == "swap.update");
-                    assert!(args.get(0).expect("expected") == &create_swap_response.id);
+                    assert!(args.get(0).expect("expected") == &create_swap_response.clone().id);
                     log::info!(
                         "Successfully subscribed for Swap updates. Swap ID : {}",
-                        create_swap_response.id
+                        create_swap_response.clone().id
                     );
                 }
 
@@ -114,7 +116,7 @@ fn liquid_v2_submarine() {
                     assert!(event == "update");
                     assert!(channel == "swap.update");
                     let update = args.get(0).expect("expected");
-                    assert!(update.id == create_swap_response.id);
+                    assert!(update.id == create_swap_response.clone().id);
                     log::info!("Got Update from server: {}", update.status);
 
                     // Invoice is Set. Waiting for us to send onchain tx.
@@ -133,12 +135,14 @@ fn liquid_v2_submarine() {
                             swap_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_liquid(),
+                            boltz_url.to_string(),
+                            create_swap_response.clone().id,
                         )
                         .unwrap();
                         // why? ^^^s
 
                         let claim_tx_response = boltz_api_v2
-                            .get_claim_tx_details(&create_swap_response.id)
+                            .get_claim_tx_details(&create_swap_response.clone().id)
                             .unwrap();
 
                         log::debug!("Received claim tx details : {:?}", claim_tx_response);
@@ -157,7 +161,7 @@ fn liquid_v2_submarine() {
                             .submarine_partial_sig(&our_keys, &claim_tx_response)
                             .unwrap();
                         boltz_api_v2
-                            .post_claim_tx_details(&create_swap_response.id, pub_nonce, partial_sig)
+                            .post_claim_tx_details(&create_swap_response.clone().id, pub_nonce, partial_sig)
                             .unwrap();
                         log::info!("Successfully Sent partial signature");
                     }
@@ -171,6 +175,9 @@ fn liquid_v2_submarine() {
                             swap_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_liquid(),
+                            boltz_url.to_string(),
+                            create_swap_response.clone().id,
+
                         )
                         .unwrap();
 
@@ -379,5 +386,89 @@ fn liquid_v2_reverse() {
                 }
             }
         }
+    }
+}
+
+// _$SwapTxSensitiveImpl (SwapTxSensitive(id: xJ9E5spWSbmw, secretKey: 5c2c8120ff354ed8b6440121c621b0395d7cccc839a6200cf0b8208e19483ed1, publicKey: 0273daf3d9728b7bd7a716fdf4b05b4b12a0febd570f8b708bfcffc1026e2c0f47, preimage: , sha256: 451f1df5a5ccc1e487cf691c21c1b90737557a9df3171a69aaa6dc1578bc6be4, hash160: 726bbbe8393827392d21445922ee87b254c07285, redeemScript: redeemScript, boltzPubkey: 0329724923c9a845eb044fa4ff323f850af6b995185b2cc18335d896011f894acd, isSubmarine: true, scriptAddress: null, locktime: 2868372, blindingKey: 1b581bed3300b146c61bdb3e5b58413f85299b71ab36401a8e02ec38d57925aa))
+
+#[test]
+#[ignore]
+fn test_recover_liquidv2_refund() {
+    setup_logger();
+
+    let id = "xJ9E5spWSbmw".to_string();
+    let secp = Secp256k1::new();
+    const RETURN_ADDRESS: &str = "lq1qqf0la7qlx5un0ssn6h2s3s4m3wlgyqlkprf3lzd8utjfvd95dc5ljhsk2684ahr842dse89whesfcgtm4vkazdjzc7e42lg0c";
+    let _out_amount = 50_000;
+    let keypair = Keypair::from_seckey_str(
+        &secp,
+        "5c2c8120ff354ed8b6440121c621b0395d7cccc839a6200cf0b8208e19483ed1",
+    )
+    .unwrap();
+
+    let our_pubkey = "0273daf3d9728b7bd7a716fdf4b05b4b12a0febd570f8b708bfcffc1026e2c0f47";
+    assert!(keypair.public_key().to_string() == our_pubkey);
+    let locktime = 2868372;
+    let preimage = Preimage::from_sha256_str(
+        "451f1df5a5ccc1e487cf691c21c1b90737557a9df3171a69aaa6dc1578bc6be4",
+    )
+    .unwrap();
+    let boltz_pubkey =
+        "0329724923c9a845eb044fa4ff323f850af6b995185b2cc18335d896011f894acd".to_string();
+
+    let script_address = "lq1pqvngcdxu9c2dprw8m2kye22m78358pug3chgk29a2wk9kh4kn0axxvjwfznzrxvvvwf59xm35kxdzv44ctjdsjzpxg0804l9vknzd2x0d8eh36d54zce".to_string();
+    let blinding_key =
+        "1b581bed3300b146c61bdb3e5b58413f85299b71ab36401a8e02ec38d57925aa".to_string();
+    let absolute_fees = 1_200;
+    let network_config = ElectrumConfig::default(Chain::Liquid, None).unwrap();
+    let swap_script: LBtcSwapScriptV2 = createSwapScriptV2(
+        script_address,
+        preimage.hash160.to_string(),
+        boltz_pubkey,
+        keypair.public_key().to_string(),
+        locktime,
+        blinding_key,
+    );
+
+    let rev_swap_tx =
+        LBtcSwapTxV2::new_refund(swap_script, &RETURN_ADDRESS.to_string(), &network_config, BOLTZ_MAINNET_URL_V2.to_string(), id.clone())
+            .unwrap();
+    let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+    let coop = Some((&client, &id));
+    let signed_tx = rev_swap_tx
+        .sign_refund(&keypair, Amount::from_sat(absolute_fees), coop)
+        .unwrap();
+    let tx_hex = serialize(&signed_tx).to_lower_hex_string();
+    log::info!("TX_HEX: {}", tx_hex);
+
+    let txid = rev_swap_tx
+        .broadcast(&signed_tx, &network_config, None)
+        .unwrap();
+    println!("{}", txid);
+}
+
+fn createSwapScriptV2(
+    address: String,
+    hashlock: String,
+    receiver_pub: String,
+    sender_pub: String,
+    locktime: u32,
+    blinding_key: String,
+) -> LBtcSwapScriptV2 {
+    let address = elements::Address::from_str(&address).unwrap();
+    let hashlock = BCHash::from_str(&hashlock).unwrap();
+    let receiver_pubkey = PublicKey::from_str(&receiver_pub).unwrap();
+    let sender_pubkey = PublicKey::from_str(&sender_pub).unwrap();
+    let locktime = boltz_client::ElementsLockTime::from_height(locktime).unwrap();
+    let blinding_key = Keypair::from_str(&blinding_key).unwrap();
+
+    LBtcSwapScriptV2 {
+        swap_type: SwapType::Submarine,
+        funding_addrs: Some(address),
+        hashlock: hashlock,
+        receiver_pubkey: receiver_pubkey,
+        locktime: locktime,
+        sender_pubkey: sender_pubkey,
+        blinding_key: blinding_key,
     }
 }
