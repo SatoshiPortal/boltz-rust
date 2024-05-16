@@ -814,7 +814,7 @@ impl LBtcSwapTxV2 {
 
         // Create unsigned refund transaction
         let refund_txin = TxIn {
-            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            sequence: Sequence::MAX,
             previous_output: self.funding_outpoint,
             script_sig: Script::new(),
             witness: TxInWitness::default(),
@@ -1009,9 +1009,10 @@ impl LBtcSwapTxV2 {
             };
 
             refund_tx.input[0].witness = witness;
-
             refund_tx.lock_time = LockTime::ZERO;
         } else {
+            refund_tx.input[0].sequence = Sequence::ZERO;
+
             let leaf_hash = TapLeafHash::from_script(&refund_script, LeafVersion::default());
 
             let sighash = SighashCache::new(&refund_tx).taproot_script_spend_signature_hash(

@@ -708,7 +708,7 @@ impl BtcSwapTxV2 {
         let input = TxIn {
             previous_output: self.utxo.0,
             script_sig: ScriptBuf::new(),
-            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            sequence: Sequence::MAX,
             witness: Witness::new(),
         };
 
@@ -841,6 +841,8 @@ impl BtcSwapTxV2 {
 
             refund_tx.lock_time = LockTime::ZERO; // No locktime for cooperative spend
         } else {
+            refund_tx.input[0].sequence = Sequence::ZERO;
+
             let leaf_hash =
                 TapLeafHash::from_script(&self.swap_script.refund_script(), LeafVersion::TapScript);
 
