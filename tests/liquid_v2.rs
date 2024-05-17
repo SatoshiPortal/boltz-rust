@@ -4,9 +4,8 @@ use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltzv2::{
-            BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest,
-            CreateSubmarineResponse, Subscription, SwapUpdate, BOLTZ_MAINNET_URL_V2,
-            BOLTZ_TESTNET_URL_V2,
+            BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription,
+            SwapUpdate, BOLTZ_MAINNET_URL_V2, BOLTZ_TESTNET_URL_V2,
         },
         magic_routing::{check_for_mrh, sign_address},
     },
@@ -17,11 +16,11 @@ use boltz_client::{
 use bitcoin::{
     hashes::{sha256, Hash},
     hex::{DisplayHex, FromHex},
-    key::{self, rand::thread_rng},
+    key::rand::thread_rng,
     secp256k1::Keypair,
     Amount, PublicKey,
 };
-use elements::{encode::serialize, Address};
+use elements::encode::serialize;
 
 pub mod test_utils;
 
@@ -424,7 +423,7 @@ fn test_recover_liquidv2_refund() {
         "1b581bed3300b146c61bdb3e5b58413f85299b71ab36401a8e02ec38d57925aa".to_string();
     let absolute_fees = 1_200;
     let network_config = ElectrumConfig::default(Chain::Liquid, None).unwrap();
-    let swap_script: LBtcSwapScriptV2 = createSwapScriptV2(
+    let swap_script: LBtcSwapScriptV2 = create_swap_script_v2(
         script_address,
         preimage.hash160.to_string(),
         boltz_pubkey,
@@ -455,7 +454,7 @@ fn test_recover_liquidv2_refund() {
     println!("{}", txid);
 }
 
-fn createSwapScriptV2(
+fn create_swap_script_v2(
     address: String,
     hashlock: String,
     receiver_pub: String,
