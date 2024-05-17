@@ -122,7 +122,7 @@ impl BoltzApiClientV2 {
                     Ok(r) => {
                         println!("{:#?}", r);
                         r.into_string()?
-                    },
+                    }
                     Err(ureq::Error::Status(code, response)) => {
                         print!("{:#?}", response);
                         let error: Value = serde_json::from_str(&response.into_string()?)?;

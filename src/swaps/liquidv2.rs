@@ -383,9 +383,10 @@ impl LBtcSwapScriptV2 {
     ) -> Result<(OutPoint, TxOut), Error> {
         let boltz_client = BoltzApiClientV2::new(boltz_url);
         let hex = if self.swap_type == SwapType::ReverseSubmarine {
-            boltz_client.get_reverse_tx(swap_id)?.hex}else{
-                boltz_client.get_submarine_tx(swap_id)?.hex
-            };
+            boltz_client.get_reverse_tx(swap_id)?.hex
+        } else {
+            boltz_client.get_submarine_tx(swap_id)?.hex
+        };
 
         let address = self.to_address(network_config.network())?;
         let tx: Transaction = elements::encode::deserialize(&hex_to_bytes(&hex)?)?;
@@ -748,7 +749,6 @@ impl LBtcSwapTxV2 {
             };
 
             claim_tx.input[0].witness = witness;
-
         } else {
             // If Non-Cooperative claim use the Script Path spending
 

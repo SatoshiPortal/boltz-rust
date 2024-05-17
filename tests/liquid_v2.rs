@@ -161,7 +161,11 @@ fn liquid_v2_submarine() {
                             .submarine_partial_sig(&our_keys, &claim_tx_response)
                             .unwrap();
                         boltz_api_v2
-                            .post_claim_tx_details(&create_swap_response.clone().id, pub_nonce, partial_sig)
+                            .post_claim_tx_details(
+                                &create_swap_response.clone().id,
+                                pub_nonce,
+                                partial_sig,
+                            )
                             .unwrap();
                         log::info!("Successfully Sent partial signature");
                     }
@@ -177,7 +181,6 @@ fn liquid_v2_submarine() {
                             &ElectrumConfig::default_liquid(),
                             boltz_url.to_string(),
                             create_swap_response.clone().id,
-
                         )
                         .unwrap();
 
@@ -430,9 +433,14 @@ fn test_recover_liquidv2_refund() {
         blinding_key,
     );
 
-    let rev_swap_tx =
-        LBtcSwapTxV2::new_refund(swap_script, &RETURN_ADDRESS.to_string(), &network_config, BOLTZ_MAINNET_URL_V2.to_string(), id.clone())
-            .unwrap();
+    let rev_swap_tx = LBtcSwapTxV2::new_refund(
+        swap_script,
+        &RETURN_ADDRESS.to_string(),
+        &network_config,
+        BOLTZ_MAINNET_URL_V2.to_string(),
+        id.clone(),
+    )
+    .unwrap();
     let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
     let coop = Some((&client, &id));
     let signed_tx = rev_swap_tx
