@@ -319,7 +319,7 @@ pub enum SubSwapStates {
     /// Initial state of the swap; optionally the initial state can also be `invoice.set` in case
     /// the invoice was already specified in the request that created the swap.
     Created,
-    /// The lockup transaction waas found in the mempool, meaning the user sent funds to the
+    /// The lockup transaction was found in the mempool, meaning the user sent funds to the
     /// lockup address.
     TransactionMempool,
     /// The lockup transaction was included in a block.
