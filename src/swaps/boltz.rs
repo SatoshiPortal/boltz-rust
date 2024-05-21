@@ -344,7 +344,7 @@ pub enum SubSwapStates {
     TransactionClaimPending,
     /// Indicates the lockup failed, which is usually because the user sent too little.
     TransactionLockupFailed,
-    /// Indicates the user didn't send chain L-BTC (lockup) and the swap expired (approximately 24h).
+    /// Indicates the user didn't send onchain (lockup) and the swap expired (approximately 24h).
     /// This means that it was cancelled and chain L-BTC shouldn't be sent anymore.
     SwapExpired,
 }
