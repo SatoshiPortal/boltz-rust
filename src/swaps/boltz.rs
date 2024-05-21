@@ -415,7 +415,7 @@ pub enum RevSwapStates {
     InvoiceExpired,
     /// This is the final status of a swap, if the swap expires without the lightning invoice being paid.
     SwapExpired,
-    /// Set in the unlikely event that Boltz is unable to send the agreed amount of chain bitcoin
+    /// Set in the unlikely event that Boltz is unable to send the agreed amount of onchain coins
     /// after the user set up the payment to the provided Lightning invoice. If this happens, the
     /// pending Lightning HTLC will also be cancelled. The Lightning bitcoin automatically bounce
     /// back to the user, no further action or refund is required and the user didn't pay any fees.
