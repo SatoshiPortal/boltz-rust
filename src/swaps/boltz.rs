@@ -324,8 +324,8 @@ pub enum SubSwapStates {
     TransactionMempool,
     /// The lockup transaction was included in a block.
     TransactionConfirmed,
-    /// If the invoice was _not_ set as part of the `/createswap` request, this state confirms that
-    /// an invoice with the correct amount and hash was set.
+    /// The swap has an invoice that should be paid.
+    /// Can be the initial state when the invoice was specified in the request that created the swap
     InvoiceSet,
     /// Boltz successfully paid the invoice.
     InvoicePaid,
