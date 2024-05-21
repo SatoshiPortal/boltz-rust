@@ -421,7 +421,7 @@ pub enum RevSwapStates {
     /// back to the user, no further action or refund is required and the user didn't pay any fees.
     TransactionFailed,
     /// This is the final status of a swap, if the user successfully set up the Lightning payment
-    /// and Boltz successfully locked up L-BTC on the chain, but the Boltz API Client did not claim
+    /// and Boltz successfully locked up coins onchain, but the Boltz API Client did not claim
     /// the locked oncahin coins before swap expiry. In this case, Boltz will also automatically refund
     /// its own locked onchain coins and the Lightning payment is cancelled.
     TransactionRefunded,
