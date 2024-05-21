@@ -406,7 +406,7 @@ pub enum RevSwapStates {
     /// optionally accepts the transaction without confirmation. Boltz broadcasts chain transactions
     /// non-RBF only.
     TransactionConfirmed,
-    /// The transaction claiming chain L-BTC was broadcast by the user's client and Boltz used the
+    /// The transaction claiming onchain was broadcast by the user's client and Boltz used the
     /// preimage of this transaction to settle the Lightning invoice. This is the final status of a
     /// successful Reverse Submarine Swap.
     InvoiceSettled,
