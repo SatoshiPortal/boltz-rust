@@ -317,7 +317,7 @@ impl Fees {
 #[serde(rename_all = "snake_case")]
 pub enum SubSwapStates {
     /// Initial state of the swap; optionally the initial state can also be `invoice.set` in case
-    /// the invoice was already specified in the `/createswap` request.
+    /// the invoice was already specified in the request that created the swap.
     Created,
     /// The lockup transaction is found in the mempool, meaning the user is sending funds to the
     /// lockup chain address.
