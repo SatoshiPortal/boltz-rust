@@ -291,9 +291,9 @@ pub struct CreateSubmarineRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSubmarineResponse {
-    accept_zero_conf: bool,
+    pub accept_zero_conf: bool,
     pub address: String,
-    bip21: String,
+    pub bip21: String,
     pub claim_public_key: PublicKey,
     pub expected_amount: u64,
     pub id: String,
