@@ -332,7 +332,7 @@ pub enum SubSwapStates {
     /// Boltz started paying the invoice.
     InvoicePending,
     /// Boltz failed to pay the invoice. In this case the user needs to broadcast a refund
-    /// transaction to reclaim the locked up chain L-BTC.
+    /// transaction to reclaim the locked up onchain coins.
     InvoiceFailedToPay,
     /// Indicates that after the invoice was successfully paid, the chain L-BTC were successfully
     /// claimed by Boltz. This is the final status of a successful Normal Submarine Swap.
