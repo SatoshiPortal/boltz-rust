@@ -337,7 +337,7 @@ pub enum SubSwapStates {
     /// Indicates that after the invoice was successfully paid, the onchain were successfully
     /// claimed by Boltz. This is the final status of a successful Normal Submarine Swap.
     TransactionClaimed,
-    /// Indicates that Boltz is ready for the creation of a cooperative signature for a keypath
+    /// Indicates that Boltz is ready for the creation of a cooperative signature for a key path
     /// spend. Taproot Swaps are not claimed immediately by Boltz after the invoice has been paid,
     /// but instead Boltz waits for the API client to post a signature for a key path spend. If the
     /// API client does not cooperate in a key path spend, Boltz will eventually claim via the script path.
