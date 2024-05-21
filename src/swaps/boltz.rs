@@ -334,7 +334,7 @@ pub enum SubSwapStates {
     /// Boltz failed to pay the invoice. In this case the user needs to broadcast a refund
     /// transaction to reclaim the locked up onchain coins.
     InvoiceFailedToPay,
-    /// Indicates that after the invoice was successfully paid, the chain L-BTC were successfully
+    /// Indicates that after the invoice was successfully paid, the onchain were successfully
     /// claimed by Boltz. This is the final status of a successful Normal Submarine Swap.
     TransactionClaimed,
     /// Indicates that Boltz is ready for the creation of a cooperative signature for a keypath
