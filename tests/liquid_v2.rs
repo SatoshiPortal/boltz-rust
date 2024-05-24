@@ -1,14 +1,17 @@
 use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
-    network::{electrum::ElectrumConfig, Chain}, swaps::{
+    network::{electrum::ElectrumConfig, Chain},
+    swaps::{
         boltzv2::{
             BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest,
             CreateSubmarineResponse, Subscription, SwapUpdate, BOLTZ_MAINNET_URL_V2,
             BOLTZ_TESTNET_URL_V2,
         },
         magic_routing::{check_for_mrh, sign_address},
-    }, util::{secrets::Preimage, setup_logger}, Bolt11Invoice, Hash as BCHash, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1, Serialize, SwapType
+    },
+    util::{secrets::Preimage, setup_logger},
+    Bolt11Invoice, Hash as BCHash, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1, Serialize, SwapType,
 };
 
 use bitcoin::{
@@ -63,9 +66,10 @@ fn liquid_v2_submarine() {
     let create_swap_response = boltz_api_v2.post_swap_req(&create_swap_req).unwrap();
     log::info!("Got Swap Response from Boltz server");
 
-    create_swap_response.validate(&invoice, &refund_public_key, chain).unwrap();
+    create_swap_response
+        .validate(&invoice, &refund_public_key, chain)
+        .unwrap();
     log::info!("VALIDATED RESPONSE!");
-
 
     log::debug!("Swap Response: {:?}", create_swap_response);
 
@@ -162,7 +166,11 @@ fn liquid_v2_submarine() {
                             .submarine_partial_sig(&our_keys, &claim_tx_response)
                             .unwrap();
                         boltz_api_v2
-                            .post_claim_tx_details(&create_swap_response.clone().id, pub_nonce, partial_sig)
+                            .post_claim_tx_details(
+                                &create_swap_response.clone().id,
+                                pub_nonce,
+                                partial_sig,
+                            )
                             .unwrap();
                         log::info!("Successfully Sent partial signature");
                     }
@@ -178,7 +186,6 @@ fn liquid_v2_submarine() {
                             &ElectrumConfig::default(chain, None).unwrap(),
                             boltz_url.to_string(),
                             create_swap_response.clone().id,
-
                         )
                         .unwrap();
 
@@ -271,7 +278,9 @@ fn liquid_v2_reverse() {
     };
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
-    reverse_resp.validate(&preimage,&claim_public_key,chain).unwrap();
+    reverse_resp
+        .validate(&preimage, &claim_public_key, chain)
+        .unwrap();
     log::info!("VALIDATED RESPONSE!");
 
     let swap_id = reverse_resp.clone().id;
@@ -436,9 +445,14 @@ fn test_recover_liquidv2_refund() {
         blinding_key,
     );
 
-    let rev_swap_tx =
-        LBtcSwapTxV2::new_refund(swap_script, &RETURN_ADDRESS.to_string(), &network_config, BOLTZ_MAINNET_URL_V2.to_string(), id.clone())
-            .unwrap();
+    let rev_swap_tx = LBtcSwapTxV2::new_refund(
+        swap_script,
+        &RETURN_ADDRESS.to_string(),
+        &network_config,
+        BOLTZ_MAINNET_URL_V2.to_string(),
+        id.clone(),
+    )
+    .unwrap();
     let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
     let coop = Some((&client, &id));
     let signed_tx = rev_swap_tx
