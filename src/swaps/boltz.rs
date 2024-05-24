@@ -1055,11 +1055,12 @@ mod tests {
     #[test]
     #[ignore]
     fn test_swap_status() {
-        let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
-        let id = "Nh7Y1J".to_string();
+        let client = BoltzApiClient::new(BOLTZ_MAINNET_URL);
+        let id = "nJmfFXpeFEDV".to_string();
         let request = SwapStatusRequest { id: id };
         let response = client.swap_status(request);
-        assert!(response.is_ok());
+        println!("{:?}", response.unwrap());
+        // assert!(response.is_ok());
     }
 
     #[test]

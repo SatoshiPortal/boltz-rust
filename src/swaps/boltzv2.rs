@@ -1,3 +1,4 @@
+use bitcoin::key;
 use bitcoin::{
     hashes::sha256, hex::DisplayHex, taproot::TapLeaf, PublicKey, ScriptBuf, Transaction,
 };
@@ -11,6 +12,7 @@ use tungstenite::{connect, http::response, stream::MaybeTlsStream, WebSocket};
 use ureq::json;
 use ureq::{AgentBuilder, TlsConnector};
 
+use crate::{BtcSwapScriptV2, LBtcSwapScriptV2};
 use crate::{error::Error, network::Chain, util::secrets::Preimage};
 
 use super::boltz::GetFeeEstimationResponse;
@@ -122,7 +124,7 @@ impl BoltzApiClientV2 {
                     Ok(r) => {
                         println!("{:#?}", r);
                         r.into_string()?
-                    },
+                    }
                     Err(ureq::Error::Status(code, response)) => {
                         print!("{:#?}", response);
                         let error: Value = serde_json::from_str(&response.into_string()?)?;
@@ -300,7 +302,60 @@ pub struct CreateSubmarineResponse {
     pub swap_tree: SwapTree,
     pub blinding_key: Option<String>,
 }
+impl CreateSubmarineResponse{
+        /// Ensure submarine swap redeem script uses the preimage hash used in the invoice
+        pub fn validate(
+            &self,
+            invoice: &str,
+            our_pubkey: &PublicKey,
+            chain: Chain,
+        ) -> Result<(), Error> {
+            let preimage = Preimage::from_invoice_str(&invoice).unwrap();
 
+            match chain {
+                Chain::Bitcoin | Chain::BitcoinTestnet | Chain::BitcoinRegtest => {
+                    let boltz_sub_script =
+                        BtcSwapScriptV2::submarine_from_swap_resp(&self, *our_pubkey)?;
+
+                    let address = boltz_sub_script.to_address(chain)?;
+                    if address.to_string() == self.address
+                    {
+                        Ok(())
+                    } else {
+                        Err(Error::Protocol(
+                            "Script/FundingAddress Mismatch".to_string(),
+                        ))
+                    }
+                }
+                Chain::Liquid | Chain::LiquidTestnet | Chain::LiquidRegtest => {
+                    let blinding_key = self.blinding_key.as_ref().unwrap();
+                    let boltz_sub_script = LBtcSwapScriptV2::submarine_from_swap_resp(
+                        &self,
+                        *our_pubkey,
+                    )?;
+                    if &boltz_sub_script.hashlock != &preimage.hash160 {
+                        return Err(Error::Protocol(format!(
+                            "Hash160 mismatch: {},{}",
+                            boltz_sub_script.hashlock,
+                            preimage.hash160.to_string()
+                        )));
+                    }
+                   
+                    let address = boltz_sub_script.to_address(chain)?;
+                  
+                    if  address.to_string() == self.address
+                    {
+                        Ok(())
+                    } else {
+                        Err(Error::Protocol(
+                            "Script/FundingAddress Mismatch".to_string(),
+                        ))
+                    }
+                }
+            }
+        }
+    
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SwapTree {
@@ -360,7 +415,56 @@ pub struct CreateReverseResponse {
     pub onchain_amount: u32,
     pub blinding_key: Option<String>,
 }
+impl CreateReverseResponse {
+    /// Validate reverse swap response
+    /// Ensure reverse swap invoice uses the provided preimage
+    /// Ensure reverse swap redeem script matches locally constructured SwapScript
+    pub fn validate(
+        &self,
+        preimage: &Preimage,
+        our_pubkey: &PublicKey,
+        chain: Chain,
+    ) -> Result<(), Error> {
+        let invoice = Bolt11Invoice::from_str(&self.invoice)?;
+        if &invoice.payment_hash().to_string() == &preimage.sha256.to_string() {
+            ()
+        } else {
+            return Err(Error::Protocol(format!(
+                "Preimage missmatch : {},{}",
+                &invoice.payment_hash().to_string(),
+                preimage.sha256.to_string()
+            )));
+        }
 
+        match chain {
+            Chain::Bitcoin | Chain::BitcoinTestnet | Chain::BitcoinRegtest => {
+                let boltz_rev_script =
+                    BtcSwapScriptV2::reverse_from_swap_resp(&self, *our_pubkey)?;
+                let address = boltz_rev_script.to_address(chain)?;
+                if  address.to_string() == self.lockup_address
+                {
+                    Ok(())
+                } else {
+                    Err(Error::Protocol("Script/LockupAddress Mismatch".to_string()))
+                }
+            }
+            Chain::Liquid | Chain::LiquidTestnet | Chain::LiquidRegtest => {
+                let blinding_key = self.blinding_key.as_ref().unwrap();
+                let boltz_rev_script = LBtcSwapScriptV2::reverse_from_swap_resp(
+                    &self, *our_pubkey
+                )?;
+
+                let address = boltz_rev_script.to_address(chain)?;
+                if address.to_string() == self.lockup_address
+                {
+                    Ok(())
+                } else {
+                    Err(Error::Protocol("Script/LockupAddress Mismatch".to_string()))
+                }
+            }
+        }
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReverseSwapTxResp {

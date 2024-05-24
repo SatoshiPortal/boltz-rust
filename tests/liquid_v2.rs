@@ -1,17 +1,14 @@
 use std::{str::FromStr, time::Duration};
 
 use boltz_client::{
-    network::{electrum::ElectrumConfig, Chain},
-    swaps::{
+    network::{electrum::ElectrumConfig, Chain}, swaps::{
         boltzv2::{
             BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest,
             CreateSubmarineResponse, Subscription, SwapUpdate, BOLTZ_MAINNET_URL_V2,
             BOLTZ_TESTNET_URL_V2,
         },
         magic_routing::{check_for_mrh, sign_address},
-    },
-    util::{secrets::Preimage, setup_logger},
-    Bolt11Invoice, Hash as BCHash, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1, SwapType,
+    }, util::{secrets::Preimage, setup_logger}, Bolt11Invoice, Hash as BCHash, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1, Serialize, SwapType
 };
 
 use bitcoin::{
@@ -39,9 +36,10 @@ fn liquid_v2_submarine() {
     };
 
     // Set a new invoice string and refund address for each test.
-    let invoice = "lntb11300n1pnyfu6jpp5f8qsaxf39qsr2y9hj9dvqn2fzrjrsapkturl6v68dq05fjhqtq7sdq2v9ekgctnvsxqyjw5qcqp2sp5axgq9xqg8uagudwvqnvcgdc4custjf2kxeg29pcdansyl3m4672qrzjq0cxp9fmaadhwlw80ez2lgu9n5pzlsd803238r0tyv4dwf27s6wqq2hfgyqp9ucqqyqqqqlgqqqqqqgq2q9qyyssqrtye0tu53w3q7s6w5jl2fqh8e9tull0f2j0jj47z7dhmgkg0zyunyx2dqsw2ekumq9j3guf8etm9dq6z7vndxkz3742humjsrvljlnqptsdxhs".to_string();
-    let refund_address = "tlq1qq0aa3lhat3r4auhstr0fsevj70gcwvvlsannf0ymlytelya2ylak7e69hksrk42fnl26wyk460ehy3pncxagy0ck47grlta62".to_string();
-    let boltz_url = BOLTZ_TESTNET_URL_V2;
+    let invoice = "lnbc12320n1pn9q9hlpp5v30gg9ylrpkgyn6pctthd22xvu0lsuctw9nee7t3emljvh5ty2nscqpjsp54p8gweqlqdnstedcmzy8ktgup4auaq6wy6lcryu0085kvr6a77gs9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllard4vsfze0gsqqqqlgqqqqqeqqjq3c4qzawwh62kzj3cdykcaszjd9l4wfcwlxhq4afwhvsjllu27pen26rsxaa0gfx602nl7feh87c4s39n5p47lfsu2k38vgfjc8nvhrspg50t63".to_string();
+    let refund_address = "lq1qqfwnyjvzmknjngqxfl50sfa2fhajcnsuwqnz0umvm3ttzaxf90n36ttc6vy3xu3m8tn3lfkcavrzfcl4nr0yqe2knk5u0l5m7".to_string();
+    let boltz_url = BOLTZ_MAINNET_URL_V2;
+    let chain = Chain::Liquid;
     let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
 
     // If there is MRH send directly to that address
@@ -63,15 +61,18 @@ fn liquid_v2_submarine() {
     };
 
     let create_swap_response = boltz_api_v2.post_swap_req(&create_swap_req).unwrap();
-
     log::info!("Got Swap Response from Boltz server");
+
+    create_swap_response.validate(&invoice, &refund_public_key, chain).unwrap();
+    log::info!("VALIDATED RESPONSE!");
+
 
     log::debug!("Swap Response: {:?}", create_swap_response);
 
     let swap_script =
         LBtcSwapScriptV2::submarine_from_swap_resp(&create_swap_response, refund_public_key)
             .unwrap();
-    swap_script.to_address(Chain::LiquidTestnet).unwrap();
+    swap_script.to_address(chain).unwrap();
 
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
@@ -134,7 +135,7 @@ fn liquid_v2_submarine() {
                         let swap_tx = LBtcSwapTxV2::new_refund(
                             swap_script.clone(),
                             &refund_address,
-                            &ElectrumConfig::default_liquid(),
+                            &ElectrumConfig::default(chain, None).unwrap(),
                             boltz_url.to_string(),
                             create_swap_response.clone().id,
                         )
@@ -174,7 +175,7 @@ fn liquid_v2_submarine() {
                         let swap_tx = LBtcSwapTxV2::new_refund(
                             swap_script.clone(),
                             &refund_address,
-                            &ElectrumConfig::default_liquid(),
+                            &ElectrumConfig::default(chain, None).unwrap(),
                             boltz_url.to_string(),
                             create_swap_response.clone().id,
 
@@ -187,6 +188,7 @@ fn liquid_v2_submarine() {
                             Some((&boltz_api_v2, &create_swap_response.id)),
                         ) {
                             Ok(tx) => {
+                                println!("{}", tx.serialize().to_lower_hex_string());
                                 let txid = swap_tx
                                     .broadcast(&tx, &ElectrumConfig::default_liquid(), None)
                                     .unwrap();
@@ -243,14 +245,17 @@ fn liquid_v2_reverse() {
     let secp = Secp256k1::new();
     let preimage = Preimage::new();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
-    let invoice_amount = 100000;
+    let invoice_amount = 1111;
     let claim_public_key = PublicKey {
         compressed: true,
         inner: our_keys.public_key(),
     };
 
     // Give a valid claim address or else funds will be lost.
-    let claim_address = "tlq1qqtruxmfwfaun99rw2qj2qk6nev57tssyakn0sz292j9xly2c9ks89d4tn9xj925t644lhzk0n67zv5vgh8tewt070qnc9jlmx".to_string();
+    let claim_address = "lq1qqfwnyjvzmknjngqxfl50sfa2fhajcnsuwqnz0umvm3ttzaxf90n36ttc6vy3xu3m8tn3lfkcavrzfcl4nr0yqe2knk5u0l5m7".to_string();
+    let boltz_url = BOLTZ_MAINNET_URL_V2;
+    let chain = Chain::Liquid;
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
 
     let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
 
@@ -265,9 +270,10 @@ fn liquid_v2_reverse() {
         referral_id: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
-
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
+    reverse_resp.validate(&preimage,&claim_public_key,chain).unwrap();
+    log::info!("VALIDATED RESPONSE!");
+
     let swap_id = reverse_resp.clone().id;
 
     let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet)
