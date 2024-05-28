@@ -1129,6 +1129,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_composite() {
         let client = BoltzApiClient::new(BOLTZ_TESTNET_URL);
         let pairs = client.get_pairs().unwrap();
