@@ -310,16 +310,42 @@ impl Fees {
     }
 }
 
+/// States for a submarine swap.
+///
+/// See <https://docs.boltz.exchange/v/api/lifecycle#normal-submarine-swaps>
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum SubSwapStates {
+    /// Initial state of the swap; optionally the initial state can also be `invoice.set` in case
+    /// the invoice was already specified in the request that created the swap.
     Created,
+    /// The lockup transaction was found in the mempool, meaning the user sent funds to the
+    /// lockup address.
     TransactionMempool,
+    /// The lockup transaction was included in a block.
     TransactionConfirmed,
+    /// The swap has an invoice that should be paid.
+    /// Can be the initial state when the invoice was specified in the request that created the swap
     InvoiceSet,
+    /// Boltz successfully paid the invoice.
     InvoicePaid,
+    /// Boltz started paying the invoice.
+    InvoicePending,
+    /// Boltz failed to pay the invoice. In this case the user needs to broadcast a refund
+    /// transaction to reclaim the locked up onchain coins.
     InvoiceFailedToPay,
+    /// Indicates that after the invoice was successfully paid, the onchain were successfully
+    /// claimed by Boltz. This is the final status of a successful Normal Submarine Swap.
     TransactionClaimed,
+    /// Indicates that Boltz is ready for the creation of a cooperative signature for a key path
+    /// spend. Taproot Swaps are not claimed immediately by Boltz after the invoice has been paid,
+    /// but instead Boltz waits for the API client to post a signature for a key path spend. If the
+    /// API client does not cooperate in a key path spend, Boltz will eventually claim via the script path.
+    TransactionClaimPending,
+    /// Indicates the lockup failed, which is usually because the user sent too little.
+    TransactionLockupFailed,
+    /// Indicates the user didn't send onchain (lockup) and the swap expired (approximately 24h).
+    /// This means that it was cancelled and chain L-BTC shouldn't be sent anymore.
     SwapExpired,
 }
 
@@ -331,8 +357,11 @@ impl ToString for SubSwapStates {
             SubSwapStates::TransactionConfirmed => "transaction.confirmed".to_string(),
             SubSwapStates::InvoiceSet => "invoice.set".to_string(),
             SubSwapStates::InvoicePaid => "invoice.paid".to_string(),
+            SubSwapStates::InvoicePending => "invoice.pending".to_string(),
             SubSwapStates::InvoiceFailedToPay => "invoice.failedToPay".to_string(),
             SubSwapStates::TransactionClaimed => "transaction.claimed".to_string(),
+            SubSwapStates::TransactionClaimPending => "transaction.claim.pending".to_string(),
+            SubSwapStates::TransactionLockupFailed => "transaction.lockupFailed".to_string(),
             SubSwapStates::SwapExpired => "swap.expired".to_string(),
         }
     }
@@ -348,25 +377,53 @@ impl FromStr for SubSwapStates {
             "transaction.confirmed" => Ok(SubSwapStates::TransactionConfirmed),
             "invoice.set" => Ok(SubSwapStates::InvoiceSet),
             "invoice.paid" => Ok(SubSwapStates::InvoicePaid),
+            "invoice.pending" => Ok(SubSwapStates::InvoicePending),
             "invoice.failedToPay" => Ok(SubSwapStates::InvoiceFailedToPay),
             "transaction.claimed" => Ok(SubSwapStates::TransactionClaimed),
+            "transaction.claim.pending" => Ok(SubSwapStates::TransactionClaimPending),
+            "transaction.lockupFailed" => Ok(SubSwapStates::TransactionLockupFailed),
             "swap.expired" => Ok(SubSwapStates::SwapExpired),
             _ => Err(()),
         }
     }
 }
 
+/// States for a reverse swap.
+///
+/// See <https://docs.boltz.exchange/v/api/lifecycle#reverse-submarine-swaps>
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum RevSwapStates {
+    /// Initial state of a newly created Reverse Submarine Swap.
     Created,
+    /// Optional and currently not enabled on Boltz. If Boltz requires prepaying miner fees via a
+    /// separate Lightning invoice, this state is set when the miner fee invoice was successfully paid.
     MinerFeePaid,
+    /// Boltz's lockup transaction is found in the mempool which will only happen after the user
+    /// paid the Lightning hold invoice.
     TransactionMempool,
+    /// The lockup transaction was included in a block. This state is skipped, if the client
+    /// optionally accepts the transaction without confirmation. Boltz broadcasts chain transactions
+    /// non-RBF only.
     TransactionConfirmed,
+    /// The transaction claiming onchain was broadcast by the user's client and Boltz used the
+    /// preimage of this transaction to settle the Lightning invoice. This is the final status of a
+    /// successful Reverse Submarine Swap.
     InvoiceSettled,
+    /// Set when the invoice of Boltz expired and pending HTLCs are cancelled. Boltz invoices
+    /// currently expire after 50% of the swap timeout window.
     InvoiceExpired,
+    /// This is the final status of a swap, if the swap expires without the lightning invoice being paid.
     SwapExpired,
+    /// Set in the unlikely event that Boltz is unable to send the agreed amount of onchain coins
+    /// after the user set up the payment to the provided Lightning invoice. If this happens, the
+    /// pending Lightning HTLC will also be cancelled. The Lightning bitcoin automatically bounce
+    /// back to the user, no further action or refund is required and the user didn't pay any fees.
     TransactionFailed,
+    /// This is the final status of a swap, if the user successfully set up the Lightning payment
+    /// and Boltz successfully locked up coins onchain, but the Boltz API Client did not claim
+    /// the locked oncahin coins before swap expiry. In this case, Boltz will also automatically refund
+    /// its own locked onchain coins and the Lightning payment is cancelled.
     TransactionRefunded,
 }
 
