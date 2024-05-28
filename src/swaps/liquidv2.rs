@@ -317,33 +317,6 @@ impl LBtcSwapScriptV2 {
         ))
     }
 
-    /// Get balance for the swap script
-    pub fn get_balance(&self, network_config: &ElectrumConfig) -> Result<(u64, i64), Error> {
-        let electrum_client = network_config.clone().build_client()?;
-
-        let _ = electrum_client.script_subscribe(BitcoinScript::from_bytes(
-            &self
-                .to_address(network_config.network())?
-                .script_pubkey()
-                .as_bytes(),
-        ))?;
-
-        let balance = electrum_client.script_get_balance(BitcoinScript::from_bytes(
-            &self
-                .to_address(network_config.network())?
-                .script_pubkey()
-                .as_bytes(),
-        ))?;
-
-        let _ = electrum_client.script_unsubscribe(BitcoinScript::from_bytes(
-            &self
-                .to_address(network_config.network())?
-                .script_pubkey()
-                .as_bytes(),
-        ))?;
-        Ok((balance.confirmed, balance.unconfirmed))
-    }
-
     /// Fetch utxo for script from Electrum
     pub fn fetch_utxo(&self, network_config: &ElectrumConfig) -> Result<(OutPoint, TxOut), Error> {
         let electrum_client = network_config.clone().build_client()?;
