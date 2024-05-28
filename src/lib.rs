@@ -12,6 +12,12 @@ pub mod swaps;
 /// utilities (key, preimage, error)
 pub mod util;
 
+// Re-export common libs, so callers can make use of them and avoid version conflicts
+pub use bitcoin;
+pub use elements;
+pub use lightning_invoice;
+
+// Re-export relevant structs under boltz_client::StructName for simplicity
 pub use bitcoin::{
     blockdata::locktime::absolute::LockTime,
     hashes::hash160::Hash,
