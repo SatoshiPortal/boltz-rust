@@ -122,17 +122,20 @@ impl BoltzApiClientV2 {
                     .send_json(data)
                 {
                     Ok(r) => {
-                        println!("{:#?}", r);
+                        log::debug!("POST response: {:#?}", r);
                         r.into_string()?
                     }
-                    Err(ureq::Error::Status(code, response)) => {
-                        print!("{:#?}", response);
-                        let error: Value = serde_json::from_str(&response.into_string()?)?;
-                        error.get("error").unwrap_or(&Value::Null).to_string()
-                    }
-                    Err(e) => {
-                        print!("{:#?}", e);
-                        return Err(e.into());
+                    Err(ureq_err) => {
+                        log::error!("POST error: {:#?}", ureq_err);
+                        let err = match ureq_err {
+                            ureq::Error::Status(_code, err_resp) => {
+                                let e_val: Value = serde_json::from_str(&err_resp.into_string()?)?;
+                                let e_str = e_val.get("error").unwrap_or(&Value::Null).to_string();
+                                Error::HTTP(e_str)
+                            }
+                            ureq::Error::Transport(_) => ureq_err.into(),
+                        };
+                        return Err(err.into());
                     }
                 };
                 response
