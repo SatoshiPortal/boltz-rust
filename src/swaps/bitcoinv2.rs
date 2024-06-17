@@ -1009,12 +1009,7 @@ impl BtcSwapTxV2 {
     /// Calculate the size of a transaction.
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
-    pub fn size(
-        &self,
-        keys: &Keypair,
-        preimage: &Preimage,
-        refund_tx: Option<LBtcSwapTxV2>,
-    ) -> Result<usize, Error> {
+    pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, Error> {
         let dummy_abs_fee = 5_000;
         // Can only calculate non-coperative claims
         let tx = match self.kind {
