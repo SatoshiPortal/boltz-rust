@@ -503,6 +503,7 @@ fn create_swap_script_v2(
 
     LBtcSwapScriptV2 {
         swap_type: SwapType::Submarine,
+        side: None,
         funding_addrs: Some(address),
         hashlock: hashlock,
         receiver_pubkey: receiver_pubkey,

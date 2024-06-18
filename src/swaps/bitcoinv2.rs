@@ -50,6 +50,7 @@ use elements::secp256k1_zkp::{
 pub struct BtcSwapScriptV2 {
     pub swap_type: SwapType,
     // pub swap_id: String,
+    pub side: Option<Side>,
     pub funding_addrs: Option<Address>, // we should not store this as a field, since we have a method
     // if we are using it just to recognize regtest, we should consider another strategy
     pub hashlock: hash160::Hash,
@@ -115,6 +116,7 @@ impl BtcSwapScriptV2 {
         Ok(BtcSwapScriptV2 {
             swap_type: SwapType::Submarine,
             // swap_id: create_swap_response.id.clone(),
+            side: None,
             funding_addrs: Some(funding_addrs),
             hashlock: hashlock,
             receiver_pubkey: create_swap_response.claim_public_key,
@@ -124,14 +126,14 @@ impl BtcSwapScriptV2 {
     }
 
     pub fn musig_keyagg_cache(&self) -> MusigKeyAggCache {
-        match self.swap_type {
-            SwapType::Submarine => {
-                let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
+        match (self.swap_type, self.side.clone()) {
+            (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::To)) => {
+                let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
                 MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
             }
 
-            SwapType::ReverseSubmarine | SwapType::Chain => {
-                let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
+            (SwapType::Submarine, _) | (SwapType::Chain, _) => {
+                let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
                 MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
             }
         }
@@ -192,6 +194,7 @@ impl BtcSwapScriptV2 {
         Ok(BtcSwapScriptV2 {
             swap_type: SwapType::ReverseSubmarine,
             // swap_id: reverse_response.id.clone(),
+            side: None,
             funding_addrs: Some(funding_addrs),
             hashlock: hashlock,
             receiver_pubkey: our_pubkey,
@@ -261,6 +264,7 @@ impl BtcSwapScriptV2 {
         Ok(BtcSwapScriptV2 {
             swap_type: SwapType::Chain,
             // swap_id: reverse_response.id.clone(),
+            side: Some(side),
             funding_addrs: Some(funding_addrs),
             hashlock,
             receiver_pubkey,

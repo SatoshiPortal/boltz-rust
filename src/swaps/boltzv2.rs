@@ -720,7 +720,7 @@ impl CreateReverseResponse {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Side {
     From,
     To,
