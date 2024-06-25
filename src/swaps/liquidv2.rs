@@ -461,7 +461,7 @@ impl LBtcSwapScriptV2 {
         };
 
         let address = self.to_address(network_config.network())?;
-        let tx: Transaction = elements::encode::deserialize(&hex_to_bytes(&hex)?)?;
+        let tx: Transaction = elements::encode::deserialize(&hex::decode(&hex)?)?;
         let mut vout = 0;
         for output in tx.clone().output {
             if output.script_pubkey == address.script_pubkey() {
