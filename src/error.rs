@@ -52,6 +52,12 @@ impl From<bitcoin::hex::HexToArrayError> for Error {
     }
 }
 
+impl From<hex::FromHexError> for Error {
+    fn from(value: hex::FromHexError) -> Self {
+        Self::Hex(value.to_string())
+    }
+}
+
 impl From<bitcoin::address::ParseError> for Error {
     fn from(value: bitcoin::address::ParseError) -> Self {
         Self::Address(value.to_string())
