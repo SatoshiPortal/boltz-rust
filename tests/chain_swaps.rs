@@ -54,7 +54,7 @@ fn bitcoin_liquid_v2_chain() {
     let lockup_details: ChainSwapDetails = create_chain_response.clone().lockup_details;
 
     let lockup_script = BtcSwapScriptV2::chain_from_swap_resp(
-        Side::From,
+        Side::Lockup,
         lockup_details.clone(),
         refund_public_key,
     )
@@ -78,9 +78,12 @@ fn bitcoin_liquid_v2_chain() {
 
     let claim_details: ChainSwapDetails = create_chain_response.claim_details;
 
-    let claim_script =
-        LBtcSwapScriptV2::chain_from_swap_resp(Side::To, claim_details.clone(), claim_public_key)
-            .unwrap();
+    let claim_script = LBtcSwapScriptV2::chain_from_swap_resp(
+        Side::Claim,
+        claim_details.clone(),
+        claim_public_key,
+    )
+    .unwrap();
 
     let claim_address = "tlq1qq0y3xudhc909fur3ktaws0yrhjv3ld9c2fk5hqzjfmgqurl0cy4z8yc8d9h54lj7ddwatzegwamyqhp4vttxj26wml4s9vecx".to_string();
     let lq_address = EAddress::from_str(&claim_address).unwrap();
@@ -289,7 +292,7 @@ fn liquid_bitcoin_v2_chain() {
     let lockup_details: ChainSwapDetails = create_chain_response.clone().lockup_details;
 
     let lockup_script = LBtcSwapScriptV2::chain_from_swap_resp(
-        Side::From,
+        Side::Lockup,
         lockup_details.clone(),
         refund_public_key,
     )
@@ -318,7 +321,7 @@ fn liquid_bitcoin_v2_chain() {
     let claim_details: ChainSwapDetails = create_chain_response.claim_details;
 
     let claim_script =
-        BtcSwapScriptV2::chain_from_swap_resp(Side::To, claim_details.clone(), claim_public_key)
+        BtcSwapScriptV2::chain_from_swap_resp(Side::Claim, claim_details.clone(), claim_public_key)
             .unwrap();
 
     let claim_address = "tb1qra2cdypld3hyq3f84630cvj9d0lmzv66vn4k28".to_string();

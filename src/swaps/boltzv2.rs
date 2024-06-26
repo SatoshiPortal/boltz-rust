@@ -724,8 +724,8 @@ impl CreateReverseResponse {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Side {
-    From,
-    To,
+    Lockup,
+    Claim,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -778,8 +778,13 @@ impl CreateChainResponse {
         from_chain: Chain,
         to_chain: Chain,
     ) -> Result<(), Error> {
-        self.validate_side(Side::From, from_chain, &self.lockup_details, refund_pubkey)?;
-        self.validate_side(Side::To, to_chain, &self.claim_details, claim_pubkey)
+        self.validate_side(
+            Side::Lockup,
+            from_chain,
+            &self.lockup_details,
+            refund_pubkey,
+        )?;
+        self.validate_side(Side::Claim, to_chain, &self.claim_details, claim_pubkey)
     }
 
     fn validate_side(
