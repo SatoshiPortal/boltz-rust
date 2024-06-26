@@ -158,7 +158,9 @@ impl ReverseFees {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmarineFees {
+    /// The percentage of the "send amount" that is charged by Boltz as "Boltz Fee".
     pub percentage: f64,
+    /// The network fees charged for locking up and claiming funds onchain. These values are absolute, denominated in 10 ** -8 of the quote asset.
     pub miner_fees: u64,
 }
 
