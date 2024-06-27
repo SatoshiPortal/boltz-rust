@@ -37,5 +37,6 @@ pub use swaps::boltz::{SwapTxKind, SwapType};
 pub use swaps::{
     bitcoin::{BtcSwapScript, BtcSwapTx},
     bitcoinv2::{BtcSwapScriptV2, BtcSwapTxV2},
+    boltzv2,
     liquidv2::{LBtcSwapScriptV2, LBtcSwapTxV2},
 };

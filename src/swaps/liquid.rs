@@ -234,6 +234,10 @@ impl LBtcSwapScript {
 
                 Ok(script)
             }
+            SwapType::Chain => Err(Error::Protocol(format!(
+                "Invalid SwapType: {:?}",
+                self.swap_type
+            ))),
         }
     }
 
@@ -258,6 +262,10 @@ impl LBtcSwapScript {
                 Some(self.blinding_key.public_key()),
                 address_params,
             )),
+            SwapType::Chain => Err(Error::Protocol(format!(
+                "Invalid SwapType: {:?}",
+                self.swap_type
+            ))),
         }
     }
 

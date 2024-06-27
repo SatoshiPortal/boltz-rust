@@ -28,6 +28,7 @@ fn btc_reverse_claim() {
     // create a btc swap script.
     let swap_script = BtcSwapScriptV2 {
         swap_type: SwapType::ReverseSubmarine,
+        side: None,
         funding_addrs: None,
         hashlock: preimage.hash160,
         receiver_pubkey: PublicKey {
@@ -123,6 +124,7 @@ fn btc_submarine_refund() {
     // create a btc swap script.
     let swap_script = BtcSwapScriptV2 {
         swap_type: SwapType::Submarine,
+        side: None,
         funding_addrs: None,
         hashlock: preimage.hash160,
         receiver_pubkey: PublicKey {
@@ -219,6 +221,7 @@ fn lbtc_reverse_claim() {
     // create a btc swap script.
     let swap_script = LBtcSwapScriptV2 {
         swap_type: SwapType::ReverseSubmarine,
+        side: None,
         funding_addrs: None,
         hashlock: preimage.hash160,
         receiver_pubkey: PublicKey {
@@ -280,6 +283,7 @@ fn lbtc_submarine_refund() {
     // create a btc swap script.
     let swap_script = LBtcSwapScriptV2 {
         swap_type: SwapType::Submarine,
+        side: None,
         funding_addrs: None,
         hashlock: preimage.hash160,
         receiver_pubkey: PublicKey {

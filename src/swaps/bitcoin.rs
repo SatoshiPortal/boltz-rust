@@ -228,6 +228,10 @@ impl BtcSwapScript {
 
                 Ok(script)
             }
+            SwapType::Chain => Err(Error::Protocol(format!(
+                "Invalid SwapType: {:?}",
+                self.swap_type
+            ))),
         }
     }
 
@@ -248,6 +252,10 @@ impl BtcSwapScript {
         match self.swap_type {
             SwapType::Submarine => Ok(Address::p2shwsh(&script, network)),
             SwapType::ReverseSubmarine => Ok(Address::p2wsh(&script, network)),
+            SwapType::Chain => Err(Error::Protocol(format!(
+                "Invalid SwapType: {:?}",
+                self.swap_type
+            ))),
         }
     }
     /// Get the balance of the script

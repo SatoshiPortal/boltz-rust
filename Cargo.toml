@@ -33,6 +33,7 @@ url = "2.5.0"
 log = "^0.4"
 env_logger = "0.7"
 native-tls = "0.2.11"
+hex = "0.4"
 
 [patch.crates-io]
 secp256k1-zkp = {git = "https://github.com/BlockstreamResearch/rust-secp256k1-zkp.git", rev = "60e631c24588a0c9e271badd61959294848c665d"}

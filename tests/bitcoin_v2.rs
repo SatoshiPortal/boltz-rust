@@ -4,8 +4,8 @@ use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     swaps::{
         boltzv2::{
-            BoltzApiClientV2, CreateReverseRequest, CreateSubmarineRequest, Subscription,
-            SwapUpdate, BOLTZ_TESTNET_URL_V2,
+            BoltzApiClientV2, Cooperative, CreateReverseRequest, CreateSubmarineRequest,
+            Subscription, SwapUpdate, BOLTZ_TESTNET_URL_V2,
         },
         magic_routing::{check_for_mrh, sign_address},
     },
@@ -55,6 +55,7 @@ fn bitcoin_v2_submarine() {
         to: "BTC".to_string(),
         invoice: invoice.to_string(),
         refund_public_key,
+        pair_hash: None,
         referral_id: None,
     };
 
@@ -138,7 +139,7 @@ fn bitcoin_v2_submarine() {
                         .expect("Funding UTXO not found");
 
                         let claim_tx_response = boltz_api_v2
-                            .get_claim_tx_details(&create_swap_response.id)
+                            .get_submarine_claim_tx_details(&create_swap_response.id)
                             .unwrap();
 
                         log::debug!("Received claim tx details : {:?}", claim_tx_response);
@@ -154,10 +155,18 @@ fn bitcoin_v2_submarine() {
 
                         // Compute and send Musig2 partial sig
                         let (partial_sig, pub_nonce) = swap_tx
-                            .submarine_partial_sig(&our_keys, &claim_tx_response)
+                            .partial_sig(
+                                &our_keys,
+                                &claim_tx_response.pub_nonce,
+                                &claim_tx_response.transaction_hash,
+                            )
                             .unwrap();
                         boltz_api_v2
-                            .post_claim_tx_details(&create_swap_response.id, pub_nonce, partial_sig)
+                            .post_submarine_claim_tx_details(
+                                &create_swap_response.id,
+                                pub_nonce,
+                                partial_sig,
+                            )
                             .unwrap();
                         log::info!("Successfully Sent partial signature");
                     }
@@ -182,7 +191,12 @@ fn bitcoin_v2_submarine() {
                         match swap_tx.sign_refund(
                             &our_keys,
                             1000,
-                            Some((&boltz_api_v2, &create_swap_response.id)),
+                            Some(Cooperative {
+                                boltz_api: &boltz_api_v2,
+                                swap_id: create_swap_response.id.clone(),
+                                pub_nonce: None,
+                                partial_sig: None,
+                            }),
                         ) {
                             Ok(tx) => {
                                 let txid = swap_tx
@@ -333,7 +347,12 @@ fn bitcoin_v2_reverse() {
                                 &our_keys,
                                 &preimage,
                                 1000,
-                                Some((&boltz_api_v2, reverse_resp.id.clone())),
+                                Some(Cooperative {
+                                    boltz_api: &boltz_api_v2,
+                                    swap_id: reverse_resp.id.clone(),
+                                    pub_nonce: None,
+                                    partial_sig: None,
+                                }),
                             )
                             .unwrap();
 

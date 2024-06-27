@@ -462,11 +462,71 @@ impl FromStr for RevSwapStates {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ChainSwapStates {
+    Created,
+    TransactionZeroConfRejected,
+    TransactionMempool,
+    TransactionConfirmed,
+    TransactionServerMempool,
+    TransactionServerConfirmed,
+    TransactionClaimed,
+    TransactionLockupFailed,
+    SwapExpired,
+    TransactionFailed,
+    TransactionRefunded,
+}
+
+impl ToString for ChainSwapStates {
+    fn to_string(&self) -> String {
+        match self {
+            ChainSwapStates::Created => "swap.created".to_string(),
+            ChainSwapStates::TransactionZeroConfRejected => {
+                "transaction.zeroconf.rejected".to_string()
+            }
+            ChainSwapStates::TransactionMempool => "transaction.mempool".to_string(),
+            ChainSwapStates::TransactionConfirmed => "transaction.confirmed".to_string(),
+            ChainSwapStates::TransactionServerMempool => "transaction.server.mempool".to_string(),
+            ChainSwapStates::TransactionServerConfirmed => {
+                "transaction.server.confirmed".to_string()
+            }
+            ChainSwapStates::TransactionClaimed => "transaction.claimed".to_string(),
+            ChainSwapStates::TransactionLockupFailed => "transaction.lockupFailed".to_string(),
+            ChainSwapStates::SwapExpired => "swap.expired".to_string(),
+            ChainSwapStates::TransactionFailed => "transaction.failed".to_string(),
+            ChainSwapStates::TransactionRefunded => "transaction.refunded".to_string(),
+        }
+    }
+}
+
+impl FromStr for ChainSwapStates {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "swap.created" => Ok(ChainSwapStates::Created),
+            "transaction.zeroconf.rejected" => Ok(ChainSwapStates::TransactionZeroConfRejected),
+            "transaction.mempool" => Ok(ChainSwapStates::TransactionMempool),
+            "transaction.confirmed" => Ok(ChainSwapStates::TransactionConfirmed),
+            "transaction.server.mempool" => Ok(ChainSwapStates::TransactionServerMempool),
+            "transaction.server.confirmed" => Ok(ChainSwapStates::TransactionServerConfirmed),
+            "transaction.claimed" => Ok(ChainSwapStates::TransactionClaimed),
+            "transaction.lockupFailed" => Ok(ChainSwapStates::TransactionLockupFailed),
+            "swap.expired" => Ok(ChainSwapStates::SwapExpired),
+            "transaction.failed" => Ok(ChainSwapStates::TransactionFailed),
+            "transaction.refunded" => Ok(ChainSwapStates::TransactionRefunded),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum SwapType {
     Submarine,
     ReverseSubmarine,
+    Chain,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
