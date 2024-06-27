@@ -155,7 +155,7 @@ fn bitcoin_v2_submarine() {
 
                         // Compute and send Musig2 partial sig
                         let (partial_sig, pub_nonce) = swap_tx
-                            .partial_sig(
+                            .partial_sign(
                                 &our_keys,
                                 &claim_tx_response.pub_nonce,
                                 &claim_tx_response.transaction_hash,
