@@ -574,7 +574,7 @@ impl BtcSwapTxV2 {
     }
 
     /// Sign a claim transaction.
-    /// Panics if called on a Submarine Swap or Refund Tx.
+    /// Errors if called on a Submarine Swap or Refund Tx.
     /// If the claim is cooperative, provide the other party's partial sigs.
     /// If this is None, transaction will be claimed via taproot script path.
     pub fn sign_claim(
