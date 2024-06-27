@@ -402,7 +402,7 @@ fn liquid_bitcoin_v2_chain() {
                         let claim_tx_response =
                             boltz_api_v2.get_chain_claim_tx_details(&swap_id).unwrap();
                         let (partial_sig, pub_nonce) = refund_tx
-                            .partial_sig(
+                            .partial_sign(
                                 &our_refund_keys,
                                 &claim_tx_response.pub_nonce,
                                 &claim_tx_response.transaction_hash,
