@@ -1,14 +1,14 @@
 use std::time::Duration;
 
 use bitcoin::{key::rand::thread_rng, Amount, PublicKey};
-use boltz_client::boltzv2::{
+use boltz_client::boltz::{
     BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateChainRequest, Side, Subscription,
     SwapUpdate, BOLTZ_TESTNET_URL_V2,
 };
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
     util::{liquid_genesis_hash, secrets::Preimage, setup_logger},
-    BtcSwapScriptV2, BtcSwapTxV2, Keypair, LBtcSwapScriptV2, LBtcSwapTxV2, Secp256k1,
+    BtcSwapScript, BtcSwapTx, Keypair, LBtcSwapScript, LBtcSwapTx, Secp256k1,
 };
 use elements::Address as EAddress;
 use std::str::FromStr;
@@ -53,7 +53,7 @@ fn bitcoin_liquid_v2_chain() {
     let swap_id = create_chain_response.clone().id;
     let lockup_details: ChainSwapDetails = create_chain_response.clone().lockup_details;
 
-    let lockup_script = BtcSwapScriptV2::chain_from_swap_resp(
+    let lockup_script = BtcSwapScript::chain_from_swap_resp(
         Side::Lockup,
         lockup_details.clone(),
         refund_public_key,
@@ -78,12 +78,9 @@ fn bitcoin_liquid_v2_chain() {
 
     let claim_details: ChainSwapDetails = create_chain_response.claim_details;
 
-    let claim_script = LBtcSwapScriptV2::chain_from_swap_resp(
-        Side::Claim,
-        claim_details.clone(),
-        claim_public_key,
-    )
-    .unwrap();
+    let claim_script =
+        LBtcSwapScript::chain_from_swap_resp(Side::Claim, claim_details.clone(), claim_public_key)
+            .unwrap();
 
     let claim_address = "tlq1qq0y3xudhc909fur3ktaws0yrhjv3ld9c2fk5hqzjfmgqurl0cy4z8yc8d9h54lj7ddwatzegwamyqhp4vttxj26wml4s9vecx".to_string();
     let lq_address = EAddress::from_str(&claim_address).unwrap();
@@ -151,7 +148,7 @@ fn bitcoin_liquid_v2_chain() {
                         std::thread::sleep(Duration::from_secs(10));
                         log::info!("Claiming!");
 
-                        let claim_tx = LBtcSwapTxV2::new_claim(
+                        let claim_tx = LBtcSwapTx::new_claim(
                             claim_script.clone(),
                             claim_address.clone(),
                             &ElectrumConfig::default_liquid(),
@@ -159,7 +156,7 @@ fn bitcoin_liquid_v2_chain() {
                             swap_id.clone(),
                         )
                         .unwrap();
-                        let refund_tx = BtcSwapTxV2::new_refund(
+                        let refund_tx = BtcSwapTx::new_refund(
                             lockup_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_bitcoin(),
@@ -204,7 +201,7 @@ fn bitcoin_liquid_v2_chain() {
                     // fund back via refund.
                     if update.status == "transaction.lockupFailed" {
                         log::info!("REFUNDING!");
-                        let refund_tx = BtcSwapTxV2::new_refund(
+                        let refund_tx = BtcSwapTx::new_refund(
                             lockup_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_bitcoin(),
@@ -291,7 +288,7 @@ fn liquid_bitcoin_v2_chain() {
     let swap_id = create_chain_response.clone().id;
     let lockup_details: ChainSwapDetails = create_chain_response.clone().lockup_details;
 
-    let lockup_script = LBtcSwapScriptV2::chain_from_swap_resp(
+    let lockup_script = LBtcSwapScript::chain_from_swap_resp(
         Side::Lockup,
         lockup_details.clone(),
         refund_public_key,
@@ -321,7 +318,7 @@ fn liquid_bitcoin_v2_chain() {
     let claim_details: ChainSwapDetails = create_chain_response.claim_details;
 
     let claim_script =
-        BtcSwapScriptV2::chain_from_swap_resp(Side::Claim, claim_details.clone(), claim_public_key)
+        BtcSwapScript::chain_from_swap_resp(Side::Claim, claim_details.clone(), claim_public_key)
             .unwrap();
 
     let claim_address = "tb1qra2cdypld3hyq3f84630cvj9d0lmzv66vn4k28".to_string();
@@ -385,13 +382,13 @@ fn liquid_bitcoin_v2_chain() {
                         std::thread::sleep(Duration::from_secs(10));
                         log::info!("Claiming!");
 
-                        let claim_tx = BtcSwapTxV2::new_claim(
+                        let claim_tx = BtcSwapTx::new_claim(
                             claim_script.clone(),
                             claim_address.clone(),
                             &ElectrumConfig::default_bitcoin(),
                         )
                         .unwrap();
-                        let refund_tx = LBtcSwapTxV2::new_refund(
+                        let refund_tx = LBtcSwapTx::new_refund(
                             lockup_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_liquid(),
@@ -438,7 +435,7 @@ fn liquid_bitcoin_v2_chain() {
                     // fund back via refund.
                     if update.status == "transaction.lockupFailed" {
                         log::info!("REFUNDING!");
-                        let refund_tx = LBtcSwapTxV2::new_refund(
+                        let refund_tx = LBtcSwapTx::new_refund(
                             lockup_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_liquid(),

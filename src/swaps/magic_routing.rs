@@ -11,7 +11,7 @@ use bitcoin::{
 use elements::hex::ToHex;
 use lightning_invoice::{Bolt11Invoice, RouteHintHop};
 
-use super::boltzv2::BoltzApiClientV2;
+use super::boltz::BoltzApiClientV2;
 
 const MAGIC_ROUTING_HINT_CONSTANT: u64 = 596385002596073472;
 const LBTC_TESTNET_ASSET_HASH: &str =

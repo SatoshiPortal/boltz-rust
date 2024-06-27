@@ -5,10 +5,10 @@ use bitcoin::secp256k1::Secp256k1;
 use bitcoin::{Amount, OutPoint, TxOut};
 use bitcoind::bitcoincore_rpc::json::ScanTxOutRequest;
 use bitcoind::bitcoincore_rpc::RpcApi;
+use boltz_client::boltz::{SwapTxKind, SwapType};
 use boltz_client::network::Chain;
 use boltz_client::util::secrets::Preimage;
-use boltz_client::{BtcSwapScriptV2, BtcSwapTxV2, LBtcSwapScriptV2, LBtcSwapTxV2};
-use boltz_client::{SwapTxKind, SwapType};
+use boltz_client::{BtcSwapScript, BtcSwapTx, LBtcSwapScript, LBtcSwapTx};
 mod test_framework;
 use test_framework::{BtcTestFramework, LbtcTestFramework};
 
@@ -26,7 +26,7 @@ fn btc_reverse_claim() {
     let sender_keypair = Keypair::new(&secp, &mut thread_rng());
 
     // create a btc swap script.
-    let swap_script = BtcSwapScriptV2 {
+    let swap_script = BtcSwapScript {
         swap_type: SwapType::ReverseSubmarine,
         side: None,
         funding_addrs: None,
@@ -80,7 +80,7 @@ fn btc_reverse_claim() {
         .unwrap()
         .assume_checked();
 
-    let swap_tx = BtcSwapTxV2 {
+    let swap_tx = BtcSwapTx {
         kind: SwapTxKind::Claim,
         swap_script,
         output_address: refund_addrs,
@@ -122,7 +122,7 @@ fn btc_submarine_refund() {
     let sender_keypair = Keypair::new(&secp, &mut thread_rng());
 
     // create a btc swap script.
-    let swap_script = BtcSwapScriptV2 {
+    let swap_script = BtcSwapScript {
         swap_type: SwapType::Submarine,
         side: None,
         funding_addrs: None,
@@ -174,7 +174,7 @@ fn btc_submarine_refund() {
         .unwrap()
         .assume_checked();
 
-    let swap_tx = BtcSwapTxV2 {
+    let swap_tx = BtcSwapTx {
         kind: SwapTxKind::Refund,
         swap_script,
         output_address: refund_addrs,
@@ -219,7 +219,7 @@ fn lbtc_reverse_claim() {
     let blinding_keypair = elements::secp256k1_zkp::Keypair::new(&secp, &mut thread_rng());
 
     // create a btc swap script.
-    let swap_script = LBtcSwapScriptV2 {
+    let swap_script = LBtcSwapScript {
         swap_type: SwapType::ReverseSubmarine,
         side: None,
         funding_addrs: None,
@@ -248,7 +248,7 @@ fn lbtc_reverse_claim() {
 
     let genesis_hash = test_framework.genesis_hash();
 
-    let swap_tx = LBtcSwapTxV2 {
+    let swap_tx = LBtcSwapTx {
         kind: SwapTxKind::Claim,
         swap_script,
         output_address: refund_addrs,
@@ -281,7 +281,7 @@ fn lbtc_submarine_refund() {
     let blinding_keypair = elements::secp256k1_zkp::Keypair::new(&secp, &mut thread_rng());
 
     // create a btc swap script.
-    let swap_script = LBtcSwapScriptV2 {
+    let swap_script = LBtcSwapScript {
         swap_type: SwapType::Submarine,
         side: None,
         funding_addrs: None,
@@ -310,7 +310,7 @@ fn lbtc_submarine_refund() {
 
     let genesis_hash = test_framework.genesis_hash();
 
-    let swap_tx = LBtcSwapTxV2 {
+    let swap_tx = LBtcSwapTx {
         kind: SwapTxKind::Refund,
         swap_script,
         output_address: refund_addrs,

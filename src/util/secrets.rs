@@ -1,7 +1,6 @@
 use crate::error::Error;
 use crate::network::Chain;
-use crate::swaps::bitcoin::BtcSwapScript;
-use crate::swaps::liquid::LBtcSwapScript;
+use crate::BtcSwapScript;
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
 use bitcoin::hex::{DisplayHex, FromHex};
@@ -264,188 +263,189 @@ impl RefundSwapFile {
 }
 
 /// Recovery items for storage
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BtcSubmarineRecovery {
-    pub id: String,
-    pub refund_key: String,
-    pub redeem_script: String,
-}
-impl BtcSubmarineRecovery {
-    pub fn new(id: &str, refund_key: &Keypair, redeem_script: &str) -> Self {
-        BtcSubmarineRecovery {
-            id: id.to_string(),
-            refund_key: refund_key.display_secret().to_string(),
-            redeem_script: redeem_script.to_string(),
-        }
-    }
-}
-impl TryInto<RefundSwapFile> for BtcSubmarineRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<RefundSwapFile, Self::Error> {
-        let script = BtcSwapScript::submarine_from_str(&self.redeem_script)?;
+// #[derive(Serialize, Deserialize, Debug, Clone)]
+// pub struct BtcSubmarineRecovery {
+//     pub id: String,
+//     pub refund_key: String,
+//     pub redeem_script: String,
+// }
+// impl BtcSubmarineRecovery {
+//     pub fn new(id: &str, refund_key: &Keypair, redeem_script: &str) -> Self {
+//         BtcSubmarineRecovery {
+//             id: id.to_string(),
+//             refund_key: refund_key.display_secret().to_string(),
+//             redeem_script: redeem_script.to_string(),
+//         }
+//     }
+// }
+// impl TryInto<RefundSwapFile> for BtcSubmarineRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<RefundSwapFile, Self::Error> {
+//         let script = BtcSwapScriptV2::submarine_from_str(&self.redeem_script)?;
 
-        Ok(RefundSwapFile {
-            id: self.id,
-            currency: "BTC".to_string(),
-            redeem_script: self.redeem_script,
-            private_key: self.refund_key,
-            timeout_block_height: script.locktime.to_consensus_u32(),
-        })
-    }
-}
+//         Ok(RefundSwapFile {
+//             id: self.id,
+//             currency: "BTC".to_string(),
+//             redeem_script: self.redeem_script,
+//             private_key: self.refund_key,
+//             timeout_block_height: script.locktime.to_consensus_u32(),
+//         })
+//     }
+// }
 
-impl TryInto<BtcSwapScript> for &BtcSubmarineRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
-        Ok(BtcSwapScript::submarine_from_str(&self.redeem_script)?)
-    }
-}
+// impl TryInto<BtcSwapScript> for &BtcSubmarineRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
+//         Ok(BtcSwapScriptV2::submarine_from_str(&self.redeem_script)?)
+//     }
+// }
 
-impl TryInto<Keypair> for &BtcSubmarineRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<Keypair, Self::Error> {
-        let secp = Secp256k1::new();
-        Ok(Keypair::from_seckey_str(&secp, &self.refund_key)?)
-    }
-}
-
-/// Recovery items for storage
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BtcReverseRecovery {
-    pub id: String,
-    pub preimage: String,
-    pub claim_key: String,
-    pub redeem_script: String,
-}
-impl BtcReverseRecovery {
-    pub fn new(
-        id: &str,
-        preimage: &Preimage,
-        claim_key: &Keypair,
-        redeem_script: &str,
-    ) -> Result<Self, Error> {
-        let preimage = preimage
-            .to_string()
-            .ok_or_else(|| Error::Protocol("Error parsing preimage to string".to_string()))?;
-
-        Ok(BtcReverseRecovery {
-            id: id.to_string(),
-            claim_key: claim_key.display_secret().to_string(),
-            preimage,
-            redeem_script: redeem_script.to_string(),
-        })
-    }
-}
-impl TryInto<BtcSwapScript> for &BtcReverseRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
-        Ok(BtcSwapScript::reverse_from_str(&self.redeem_script)?)
-    }
-}
-
-impl TryInto<Keypair> for &BtcReverseRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<Keypair, Self::Error> {
-        let secp = Secp256k1::new();
-        Ok(Keypair::from_seckey_str(&secp, &self.claim_key)?)
-    }
-}
-impl TryInto<Preimage> for &BtcReverseRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<Preimage, Self::Error> {
-        Ok(Preimage::from_str(&self.preimage)?)
-    }
-}
+// impl TryInto<Keypair> for &BtcSubmarineRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<Keypair, Self::Error> {
+//         let secp = Secp256k1::new();
+//         Ok(Keypair::from_seckey_str(&secp, &self.refund_key)?)
+//     }
+// }
 
 /// Recovery items for storage
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct LBtcSubmarineRecovery {
-    pub id: String,
-    pub refund_key: String,
-    pub blinding_key: String,
-    pub redeem_script: String,
-}
-impl LBtcSubmarineRecovery {
-    pub fn new(
-        id: &str,
-        refund_key: &Keypair,
-        blinding_key: &ZKKeyPair,
-        redeem_script: &str,
-    ) -> Self {
-        LBtcSubmarineRecovery {
-            id: id.to_string(),
-            refund_key: refund_key.display_secret().to_string(),
-            redeem_script: redeem_script.to_string(),
-            blinding_key: blinding_key.display_secret().to_string(),
-        }
-    }
-}
-impl TryInto<RefundSwapFile> for LBtcSubmarineRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<RefundSwapFile, Self::Error> {
-        let script = LBtcSwapScript::submarine_from_str(&self.redeem_script, &self.blinding_key)?;
-        Ok(RefundSwapFile {
-            id: self.id,
-            currency: "L-BTC".to_string(),
-            redeem_script: self.redeem_script,
-            private_key: self.refund_key,
-            timeout_block_height: script.locktime.to_consensus_u32(),
-        })
-    }
-}
-/// Recovery items for storage
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct LBtcReverseRecovery {
-    pub id: String,
-    pub preimage: String,
-    pub claim_key: String,
-    pub blinding_key: String,
-    pub redeem_script: String,
-}
-impl LBtcReverseRecovery {
-    pub fn new(
-        id: &str,
-        preimage: &Preimage,
-        claim_key: &Keypair,
-        blinding_key: &ZKKeyPair,
-        redeem_script: &str,
-    ) -> Result<Self, Error> {
-        let preimage = preimage
-            .to_string()
-            .ok_or_else(|| Error::Protocol("Error parsing preimage to string".to_string()))?;
+// #[derive(Serialize, Deserialize, Debug, Clone)]
+// pub struct BtcReverseRecovery {
+//     pub id: String,
+//     pub preimage: String,
+//     pub claim_key: String,
+//     pub redeem_script: String,
+// }
+// impl BtcReverseRecovery {
+//     pub fn new(
+//         id: &str,
+//         preimage: &Preimage,
+//         claim_key: &Keypair,
+//         redeem_script: &str,
+//     ) -> Result<Self, Error> {
+//         let preimage = preimage
+//             .to_string()
+//             .ok_or_else(|| Error::Protocol("Error parsing preimage to string".to_string()))?;
 
-        Ok(LBtcReverseRecovery {
-            id: id.to_string(),
-            claim_key: claim_key.display_secret().to_string(),
-            blinding_key: blinding_key.display_secret().to_string(),
-            preimage,
-            redeem_script: redeem_script.to_string(),
-        })
-    }
-}
-impl TryInto<LBtcSwapScript> for &LBtcReverseRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<LBtcSwapScript, Self::Error> {
-        Ok(LBtcSwapScript::reverse_from_str(
-            &self.redeem_script,
-            &self.blinding_key,
-        )?)
-    }
-}
+//         Ok(BtcReverseRecovery {
+//             id: id.to_string(),
+//             claim_key: claim_key.display_secret().to_string(),
+//             preimage,
+//             redeem_script: redeem_script.to_string(),
+//         })
+//     }
+// }
+// impl TryInto<BtcSwapScript> for &BtcReverseRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<BtcSwapScript, Self::Error> {
+//         Ok(BtcSwapScript::reverse_from_str(&self.redeem_script)?)
+//     }
+// }
 
-impl TryInto<Keypair> for &LBtcReverseRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<Keypair, Self::Error> {
-        let secp = Secp256k1::new();
-        Ok(Keypair::from_seckey_str(&secp, &self.claim_key)?)
-    }
-}
-impl TryInto<Preimage> for &LBtcReverseRecovery {
-    type Error = Error;
-    fn try_into(self) -> Result<Preimage, Self::Error> {
-        Ok(Preimage::from_str(&self.preimage)?)
-    }
-}
+// impl TryInto<Keypair> for &BtcReverseRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<Keypair, Self::Error> {
+//         let secp = Secp256k1::new();
+//         Ok(Keypair::from_seckey_str(&secp, &self.claim_key)?)
+//     }
+// }
+// impl TryInto<Preimage> for &BtcReverseRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<Preimage, Self::Error> {
+//         Ok(Preimage::from_str(&self.preimage)?)
+//     }
+// }
+
+// /// Recovery items for storage
+// #[derive(Serialize, Deserialize, Debug, Clone)]
+// pub struct LBtcSubmarineRecovery {
+//     pub id: String,
+//     pub refund_key: String,
+//     pub blinding_key: String,
+//     pub redeem_script: String,
+// }
+// impl LBtcSubmarineRecovery {
+//     pub fn new(
+//         id: &str,
+//         refund_key: &Keypair,
+//         blinding_key: &ZKKeyPair,
+//         redeem_script: &str,
+//     ) -> Self {
+//         LBtcSubmarineRecovery {
+//             id: id.to_string(),
+//             refund_key: refund_key.display_secret().to_string(),
+//             redeem_script: redeem_script.to_string(),
+//             blinding_key: blinding_key.display_secret().to_string(),
+//         }
+//     }
+// }
+// impl TryInto<RefundSwapFile> for LBtcSubmarineRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<RefundSwapFile, Self::Error> {
+//         let script = LBtcSwapScript::submarine_from_str(&self.redeem_script, &self.blinding_key)?;
+//         Ok(RefundSwapFile {
+//             id: self.id,
+//             currency: "L-BTC".to_string(),
+//             redeem_script: self.redeem_script,
+//             private_key: self.refund_key,
+//             timeout_block_height: script.locktime.to_consensus_u32(),
+//         })
+//     }
+// }
+// /// Recovery items for storage
+// #[derive(Serialize, Deserialize, Debug, Clone)]
+// pub struct LBtcReverseRecovery {
+//     pub id: String,
+//     pub preimage: String,
+//     pub claim_key: String,
+//     pub blinding_key: String,
+//     pub redeem_script: String,
+// }
+// impl LBtcReverseRecovery {
+//     pub fn new(
+//         id: &str,
+//         preimage: &Preimage,
+//         claim_key: &Keypair,
+//         blinding_key: &ZKKeyPair,
+//         redeem_script: &str,
+//     ) -> Result<Self, Error> {
+//         let preimage = preimage
+//             .to_string()
+//             .ok_or_else(|| Error::Protocol("Error parsing preimage to string".to_string()))?;
+
+//         Ok(LBtcReverseRecovery {
+//             id: id.to_string(),
+//             claim_key: claim_key.display_secret().to_string(),
+//             blinding_key: blinding_key.display_secret().to_string(),
+//             preimage,
+//             redeem_script: redeem_script.to_string(),
+//         })
+//     }
+// }
+// impl TryInto<LBtcSwapScript> for &LBtcReverseRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<LBtcSwapScript, Self::Error> {
+//         Ok(LBtcSwapScript::reverse_from_str(
+//             &self.redeem_script,
+//             &self.blinding_key,
+//         )?)
+//     }
+// }
+
+// impl TryInto<Keypair> for &LBtcReverseRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<Keypair, Self::Error> {
+//         let secp = Secp256k1::new();
+//         Ok(Keypair::from_seckey_str(&secp, &self.claim_key)?)
+//     }
+// }
+// impl TryInto<Preimage> for &LBtcReverseRecovery {
+//     type Error = Error;
+//     fn try_into(self) -> Result<Preimage, Self::Error> {
+//         Ok(Preimage::from_str(&self.preimage)?)
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
 
@@ -472,28 +472,28 @@ mod tests {
         );
     }
 
-    #[test]
-    #[ignore]
-    fn test_recover() {
-        let recovery = BtcSubmarineRecovery {
-            id: "y8uGeA".to_string(),
-            refund_key: "5416f1e024c191605502017d066786e294f841e711d3d437d13e9d27e40e066e".to_string(),
-            redeem_script: "a914046fabc17989627f6ca9c1846af8e470263e712d87632102c929edb654bc1da91001ec27d74d42b5d6a8cf8aef2fab7c55f2eb728eed0d1f6703634d27b1752102c530b4583640ab3df5c75c5ce381c4b747af6bdd6c618db7e5248cb0adcf3a1868ac".to_string(),
-        };
-        //let file: RefundSwapFile = recovery.try_into();
+    // #[test]
+    // #[ignore]
+    // fn test_recover() {
+    //     let recovery = BtcSubmarineRecovery {
+    //         id: "y8uGeA".to_string(),
+    //         refund_key: "5416f1e024c191605502017d066786e294f841e711d3d437d13e9d27e40e066e".to_string(),
+    //         redeem_script: "a914046fabc17989627f6ca9c1846af8e470263e712d87632102c929edb654bc1da91001ec27d74d42b5d6a8cf8aef2fab7c55f2eb728eed0d1f6703634d27b1752102c530b4583640ab3df5c75c5ce381c4b747af6bdd6c618db7e5248cb0adcf3a1868ac".to_string(),
+    //     };
+    //     //let file: RefundSwapFile = recovery.try_into();
 
-        let file: RefundSwapFile = match BtcSubmarineRecovery::try_into(recovery) {
-            Ok(file) => file,
-            Err(err) => {
-                // Handle the error
-                return println!("Error converting: {:?}", err);
-            }
-        };
+    //     let file: RefundSwapFile = match BtcSubmarineRecovery::try_into(recovery) {
+    //         Ok(file) => file,
+    //         Err(err) => {
+    //             // Handle the error
+    //             return println!("Error converting: {:?}", err);
+    //         }
+    //     };
 
-        let base_path = "/tmp/boltz-rust";
-        file.write_to_file(base_path).unwrap();
-        let file_path = base_path.to_owned() + "/" + &file.file_name();
-        let file_struct = RefundSwapFile::read_from_file(file_path);
-        println!("Refund File: {:?}", file_struct);
-    }
+    //     let base_path = "/tmp/boltz-rust";
+    //     file.write_to_file(base_path).unwrap();
+    //     let file_path = base_path.to_owned() + "/" + &file.file_name();
+    //     let file_struct = RefundSwapFile::read_from_file(file_path);
+    //     println!("Refund File: {:?}", file_struct);
+    // }
 }

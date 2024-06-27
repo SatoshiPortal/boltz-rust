@@ -1,9 +1,12 @@
-use bitcoin::consensus::Decodable;
-use bitcoin::ecdsa::Signature;
+use bitcoin::consensus::{deserialize, Decodable};
 use bitcoin::hashes::Hash;
 use bitcoin::hex::{DisplayHex, FromHex};
+use bitcoin::key::rand::rngs::OsRng;
+use bitcoin::key::rand::{thread_rng, RngCore};
 use bitcoin::script::{PushBytes, PushBytesBuf};
-use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
+use bitcoin::secp256k1::{All, Keypair, Message, Secp256k1, SecretKey};
+use bitcoin::sighash::Prevouts;
+use bitcoin::taproot::{LeafVersion, Signature, TaprootBuilder, TaprootSpendInfo};
 use bitcoin::transaction::Version;
 use bitcoin::{
     blockdata::script::{Builder, Instruction, Script, ScriptBuf},
@@ -11,27 +14,42 @@ use bitcoin::{
     Address, OutPoint, PublicKey,
 };
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
-use bitcoin::{Amount, EcdsaSighashType, Txid};
+use bitcoin::{Amount, EcdsaSighashType, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey};
 use electrum_client::ElectrumApi;
+use elements::encode::serialize;
+use elements::pset::serialize::Serialize;
 use std::ops::{Add, Index};
 use std::str::FromStr;
 
 use crate::{
     error::Error,
     network::{electrum::ElectrumConfig, Chain},
-    swaps::boltz::SwapTxKind,
     util::secrets::Preimage,
 };
+use crate::{LBtcSwapScript, LBtcSwapTx};
 
 use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160};
 
-use super::boltz::SwapType;
+use super::boltz::{
+    BoltzApiClientV2, ChainClaimTxResponse, ChainSwapDetails, Cooperative, CreateChainResponse,
+    CreateReverseResponse, CreateSubmarineResponse, PartialSig, Side, SubmarineClaimTxResponse,
+    SwapTxKind, SwapType, ToSign,
+};
 
-/// Bitcoin swap script helper.
+use elements::secp256k1_zkp::{
+    musig, MusigAggNonce, MusigKeyAggCache, MusigPartialSignature, MusigPubNonce, MusigSession,
+    MusigSessionId,
+};
+
+/// Bitcoin v2 swap script helper.
 // TODO: This should encode the network at global level.
 #[derive(Debug, PartialEq, Clone)]
 pub struct BtcSwapScript {
     pub swap_type: SwapType,
+    // pub swap_id: String,
+    pub side: Option<Side>,
+    pub funding_addrs: Option<Address>, // we should not store this as a field, since we have a method
+    // if we are using it just to recognize regtest, we should consider another strategy
     pub hashlock: hash160::Hash,
     pub receiver_pubkey: PublicKey,
     pub locktime: LockTime,
@@ -39,206 +57,318 @@ pub struct BtcSwapScript {
 }
 
 impl BtcSwapScript {
-    /// Create the struct from a submarine swap redeem_script string.
-    /// Usually created from the string provided by boltz api response.
-    pub fn submarine_from_str(redeem_script_str: &str) -> Result<Self, Error> {
-        let script = ScriptBuf::from_hex(redeem_script_str)?;
+    /// Create the struct for a submarine swap from boltz create swap response.
+    pub fn submarine_from_swap_resp(
+        create_swap_response: &CreateSubmarineResponse,
+        our_pubkey: PublicKey,
+    ) -> Result<Self, Error> {
+        let claim_script = ScriptBuf::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?;
+        let refund_script =
+            ScriptBuf::from_hex(&create_swap_response.swap_tree.refund_leaf.output)?;
 
-        let instructions = script.instructions();
+        let claim_instructions = claim_script.instructions();
+        let refund_instructions = refund_script.instructions();
+
         let mut last_op = OP_0;
         let mut hashlock = None;
-        let mut reciever_pubkey = None;
         let mut timelock = None;
-        let mut sender_pubkey = None;
 
-        for instruction in instructions {
+        for instruction in claim_instructions {
             match instruction {
-                Ok(Instruction::Op(opcode)) => {
-                    last_op = opcode;
-                }
-
                 Ok(Instruction::PushBytes(bytes)) => {
-                    if last_op == OP_HASH160 {
+                    if bytes.len() == 20 {
                         hashlock = Some(hash160::Hash::from_slice(bytes.as_bytes())?);
+                    } else {
+                        continue;
                     }
-                    if last_op == OP_IF {
-                        reciever_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
-                    }
-                    if last_op == OP_ELSE {
+                }
+                _ => continue,
+            }
+        }
+
+        for instruction in refund_instructions {
+            match instruction {
+                Ok(Instruction::Op(opcode)) => last_op = opcode,
+                Ok(Instruction::PushBytes(bytes)) => {
+                    if last_op == OP_CHECKSIGVERIFY {
                         timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
                             &bytes.as_bytes(),
                         )));
-                    }
-                    if last_op == OP_DROP {
-                        sender_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
+                    } else {
+                        continue;
                     }
                 }
-                _ => (),
+                _ => continue,
             }
         }
 
         let hashlock =
             hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
 
-        let sender_pubkey = sender_pubkey
-            .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
-
         let timelock =
             timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
 
-        let receiver_pubkey = reciever_pubkey
-            .ok_or_else(|| Error::Protocol("No receiver_pubkey provided".to_string()))?;
+        let funding_addrs = Address::from_str(&create_swap_response.address)?.assume_checked();
 
         Ok(BtcSwapScript {
             swap_type: SwapType::Submarine,
+            // swap_id: create_swap_response.id.clone(),
+            side: None,
+            funding_addrs: Some(funding_addrs),
             hashlock: hashlock,
-            receiver_pubkey: receiver_pubkey,
+            receiver_pubkey: create_swap_response.claim_public_key,
             locktime: timelock,
-            sender_pubkey: sender_pubkey,
+            sender_pubkey: our_pubkey,
         })
     }
 
-    /// Create the struct from a reverse swap redeem_script string.
-    /// Usually created from the string provided by boltz api response.
-    pub fn reverse_from_str(redeem_script_str: &str) -> Result<Self, Error> {
-        let script_bytes = Vec::from_hex(redeem_script_str)?;
-        let script = Script::from_bytes(&script_bytes);
+    pub fn musig_keyagg_cache(&self) -> MusigKeyAggCache {
+        match (self.swap_type, self.side.clone()) {
+            (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::Claim)) => {
+                let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
+                MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
+            }
 
-        let instructions = script.instructions();
+            (SwapType::Submarine, _) | (SwapType::Chain, _) => {
+                let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
+                MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
+            }
+        }
+    }
+
+    /// Create the struct for a reverse swap from a boltz create response.
+    pub fn reverse_from_swap_resp(
+        reverse_response: &CreateReverseResponse,
+        our_pubkey: PublicKey,
+    ) -> Result<Self, Error> {
+        let claim_script = ScriptBuf::from_hex(&reverse_response.swap_tree.claim_leaf.output)?;
+        let refund_script = ScriptBuf::from_hex(&reverse_response.swap_tree.refund_leaf.output)?;
+
+        let claim_instructions = claim_script.instructions();
+        let refund_instructions = refund_script.instructions();
+
         let mut last_op = OP_0;
         let mut hashlock = None;
-        let mut receiver_pubkey = None;
         let mut timelock = None;
-        let mut sender_pubkey = None;
 
-        for instruction in instructions {
+        for instruction in claim_instructions {
             match instruction {
-                Ok(Instruction::Op(opcode)) => {
-                    last_op = opcode;
-                }
-
                 Ok(Instruction::PushBytes(bytes)) => {
-                    if last_op == OP_HASH160 {
+                    if bytes.len() == 20 {
                         hashlock = Some(hash160::Hash::from_slice(bytes.as_bytes())?);
-                    }
-                    if last_op == OP_EQUALVERIFY {
-                        receiver_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
-                    }
-                    if last_op == OP_DROP {
-                        if bytes.len() == 3 as usize {
-                            timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
-                                &bytes.as_bytes(),
-                            )));
-                        } else {
-                            sender_pubkey = Some(PublicKey::from_slice(bytes.as_bytes())?);
-                        }
+                    } else {
+                        continue;
                     }
                 }
-                _ => (),
+                _ => continue,
+            }
+        }
+
+        for instruction in refund_instructions {
+            match instruction {
+                Ok(Instruction::Op(opcode)) => last_op = opcode,
+                Ok(Instruction::PushBytes(bytes)) => {
+                    if last_op == OP_CHECKSIGVERIFY {
+                        timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
+                            &bytes.as_bytes(),
+                        )));
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
             }
         }
 
         let hashlock =
             hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
 
-        let sender_pubkey = sender_pubkey
-            .ok_or_else(|| Error::Protocol("No sender_pubkey provided".to_string()))?;
+        let timelock =
+            timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+
+        let funding_addrs = Address::from_str(&reverse_response.lockup_address)?.assume_checked();
+
+        Ok(BtcSwapScript {
+            swap_type: SwapType::ReverseSubmarine,
+            // swap_id: reverse_response.id.clone(),
+            side: None,
+            funding_addrs: Some(funding_addrs),
+            hashlock: hashlock,
+            receiver_pubkey: our_pubkey,
+            locktime: timelock,
+            sender_pubkey: reverse_response.refund_public_key,
+        })
+    }
+
+    /// Create the struct for a chain swap from a boltz create response.
+    pub fn chain_from_swap_resp(
+        side: Side,
+        chain_swap_details: ChainSwapDetails,
+        our_pubkey: PublicKey,
+    ) -> Result<Self, Error> {
+        let claim_script = ScriptBuf::from_hex(&chain_swap_details.swap_tree.claim_leaf.output)?;
+        let refund_script = ScriptBuf::from_hex(&chain_swap_details.swap_tree.refund_leaf.output)?;
+
+        let claim_instructions = claim_script.instructions();
+        let refund_instructions = refund_script.instructions();
+
+        let mut last_op = OP_0;
+        let mut hashlock = None;
+        let mut timelock = None;
+
+        for instruction in claim_instructions {
+            match instruction {
+                Ok(Instruction::PushBytes(bytes)) => {
+                    if bytes.len() == 20 {
+                        hashlock = Some(hash160::Hash::from_slice(bytes.as_bytes())?);
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            }
+        }
+
+        for instruction in refund_instructions {
+            match instruction {
+                Ok(Instruction::Op(opcode)) => last_op = opcode,
+                Ok(Instruction::PushBytes(bytes)) => {
+                    if last_op == OP_CHECKSIGVERIFY {
+                        timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
+                            &bytes.as_bytes(),
+                        )));
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            }
+        }
+
+        let hashlock =
+            hashlock.ok_or_else(|| Error::Protocol("No hashlock provided".to_string()))?;
 
         let timelock =
             timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
 
-        let receiver_pubkey = receiver_pubkey
-            .ok_or_else(|| Error::Protocol("No receiver_pubkey provided".to_string()))?;
+        let funding_addrs = Address::from_str(&chain_swap_details.lockup_address)?.assume_checked();
+
+        let (sender_pubkey, receiver_pubkey) = match side {
+            Side::Lockup => (our_pubkey, chain_swap_details.server_public_key),
+            Side::Claim => (chain_swap_details.server_public_key, our_pubkey),
+        };
 
         Ok(BtcSwapScript {
-            swap_type: SwapType::ReverseSubmarine,
-            hashlock: hashlock,
-            receiver_pubkey: receiver_pubkey,
+            swap_type: SwapType::Chain,
+            // swap_id: reverse_response.id.clone(),
+            side: Some(side),
+            funding_addrs: Some(funding_addrs),
+            hashlock,
+            receiver_pubkey,
             locktime: timelock,
-            sender_pubkey: sender_pubkey,
+            sender_pubkey,
         })
     }
 
-    /// Internally used to convert struct into a bitcoin::Script type
-    fn to_script(&self) -> Result<ScriptBuf, Error> {
+    fn claim_script(&self) -> ScriptBuf {
         match self.swap_type {
-            SwapType::Submarine => {
-                /*
-                    HASH160 <hash of the preimage>
-                    EQUAL
-                    IF <reciever public key>
-                    ELSE <timeout block height>
-                    CHECKLOCKTIMEVERIFY
-                    DROP <sender public key>
-                    ENDIF
-                    CHECKSIG
-                */
+            SwapType::Submarine => Builder::new()
+                .push_opcode(OP_HASH160)
+                .push_slice(self.hashlock.to_byte_array())
+                .push_opcode(OP_EQUALVERIFY)
+                .push_x_only_key(&self.receiver_pubkey.inner.x_only_public_key().0)
+                .push_opcode(OP_CHECKSIG)
+                .into_script(),
 
-                let script = Builder::new()
-                    .push_opcode(OP_HASH160)
-                    .push_slice(self.hashlock.to_byte_array())
-                    .push_opcode(OP_EQUAL)
-                    .push_opcode(OP_IF)
-                    .push_key(&self.receiver_pubkey)
-                    .push_opcode(OP_ELSE)
-                    .push_lock_time(self.locktime)
-                    .push_opcode(OP_CLTV)
-                    .push_opcode(OP_DROP)
-                    .push_key(&self.sender_pubkey)
-                    .push_opcode(OP_ENDIF)
-                    .push_opcode(OP_CHECKSIG)
-                    .into_script();
-
-                Ok(script)
-            }
-            SwapType::ReverseSubmarine => {
-                /*
-                    OP_SIZE
-                    [32]
-                    OP_EQUAL
-                    OP_IF
-                    OP_HASH160 <hash of the preimage>
-                    OP_EQUALVERIFY <reciever public key>
-                    OP_ELSE
-                    OP_DROP <timeout block height>
-                    OP_CLTV
-                    OP_DROP <sender public key>
-                    OP_ENDIF
-                    OP_CHECKSIG
-                */
-
-                let script = Builder::new()
-                    .push_opcode(OP_SIZE)
-                    .push_slice([32])
-                    .push_opcode(OP_EQUAL)
-                    .push_opcode(OP_IF)
-                    .push_opcode(OP_HASH160)
-                    .push_slice(self.hashlock.to_byte_array())
-                    .push_opcode(OP_EQUALVERIFY)
-                    .push_key(&self.receiver_pubkey)
-                    .push_opcode(OP_ELSE)
-                    .push_opcode(OP_DROP)
-                    .push_lock_time(self.locktime)
-                    .push_opcode(OP_CLTV)
-                    .push_opcode(OP_DROP)
-                    .push_key(&self.sender_pubkey)
-                    .push_opcode(OP_ENDIF)
-                    .push_opcode(OP_CHECKSIG)
-                    .into_script();
-
-                Ok(script)
-            }
-            SwapType::Chain => Err(Error::Protocol(format!(
-                "Invalid SwapType: {:?}",
-                self.swap_type
-            ))),
+            SwapType::ReverseSubmarine | SwapType::Chain => Builder::new()
+                .push_opcode(OP_SIZE)
+                .push_int(32)
+                .push_opcode(OP_EQUALVERIFY)
+                .push_opcode(OP_HASH160)
+                .push_slice(self.hashlock.to_byte_array())
+                .push_opcode(OP_EQUALVERIFY)
+                .push_x_only_key(&self.receiver_pubkey.inner.x_only_public_key().0)
+                .push_opcode(OP_CHECKSIG)
+                .into_script(),
         }
     }
 
-    /// Get address for the swap script.
-    /// Submarine swaps use p2shwsh. Reverse swaps use p2wsh.
+    fn refund_script(&self) -> ScriptBuf {
+        // Refund scripts are same for all swap types
+        Builder::new()
+            .push_x_only_key(&self.sender_pubkey.inner.x_only_public_key().0)
+            .push_opcode(OP_CHECKSIGVERIFY)
+            .push_lock_time(self.locktime)
+            .push_opcode(OP_CLTV)
+            .into_script()
+    }
+
+    /// Internally used to convert struct into a bitcoin::Script type
+    fn taproot_spendinfo(&self) -> Result<TaprootSpendInfo, Error> {
+        let secp = Secp256k1::new();
+
+        // Setup Key Aggregation cache
+        // let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
+
+        let mut key_agg_cache = self.musig_keyagg_cache();
+
+        // Construct the Taproot
+        let internal_key = key_agg_cache.agg_pk();
+
+        let taproot_builder = TaprootBuilder::new();
+
+        let taproot_builder =
+            taproot_builder.add_leaf_with_ver(1, self.claim_script(), LeafVersion::TapScript)?;
+        let taproot_builder =
+            taproot_builder.add_leaf_with_ver(1, self.refund_script(), LeafVersion::TapScript)?;
+
+        let taproot_spend_info = match taproot_builder.finalize(&secp, internal_key) {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(Error::Taproot(
+                    "Could not finalize taproot constructions".to_string(),
+                ))
+            }
+        };
+
+        // Verify taproot construction, only if we have funding address previously known.
+        // Which will be None only for regtest integration tests, so verification will be skipped for them.
+        if let Some(funding_address) = &self.funding_addrs {
+            let claim_key = taproot_spend_info.output_key();
+
+            let lockup_spk = funding_address.script_pubkey();
+
+            let pubkey_instruction = lockup_spk
+                .instructions()
+                .last()
+                .expect("should contain value")
+                .expect("should not fail");
+
+            let lockup_xonly_pubkey_bytes = pubkey_instruction
+                .push_bytes()
+                .expect("pubkey bytes expected");
+
+            let lockup_xonly_pubkey =
+                XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes.as_bytes())?;
+
+            if lockup_xonly_pubkey != claim_key.to_inner() {
+                return Err(Error::Protocol(format!(
+                    "Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {}",
+                    lockup_xonly_pubkey, claim_key
+                )));
+            }
+
+            log::info!("Taproot creation and verification success!");
+        }
+
+        Ok(taproot_spend_info)
+    }
+
+    /// Get taproot address for the swap script.
     pub fn to_address(&self, network: Chain) -> Result<Address, Error> {
-        let script = self.to_script()?;
+        let spend_info = self.taproot_spendinfo()?;
+        let output_key = spend_info.output_key();
+
         let mut network = match network {
             Chain::Bitcoin => Network::Bitcoin,
             Chain::BitcoinRegtest => Network::Regtest,
@@ -249,15 +379,19 @@ impl BtcSwapScript {
                 ))
             }
         };
-        match self.swap_type {
-            SwapType::Submarine => Ok(Address::p2shwsh(&script, network)),
-            SwapType::ReverseSubmarine => Ok(Address::p2wsh(&script, network)),
-            SwapType::Chain => Err(Error::Protocol(format!(
-                "Invalid SwapType: {:?}",
-                self.swap_type
-            ))),
+
+        Ok(Address::p2tr_tweaked(output_key, network))
+    }
+
+    pub fn validate_address(&self, chain: Chain, address: String) -> Result<(), Error> {
+        let to_address = self.to_address(chain)?;
+        if to_address.to_string() == address {
+            Ok(())
+        } else {
+            Err(Error::Protocol("Script/LockupAddress Mismatch".to_string()))
         }
     }
+
     /// Get the balance of the script
     pub fn get_balance(&self, network_config: &ElectrumConfig) -> Result<(u64, i64), Error> {
         let electrum_client = network_config.build_client()?;
@@ -271,7 +405,7 @@ impl BtcSwapScript {
     pub fn fetch_utxo(
         &self,
         network_config: &ElectrumConfig,
-    ) -> Result<Option<(OutPoint, u64)>, Error> {
+    ) -> Result<Option<(OutPoint, TxOut)>, Error> {
         let electrum_client = network_config.build_client()?;
         let spk = self.to_address(network_config.network())?.script_pubkey();
         let utxos = electrum_client.script_list_unspent(spk.as_script())?;
@@ -280,12 +414,12 @@ impl BtcSwapScript {
             // No utxo found. Return None.
             return Ok(None);
         } else {
-            let txid = Txid::from_str(&utxos[0].tx_hash.to_string())?;
-
-            let outpoint_0 = OutPoint::new(txid, utxos[0].tx_pos as u32);
-            let utxo_value = utxos[0].value;
-
-            Ok(Some((outpoint_0, utxo_value)))
+            let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
+            let txout = TxOut {
+                script_pubkey: spk,
+                value: Amount::from_sat(utxos[0].value),
+            };
+            Ok(Some((outpoint_0, txout)))
         }
     }
 }
@@ -300,24 +434,26 @@ pub fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 
 /// A structure representing either a Claim or a Refund Tx.
 /// This Tx spends from the HTLC.
+#[derive(Debug, Clone)]
 pub struct BtcSwapTx {
     pub kind: SwapTxKind, // These fields needs to be public to do manual creation in IT.
     pub swap_script: BtcSwapScript,
     pub output_address: Address,
     // The HTLC utxo in (Outpoint, Amount) Pair
-    pub utxo: (OutPoint, u64),
+    pub utxo: (OutPoint, TxOut),
 }
+
 impl BtcSwapTx {
-    /// Craft a new ClaimTx. Only works for Reverse Swaps.
+    /// Craft a new ClaimTx. Only works for Reverse and Chain Swaps.
     /// Returns None, if the HTLC utxo doesn't exist for the swap.
     pub fn new_claim(
         swap_script: BtcSwapScript,
-        output_address: String,
+        claim_address: String,
         network_config: &ElectrumConfig,
     ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::Submarine {
             return Err(Error::Protocol(
-                "Claim transactions can only be constructed for Reverse swaps.".to_string(),
+                "Claim transactions cannot be constructed for Submarine swaps.".to_string(),
             ));
         }
 
@@ -326,7 +462,7 @@ impl BtcSwapTx {
         } else {
             Network::Testnet
         };
-        let address = Address::from_str(&output_address)?;
+        let address = Address::from_str(&claim_address)?;
 
         address.is_valid_for_network(network);
 
@@ -344,16 +480,17 @@ impl BtcSwapTx {
             ))
         }
     }
-    /// Construct a RefundTX corresponding to the swap_script. Only works for Normal Swaps.
+
+    /// Construct a RefundTX corresponding to the swap_script. Only works for Submarine and Chain Swaps.
     /// Returns None, if the HTLC UTXO for the swap doesn't exist in blockhcian.
     pub fn new_refund(
         swap_script: BtcSwapScript,
-        output_address: String,
+        refund_address: &String,
         network_config: &ElectrumConfig,
     ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(Error::Protocol(
-                "Refund Txs can only be constructed for Submarine Swaps.".to_string(),
+                "Refund Txs cannot be constructed for Reverse Submarine Swaps.".to_string(),
             ));
         }
 
@@ -363,8 +500,10 @@ impl BtcSwapTx {
             Network::Testnet
         };
 
-        let address = Address::from_str(&output_address)?;
-        address.is_valid_for_network(network);
+        let address = Address::from_str(&refund_address)?;
+        if !address.is_valid_for_network(network) {
+            return Err(Error::Address("Address validation failed".to_string()));
+        };
 
         let utxo_info = swap_script.fetch_utxo(network_config)?;
         if let Some(utxo) = utxo_info {
@@ -380,25 +519,77 @@ impl BtcSwapTx {
             ))
         }
     }
-    /// Fetch utxo for the script
 
-    /// Sign a reverse swap claim transaction.
-    /// Panics if called on a Normal Swap or Refund Tx.
+    /// Compute the Musig partial signature.
+    /// This is used to cooperatively settle a Submarine or Chain Swap.
+    pub fn partial_sign(
+        &self,
+        keys: &Keypair,
+        pub_nonce: &String,
+        transaction_hash: &String,
+    ) -> Result<(MusigPartialSignature, MusigPubNonce), Error> {
+        // Step 1: Start with a Musig KeyAgg Cache
+        let secp = Secp256k1::new();
+
+        let pubkeys = [
+            self.swap_script.receiver_pubkey.inner,
+            self.swap_script.sender_pubkey.inner,
+        ];
+
+        let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
+
+        let tweak = SecretKey::from_slice(
+            self.swap_script
+                .taproot_spendinfo()?
+                .tap_tweak()
+                .as_byte_array(),
+        )?;
+
+        let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+
+        let session_id = MusigSessionId::new(&mut thread_rng());
+
+        let msg = Message::from_digest_slice(&Vec::from_hex(transaction_hash)?)?;
+
+        // Step 4: Start the Musig2 Signing session
+        let mut extra_rand = [0u8; 32];
+        OsRng.fill_bytes(&mut extra_rand);
+
+        let (gen_sec_nonce, gen_pub_nonce) =
+            key_agg_cache.nonce_gen(&secp, session_id, keys.public_key(), msg, Some(extra_rand))?;
+
+        let boltz_nonce = MusigPubNonce::from_slice(&Vec::from_hex(pub_nonce)?)?;
+
+        let agg_nonce = MusigAggNonce::new(&secp, &[boltz_nonce, gen_pub_nonce]);
+
+        let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+
+        let partial_sig =
+            musig_session.partial_sign(&secp, gen_sec_nonce, &keys, &key_agg_cache)?;
+
+        Ok((partial_sig, gen_pub_nonce))
+    }
+
+    /// Sign a claim transaction.
+    /// Errors if called on a Submarine Swap or Refund Tx.
+    /// If the claim is cooperative, provide the other party's partial sigs.
+    /// If this is None, transaction will be claimed via taproot script path.
     pub fn sign_claim(
         &self,
         keys: &Keypair,
         preimage: &Preimage,
         absolute_fees: u64,
+        is_cooperative: Option<Cooperative>,
     ) -> Result<Transaction, Error> {
         if self.swap_script.swap_type == SwapType::Submarine {
             return Err(Error::Protocol(
-                "Claim Tx signing is only applicable for Reverse Swap Type".to_string(),
+                "Claim Tx signing is not applicable for Submarine Swaps".to_string(),
             ));
         }
 
         if self.kind == SwapTxKind::Refund {
             return Err(Error::Protocol(
-                "Cannot sign claim with Refund type BTCSwapTx".to_string(),
+                "Cannot sign claim with refund-type BtcSwapTx".to_string(),
             ));
         }
 
@@ -410,60 +601,200 @@ impl BtcSwapTx {
             )));
         };
 
-        let unsigned_input: TxIn = TxIn {
-            sequence: Sequence::MAX,
+        let txin = TxIn {
             previous_output: self.utxo.0,
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
         };
-        let output_amount: Amount = Amount::from_sat(self.utxo.1 - absolute_fees);
-        let output: TxOut = TxOut {
-            script_pubkey: self.output_address.payload().script_pubkey(),
-            value: output_amount,
-        };
-        let mut unsigned_tx = Transaction {
-            version: Version(1),
-            lock_time: self.swap_script.locktime,
-            input: vec![unsigned_input],
-            output: vec![output.clone()],
+
+        let destination_spk = self.output_address.script_pubkey();
+
+        let txout = TxOut {
+            script_pubkey: destination_spk,
+            value: Amount::from_sat(self.utxo.1.value.to_sat() - absolute_fees),
         };
 
-        // Compute the signature
-        let witness_script = self.swap_script.to_script()?;
+        let mut claim_tx = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![txin],
+            output: vec![txout],
+        };
+
         let secp = Secp256k1::new();
-        let hash_type = bitcoin::sighash::EcdsaSighashType::All;
-        let sighash = SighashCache::new(&unsigned_tx).p2wsh_signature_hash(
-            0,
-            &witness_script,
-            Amount::from_sat(self.utxo.1),
-            hash_type,
-        )?;
-        let sighash_message = Message::from_digest(sighash.to_byte_array());
-        let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
-        signature.verify(&sighash_message, &keys.public_key())?;
-        let ecdsa_signature = Signature::sighash_all(signature);
 
-        // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
-        let mut witness = Witness::new();
-        witness.push_ecdsa_signature(&ecdsa_signature);
-        witness.push(preimage_bytes);
-        witness.push(witness_script.as_bytes());
+        // If its a cooperative claim, compute the Musig2 Aggregate Signature and use Keypath spending
+        if let Some(Cooperative {
+            boltz_api,
+            swap_id,
+            pub_nonce,
+            partial_sig,
+        }) = is_cooperative
+        {
+            // Start the Musig session
+            // Step 1: Get the sighash
+            let claim_tx_taproot_hash = SighashCache::new(claim_tx.clone())
+                .taproot_key_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[&self.utxo.1]),
+                    bitcoin::TapSighashType::Default,
+                )?;
 
-        unsigned_tx
-            .input
-            .get_mut(0)
-            .expect("input expected")
-            .witness = witness;
+            let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
 
-        Ok(unsigned_tx)
+            // Step 2: Get the Public and Secret nonces
+            let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
+
+            let tweak = SecretKey::from_slice(
+                self.swap_script
+                    .taproot_spendinfo()?
+                    .tap_tweak()
+                    .as_byte_array(),
+            )?;
+
+            let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+
+            let session_id = MusigSessionId::new(&mut thread_rng());
+
+            let mut extra_rand = [0u8; 32];
+            OsRng.fill_bytes(&mut extra_rand);
+
+            let (claim_sec_nonce, claim_pub_nonce) = key_agg_cache.nonce_gen(
+                &secp,
+                session_id,
+                keys.public_key(),
+                msg,
+                Some(extra_rand),
+            )?;
+
+            // Step 7: Get boltz's partial sig
+            let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
+            let partial_sig_resp = match self.swap_script.swap_type {
+                SwapType::Chain => match (pub_nonce, partial_sig) {
+                    (Some(pub_nonce), Some(partial_sig)) => boltz_api.post_chain_claim_tx_details(
+                        &swap_id,
+                        preimage,
+                        pub_nonce,
+                        partial_sig,
+                        ToSign {
+                            pub_nonce: claim_pub_nonce.serialize().to_lower_hex_string(),
+                            transaction: claim_tx_hex,
+                            index: 0,
+                        },
+                    ),
+                    _ => Err(Error::Protocol(
+                        "Chain swap claim needs a partial_sig".to_string(),
+                    )),
+                },
+                SwapType::ReverseSubmarine => boltz_api.get_reverse_partial_sig(
+                    &swap_id,
+                    &preimage,
+                    &claim_pub_nonce,
+                    &claim_tx_hex,
+                ),
+                _ => Err(Error::Protocol(format!(
+                    "Cannot get partial sig for {:?} Swap",
+                    self.swap_script.swap_type
+                ))),
+            }?;
+
+            let boltz_public_nonce =
+                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
+
+            let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+                &partial_sig_resp.partial_signature,
+            )?)?;
+
+            // Aggregate Our's and Other's Nonce and start the Musig session.
+            let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, claim_pub_nonce]);
+
+            let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+
+            // Verify the Boltz's sig.
+            let boltz_partial_sig_verify = musig_session.partial_verify(
+                &secp,
+                &key_agg_cache,
+                boltz_partial_sig,
+                boltz_public_nonce,
+                self.swap_script.sender_pubkey.inner,
+            );
+
+            if !boltz_partial_sig_verify {
+                return Err(Error::Protocol(
+                    "Invalid partial-sig received from Boltz".to_string(),
+                ));
+            }
+
+            let our_partial_sig =
+                musig_session.partial_sign(&secp, claim_sec_nonce, &keys, &key_agg_cache)?;
+
+            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
+
+            let final_schnorr_sig = Signature {
+                sig: schnorr_sig,
+                hash_ty: TapSighashType::Default,
+            };
+
+            let output_key = self.swap_script.taproot_spendinfo()?.output_key();
+
+            let _ = secp.verify_schnorr(&final_schnorr_sig.sig, &msg, &output_key.to_inner())?;
+
+            let mut witness = Witness::new();
+            witness.push(final_schnorr_sig.to_vec());
+
+            claim_tx.input[0].witness = witness;
+        } else {
+            // If Non-Cooperative claim use the Script Path spending
+            let leaf_hash =
+                TapLeafHash::from_script(&self.swap_script.claim_script(), LeafVersion::TapScript);
+
+            let sighash = SighashCache::new(claim_tx.clone()).taproot_script_spend_signature_hash(
+                0,
+                &Prevouts::All(&[&self.utxo.1]),
+                leaf_hash,
+                TapSighashType::Default,
+            )?;
+
+            let msg = Message::from_digest_slice(sighash.as_byte_array())?;
+
+            let sig = secp.sign_schnorr(&msg, &keys);
+
+            let final_sig = Signature {
+                sig,
+                hash_ty: TapSighashType::Default,
+            };
+
+            let control_block = self
+                .swap_script
+                .taproot_spendinfo()?
+                .control_block(&(self.swap_script.claim_script(), LeafVersion::TapScript))
+                .expect("Control block calculation failed");
+
+            let mut witness = Witness::new();
+
+            witness.push(final_sig.to_vec());
+            witness.push(&preimage.bytes.unwrap());
+            witness.push(self.swap_script.claim_script().as_bytes());
+            witness.push(control_block.serialize());
+
+            claim_tx.input[0].witness = witness;
+        }
+
+        Ok(claim_tx)
     }
 
-    /// Sign a submarine swap refund transaction.
-    /// Panics if called on Reverse Swap, Claim type.
-    pub fn sign_refund(&self, keys: &Keypair, absolute_fees: u64) -> Result<Transaction, Error> {
+    /// Sign a refund transaction.
+    /// Errors if called for a Reverse Swap.
+    pub fn sign_refund(
+        &self,
+        keys: &Keypair,
+        absolute_fees: u64,
+        is_cooperative: Option<Cooperative>,
+    ) -> Result<Transaction, Error> {
         if self.swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(Error::Protocol(
-                "Cannot sign refund tx, for a reverse-swap".to_string(),
+                "Refund Tx signing is not applicable for Reverse Submarine Swaps".to_string(),
             ));
         }
 
@@ -473,73 +804,207 @@ impl BtcSwapTx {
             ));
         }
 
-        let unsigned_input: TxIn = TxIn {
-            sequence: Sequence::ZERO, // enables absolute locktime
-            previous_output: self.utxo.0,
-            script_sig: ScriptBuf::new(),
-            witness: Witness::new(),
-        };
-        let output_amount: Amount = Amount::from_sat(self.utxo.1 - absolute_fees);
+        // let unsigned_input: TxIn = TxIn {
+        //     sequence: Sequence::ZERO, // enables absolute locktime
+        //     previous_output: self.utxo.0,
+        //     script_sig: ScriptBuf::new(),
+        //     witness: Witness::new(),
+        // };
+        let output_amount: Amount = Amount::from_sat(self.utxo.1.value.to_sat() - absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
             value: output_amount,
         };
-        let mut unsigned_tx = Transaction {
-            version: Version(2),
-            lock_time: self.swap_script.locktime,
-            input: vec![unsigned_input],
+
+        let input = TxIn {
+            previous_output: self.utxo.0,
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        };
+
+        let lock_time = match self
+            .swap_script
+            .refund_script()
+            .instructions()
+            .filter_map(|i| {
+                let ins = i.unwrap();
+                if let Instruction::PushBytes(bytes) = ins {
+                    if bytes.len() < 5 as usize {
+                        Some(LockTime::from_consensus(bytes_to_u32_little_endian(
+                            &bytes.as_bytes(),
+                        )))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .next()
+        {
+            Some(r) => r,
+            None => {
+                return Err(Error::Protocol(
+                    "Error getting timelock from refund script".to_string(),
+                ))
+            }
+        };
+
+        let mut refund_tx = Transaction {
+            version: Version::TWO,
+            lock_time,
+            input: vec![input],
             output: vec![output],
         };
 
-        // The whole witness script of the swap tx.
-        let witness_script = self.swap_script.to_script()?;
-
-        // a p2wsh script pubkey, from the witness_script to set the script_sig field
-        let redeem_script = witness_script.to_p2wsh();
-        let mut script_sig = ScriptBuf::new();
-        let mut push_bytes = PushBytesBuf::new();
-        push_bytes.extend_from_slice(redeem_script.as_bytes());
-        script_sig.push_slice(push_bytes);
-
-        // The script pubkey of the previous output for sighash calculation
-        let script_pubkey = self
-            .swap_script
-            .to_address(Chain::BitcoinTestnet)
-            .unwrap()
-            .script_pubkey();
-
-        // Create signature
         let secp = Secp256k1::new();
-        let sighash = SighashCache::new(&unsigned_tx).p2wsh_signature_hash(
-            0,
-            &witness_script,
-            Amount::from_sat(self.utxo.1),
-            EcdsaSighashType::All,
-        )?;
-        let sighash_message = Message::from_digest(sighash.to_byte_array());
-        let signature = secp.sign_ecdsa(&sighash_message, &keys.secret_key());
-        let ecdsa_signature = Signature::sighash_all(signature);
 
-        // Assemble the witness data
-        // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
-        let mut witness = Witness::new();
-        witness.push_ecdsa_signature(&ecdsa_signature);
-        witness.push(Vec::new()); // empty push to activate the timelock branch of the script
-        witness.push(witness_script);
+        if let Some(Cooperative {
+            boltz_api, swap_id, ..
+        }) = is_cooperative
+        {
+            // Start the Musig session
+            refund_tx.lock_time = LockTime::ZERO; // No locktime for cooperative spend
 
-        // set scriptsig and witness field
-        unsigned_tx
-            .input
-            .get_mut(0)
-            .expect("input expected")
-            .script_sig = script_sig;
-        unsigned_tx
-            .input
-            .get_mut(0)
-            .expect("input expected")
-            .witness = witness;
+            // Step 1: Get the sighash
+            let refund_tx_taproot_hash = SighashCache::new(refund_tx.clone())
+                .taproot_key_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[&self.utxo.1]),
+                    bitcoin::TapSighashType::Default,
+                )?;
 
-        Ok(unsigned_tx)
+            let msg = Message::from_digest_slice(refund_tx_taproot_hash.as_byte_array())?;
+
+            // Step 2: Get the Public and Secret nonces
+
+            let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
+
+            let tweak = SecretKey::from_slice(
+                self.swap_script
+                    .taproot_spendinfo()?
+                    .tap_tweak()
+                    .as_byte_array(),
+            )?;
+
+            let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+
+            let session_id = MusigSessionId::new(&mut thread_rng());
+
+            let mut extra_rand = [0u8; 32];
+            OsRng.fill_bytes(&mut extra_rand);
+
+            let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
+                &secp,
+                session_id,
+                keys.public_key(),
+                msg,
+                Some(extra_rand),
+            )?;
+
+            // Step 7: Get boltz's partial sig
+            let refund_tx_hex = serialize(&refund_tx).to_lower_hex_string();
+            let partial_sig_resp = match self.swap_script.swap_type {
+                SwapType::Chain => {
+                    boltz_api.get_chain_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)
+                }
+                SwapType::Submarine => {
+                    boltz_api.get_submarine_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)
+                }
+                _ => Err(Error::Protocol(format!(
+                    "Cannot get partial sig for {:?} Swap",
+                    self.swap_script.swap_type
+                ))),
+            }?;
+
+            let boltz_public_nonce =
+                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
+
+            let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+                &partial_sig_resp.partial_signature,
+            )?)?;
+
+            // Aggregate Our's and Other's Nonce and start the Musig session.
+            let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
+
+            let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+
+            // Verify the Boltz's sig.
+            let boltz_partial_sig_verify = musig_session.partial_verify(
+                &secp,
+                &key_agg_cache,
+                boltz_partial_sig,
+                boltz_public_nonce,
+                self.swap_script.receiver_pubkey.inner, //boltz key
+            );
+
+            if !boltz_partial_sig_verify {
+                return Err(Error::Protocol(
+                    "Invalid partial-sig received from Boltz".to_string(),
+                ));
+            }
+
+            let our_partial_sig =
+                musig_session.partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)?;
+
+            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
+
+            let final_schnorr_sig = Signature {
+                sig: schnorr_sig,
+                hash_ty: TapSighashType::Default,
+            };
+
+            let output_key = self.swap_script.taproot_spendinfo()?.output_key();
+
+            let _ = secp.verify_schnorr(&final_schnorr_sig.sig, &msg, &output_key.to_inner())?;
+
+            let mut witness = Witness::new();
+            witness.push(final_schnorr_sig.to_vec());
+
+            refund_tx.input[0].witness = witness;
+        } else {
+            refund_tx.input[0].sequence = Sequence::ZERO;
+
+            let leaf_hash =
+                TapLeafHash::from_script(&self.swap_script.refund_script(), LeafVersion::TapScript);
+
+            let sighash = SighashCache::new(refund_tx.clone())
+                .taproot_script_spend_signature_hash(
+                    0,
+                    &Prevouts::All(&[&self.utxo.1]),
+                    leaf_hash,
+                    TapSighashType::Default,
+                )?;
+
+            let msg = Message::from_digest_slice(sighash.as_byte_array())?;
+
+            let sig = Secp256k1::new().sign_schnorr(&msg, &keys);
+
+            let final_sig = Signature {
+                sig,
+                hash_ty: TapSighashType::Default,
+            };
+
+            let control_block = self
+                .swap_script
+                .taproot_spendinfo()?
+                .control_block(&(
+                    self.swap_script.refund_script().clone(),
+                    LeafVersion::TapScript,
+                ))
+                .expect("Control block calculation failed");
+
+            let mut witness = Witness::new();
+
+            witness.push(final_sig.to_vec());
+            witness.push(self.swap_script.refund_script().as_bytes());
+            witness.push(control_block.serialize());
+
+            refund_tx.input[0].witness = witness;
+        }
+
+        Ok(refund_tx)
     }
 
     /// Calculate the size of a transaction.
@@ -547,172 +1012,22 @@ impl BtcSwapTx {
     /// Multiply the size by the fee_rate to get the absolute fees.
     pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, Error> {
         let dummy_abs_fee = 5_000;
+        // Can only calculate non-coperative claims
         let tx = match self.kind {
-            _ => self.sign_claim(keys, preimage, dummy_abs_fee)?,
+            SwapTxKind::Claim => self.sign_claim(keys, preimage, dummy_abs_fee, None)?,
+            SwapTxKind::Refund => self.sign_refund(keys, dummy_abs_fee, None)?,
         };
         Ok(tx.vsize())
     }
-    /// Broadcast transaction to the network
+
+    /// Broadcast transaction to the network.
     pub fn broadcast(
         &self,
-        signed_tx: Transaction,
+        signed_tx: &Transaction,
         network_config: &ElectrumConfig,
     ) -> Result<Txid, Error> {
         Ok(network_config
             .build_client()?
-            .transaction_broadcast(&signed_tx)?)
+            .transaction_broadcast(signed_tx)?)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::network::electrum::ElectrumConfig;
-    use bitcoin::opcodes::all::{OP_EQUAL, OP_HASH160};
-    use bitcoin::script::Builder;
-    use bitcoin::secp256k1::hashes::{hash160, Hash};
-    use bitcoin::{
-        absolute::LockTime, Address, Network, OutPoint, Sequence, Transaction, TxIn, TxOut, Witness,
-    };
-    use electrum_client::ElectrumApi;
-    use std::io;
-    use std::io::Write;
-    use std::str::FromStr;
-    pub fn pause_and_wait(msg: &str) {
-        let stdin = io::stdin();
-        let mut stdout = io::stdout();
-        write!(stdout, "\n").unwrap();
-        write!(stdout, "******{msg}******").unwrap();
-        write!(stdout, "\n").unwrap();
-        write!(stdout, "Press Enter to continue...").unwrap();
-        stdout.flush().unwrap();
-        let _ = stdin.read_line(&mut String::new()).unwrap();
-    }
-
-    #[test]
-    #[ignore]
-    fn test_transaction() {
-        let preimage = "a45380303a1b87ec9d0de25f5eba4f6bfbf79b0396e15b72df4914fdb1124634";
-        let preimage_bytes = Vec::from_hex(preimage).unwrap();
-        let preimage_hash = hash160::Hash::hash(&preimage_bytes);
-        let hashbytes: [u8; 20] = *preimage_hash.as_ref();
-
-        let script = Builder::new()
-            .push_opcode(OP_HASH160)
-            .push_slice(hashbytes)
-            .push_opcode(OP_EQUAL)
-            .into_script();
-
-        let address = Address::p2wsh(&script, Network::Testnet);
-        println!("PAY THIS ADDRESS: {}", address);
-        pause_and_wait("Pay the address and then continue!");
-
-        let electrum_client = ElectrumConfig::default_bitcoin().build_client().unwrap();
-
-        let utxos = electrum_client
-            .script_list_unspent(electrum_client::bitcoin::Script::from_bytes(
-                &script.to_p2wsh().as_bytes(),
-            ))
-            .unwrap();
-        let outpoint_0 = OutPoint::new(
-            bitcoin::Txid::from_str(&utxos[0].tx_hash.to_string()).unwrap(),
-            utxos[0].tx_pos as u32,
-        );
-        let utxo_value = utxos[0].value;
-
-        assert_eq!(utxo_value, 1_000);
-        println!("{:?}", utxos[0]);
-
-        let mut witness = Witness::new();
-
-        // witness.push(OP_0);
-        witness.push(preimage_bytes);
-        witness.push(script.to_bytes());
-        // println!("{:?}",script.to_v0_p2wsh());
-        let input: TxIn = TxIn {
-            previous_output: outpoint_0,
-            script_sig: ScriptBuf::new(),
-            sequence: Sequence::from_consensus(0xFFFFFFFF),
-            witness: witness,
-        };
-        const RETURN_ADDRESS: &str = "tb1qw2c3lxufxqe2x9s4rdzh65tpf4d7fssjgh8nv6";
-        let return_address = Address::from_str(RETURN_ADDRESS).unwrap();
-        let output_value = 700;
-
-        let output: TxOut = TxOut {
-            script_pubkey: return_address.payload().script_pubkey(),
-            value: Amount::from_sat(output_value),
-        };
-
-        let tx = Transaction {
-            version: Version(1),
-            lock_time: LockTime::from_consensus(0),
-            input: vec![input],
-            output: vec![output.clone()],
-        };
-
-        let txid = electrum_client.transaction_broadcast(&tx).unwrap();
-        println!("{}", txid);
-
-        // let mut utxo_map = HashMap::new();
-        // utxo_map.insert(outpoint_0, output);
-
-        // let verify_result = tx.verify(|outpoint| {
-        //     utxo_map.get(outpoint).cloned()
-        // });
-
-        // match verify_result {
-        //     Ok(_) => println!("Transaction verified successfully!"),
-        //     Err(e) =>{
-        //         println!("Verification failed: {:?}", e.to_string())
-        //     }
-        // }
-        // assert!(verify_result.is_ok());
-        // let unsigned_tx = Transaction{
-        //     version : 1,
-        //     lock_time: LockTime::from_consensus(script_elements.timelock),
-        //     input: vec![unsigned_input],
-        //     output: vec![output.clone()],
-        // };
-    }
-
-    #[test]
-    fn test_decode_encode_swap_redeem_script() {
-        let secp = Secp256k1::new();
-        let redeem_script = "a91461be1fecdb989e10275a19f893836066230ab208876321039f3dece2229c2e957e43df168bd078bcdad7e66d1690a27c8b0277d7832ced216703e0c926b17521023946267e8f3eeeea651b0ea865b52d1f9d1c12e851b0f98a3303c15a26cf235d68ac";
-        let expected_address = "2MxkD9NtLhU4iRAUw8G6B83SiHxDESGfDac";
-        let expected_timeout = LockTime::from_consensus(2542048);
-        let sender_key_pair = Keypair::from_seckey_str(
-            &secp,
-            "d5f984d2ab332345dbf7ddff9f47852125721b2025329e6981c4130671e237d0",
-        )
-        .unwrap();
-        let decoded = BtcSwapScript::submarine_from_str(&redeem_script).unwrap();
-        println!("{:?}", decoded);
-        assert!(decoded.sender_pubkey.inner == sender_key_pair.public_key());
-        assert!(decoded.locktime == expected_timeout);
-
-        let encoded = BtcSwapScript {
-            swap_type: SwapType::Submarine,
-            hashlock: decoded.hashlock,
-            receiver_pubkey: decoded.receiver_pubkey,
-            sender_pubkey: decoded.sender_pubkey,
-            locktime: decoded.locktime,
-        }
-        .to_script()
-        .unwrap();
-        let script_hash = encoded.script_hash();
-        let sh_str = script_hash.as_byte_array().to_lower_hex_string();
-        println!("ENCODED SCRIPT HASH: {}", sh_str);
-        println!("ENCODED HEX: {}", encoded.to_hex_string());
-        let address = Address::p2shwsh(&encoded, bitcoin::Network::Testnet);
-        println!("ADDRESS FROM ENCODED: {:?}", address.to_string());
-        assert!(address.to_string() == expected_address);
-    }
-}
-
-/*
-
-lightning-cli --lightning-dir=/.lightning
-
-*/
