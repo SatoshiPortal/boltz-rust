@@ -524,7 +524,7 @@ impl BtcSwapTxV2 {
     }
 
     /// Compute the Musig partial signature.
-    /// This is used to cooperatively close a Submarine or Chain Swap.
+    /// This is used to cooperatively settle a Submarine or Chain Swap.
     pub fn partial_sig(
         &self,
         keys: &Keypair,
