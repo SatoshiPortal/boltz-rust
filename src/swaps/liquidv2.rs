@@ -575,7 +575,7 @@ impl LBtcSwapTxV2 {
 
     /// Compute the Musig partial signature.
     /// This is used to cooperatively close a Submarine or Chain Swap.
-    pub fn partial_sig(
+    pub fn partial_sign(
         &self,
         keys: &Keypair,
         pub_nonce: &String,
