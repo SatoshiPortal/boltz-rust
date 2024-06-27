@@ -788,7 +788,7 @@ impl BtcSwapTxV2 {
     }
 
     /// Sign a refund transaction.
-    /// Panics if called on a Reverse Swap or Claim Tx.
+    /// Errors if called for a Reverse Swap.
     pub fn sign_refund(
         &self,
         keys: &Keypair,
