@@ -127,7 +127,7 @@ impl BtcSwapScriptV2 {
 
     pub fn musig_keyagg_cache(&self) -> MusigKeyAggCache {
         match (self.swap_type, self.side.clone()) {
-            (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::To)) => {
+            (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::Claim)) => {
                 let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
                 MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
             }
@@ -257,8 +257,8 @@ impl BtcSwapScriptV2 {
         let funding_addrs = Address::from_str(&chain_swap_details.lockup_address)?.assume_checked();
 
         let (sender_pubkey, receiver_pubkey) = match side {
-            Side::From => (our_pubkey, chain_swap_details.server_public_key),
-            Side::To => (chain_swap_details.server_public_key, our_pubkey),
+            Side::Lockup => (our_pubkey, chain_swap_details.server_public_key),
+            Side::Claim => (chain_swap_details.server_public_key, our_pubkey),
         };
 
         Ok(BtcSwapScriptV2 {

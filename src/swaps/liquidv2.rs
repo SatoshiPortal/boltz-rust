@@ -255,8 +255,8 @@ impl LBtcSwapScriptV2 {
         let funding_addrs = Address::from_str(&chain_swap_details.lockup_address)?;
 
         let (sender_pubkey, receiver_pubkey) = match side {
-            Side::From => (our_pubkey, chain_swap_details.server_public_key),
-            Side::To => (chain_swap_details.server_public_key, our_pubkey),
+            Side::Lockup => (our_pubkey, chain_swap_details.server_public_key),
+            Side::Claim => (chain_swap_details.server_public_key, our_pubkey),
         };
 
         let blinding_str = chain_swap_details
@@ -312,7 +312,7 @@ impl LBtcSwapScriptV2 {
 
     pub fn musig_keyagg_cache(&self) -> MusigKeyAggCache {
         match (self.swap_type, self.side.clone()) {
-            (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::To)) => {
+            (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::Claim)) => {
                 let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
                 MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
             }
@@ -438,7 +438,7 @@ impl LBtcSwapScriptV2 {
     }
 
     /// Fetch utxo for script from BoltzApi
-    pub fn fetch_utxo_boltz(
+    pub fn fetch_lockup_utxo_boltz(
         &self,
         network_config: &ElectrumConfig,
         boltz_url: &str,
@@ -524,7 +524,7 @@ impl LBtcSwapTxV2 {
 
         let (funding_outpoint, funding_utxo) = match swap_script.fetch_utxo(&network_config) {
             Ok(r) => r,
-            Err(_) => swap_script.fetch_utxo_boltz(&network_config, &boltz_url, &swap_id)?,
+            Err(_) => swap_script.fetch_lockup_utxo_boltz(&network_config, &boltz_url, &swap_id)?,
         };
 
         let electrum = network_config.build_client()?;
@@ -557,7 +557,7 @@ impl LBtcSwapTxV2 {
         let address = Address::from_str(&output_address)?;
         let (funding_outpoint, funding_utxo) = match swap_script.fetch_utxo(&network_config) {
             Ok(r) => r,
-            Err(_) => swap_script.fetch_utxo_boltz(&network_config, &boltz_url, &swap_id)?,
+            Err(_) => swap_script.fetch_lockup_utxo_boltz(&network_config, &boltz_url, &swap_id)?,
         };
 
         let electrum = network_config.build_client()?;

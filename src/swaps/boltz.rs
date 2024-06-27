@@ -472,7 +472,6 @@ pub enum ChainSwapStates {
     TransactionServerMempool,
     TransactionServerConfirmed,
     TransactionClaimed,
-    TransactionClaimPending,
     TransactionLockupFailed,
     SwapExpired,
     TransactionFailed,
@@ -493,7 +492,6 @@ impl ToString for ChainSwapStates {
                 "transaction.server.confirmed".to_string()
             }
             ChainSwapStates::TransactionClaimed => "transaction.claimed".to_string(),
-            ChainSwapStates::TransactionClaimPending => "transaction.claim.pending".to_string(),
             ChainSwapStates::TransactionLockupFailed => "transaction.lockupFailed".to_string(),
             ChainSwapStates::SwapExpired => "swap.expired".to_string(),
             ChainSwapStates::TransactionFailed => "transaction.failed".to_string(),
@@ -514,7 +512,6 @@ impl FromStr for ChainSwapStates {
             "transaction.server.mempool" => Ok(ChainSwapStates::TransactionServerMempool),
             "transaction.server.confirmed" => Ok(ChainSwapStates::TransactionServerConfirmed),
             "transaction.claimed" => Ok(ChainSwapStates::TransactionClaimed),
-            "transaction.claim.pending" => Ok(ChainSwapStates::TransactionClaimPending),
             "transaction.lockupFailed" => Ok(ChainSwapStates::TransactionLockupFailed),
             "swap.expired" => Ok(ChainSwapStates::SwapExpired),
             "transaction.failed" => Ok(ChainSwapStates::TransactionFailed),
