@@ -262,7 +262,7 @@ impl LBtcSwapScriptV2 {
         let blinding_str = chain_swap_details
             .blinding_key
             .as_ref()
-            .expect("No blinding key provided in CreateSwapResp");
+            .expect("No blinding key provided in ChainSwapDetails");
         let blinding_key = ZKKeyPair::from_seckey_str(&Secp256k1::new(), blinding_str)?;
 
         Ok(Self {
