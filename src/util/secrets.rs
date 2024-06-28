@@ -20,6 +20,7 @@ use std::str::FromStr;
 
 const SUBMARINE_SWAP_ACCOUNT: u32 = 21;
 const REVERSE_SWAP_ACCOUNT: u32 = 42;
+const CHAIN_SWAP_ACCOUNT: u32 = 84;
 
 const BITCOIN_NETWORK_PATH: u32 = 0;
 const LIQUID_NETWORK_PATH: u32 = 1776;
@@ -72,7 +73,7 @@ impl SwapKey {
             keypair: key_pair,
         })
     }
-    /// Derives keys for a submarine swap at standardized path
+    /// Derives keys for a reverse swap at standardized path
     /// m/49'/<0;1777;1>/42'/0/*
     pub fn from_reverse_account(
         mnemonic: &str,
@@ -96,6 +97,41 @@ impl SwapKey {
         let derivation_path = format!(
             "m/{}h/{}h/{}h/0/{}",
             purpose, network_path, REVERSE_SWAP_ACCOUNT, index
+        );
+        let path = DerivationPath::from_str(&derivation_path)?;
+        let child_xprv = root.derive_priv(&secp, &path)?;
+
+        let key_pair = Keypair::from_secret_key(&secp, &child_xprv.private_key);
+
+        Ok(SwapKey {
+            fingerprint: fingerprint,
+            path: path,
+            keypair: key_pair,
+        })
+    }
+    /// Derives keys for a chain swap at standardized path
+    pub fn from_chain_account(
+        mnemonic: &str,
+        passphrase: &str,
+        network: Chain,
+        index: u64,
+    ) -> Result<SwapKey, Error> {
+        let secp = Secp256k1::new();
+        let mnemonic_struct = Mnemonic::from_str(&mnemonic)?;
+
+        let seed = mnemonic_struct.to_seed(passphrase);
+        let root = Xpriv::new_master(bitcoin::Network::Testnet, &seed)?;
+        let fingerprint = root.fingerprint(&secp);
+        let purpose = DerivationPurpose::Taproot;
+        let network_path = match network {
+            Chain::Bitcoin => BITCOIN_NETWORK_PATH,
+            Chain::Liquid => LIQUID_NETWORK_PATH,
+            _ => TESTNET_NETWORK_PATH,
+        };
+        // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
+        let derivation_path = format!(
+            "m/{}h/{}h/{}h/0/{}",
+            purpose, network_path, CHAIN_SWAP_ACCOUNT, index
         );
         let path = DerivationPath::from_str(&derivation_path)?;
         let child_xprv = root.derive_priv(&secp, &path)?;
@@ -136,18 +172,16 @@ impl TryFrom<SwapKey> for LiquidSwapKey {
     }
 }
 enum DerivationPurpose {
-    _Legacy,
     Compatible,
     Native,
-    _Taproot,
+    Taproot,
 }
 impl Display for DerivationPurpose {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            DerivationPurpose::_Legacy => write!(f, "44"),
             DerivationPurpose::Compatible => write!(f, "49"),
             DerivationPurpose::Native => write!(f, "84"),
-            DerivationPurpose::_Taproot => write!(f, "86"),
+            DerivationPurpose::Taproot => write!(f, "86"),
         }
     }
 }
