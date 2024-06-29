@@ -107,15 +107,15 @@ impl ReverseLimits {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PairMinerFees {
-    lockup: u64,
-    claim: u64,
+    pub lockup: u64,
+    pub claim: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainMinerFees {
-    server: u64,
-    user: PairMinerFees,
+    pub server: u64,
+    pub user: PairMinerFees,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
