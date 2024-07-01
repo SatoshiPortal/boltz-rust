@@ -594,6 +594,7 @@ pub struct CreateSubmarineRequest {
     pub to: String,
     pub invoice: String,
     pub refund_public_key: PublicKey,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pair_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
