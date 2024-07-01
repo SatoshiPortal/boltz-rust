@@ -608,7 +608,9 @@ pub struct CreateSubmarineResponse {
     pub claim_public_key: PublicKey,
     pub expected_amount: u64,
     pub id: String,
+    pub referral_id: Option<String>,
     pub swap_tree: SwapTree,
+    pub timeout_block_height: u64,
     pub blinding_key: Option<String>,
 }
 impl CreateSubmarineResponse {
