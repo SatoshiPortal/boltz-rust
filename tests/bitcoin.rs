@@ -262,6 +262,7 @@ fn bitcoin_v2_reverse() {
         from: "BTC".to_string(),
         to: "BTC".to_string(),
         preimage_hash: preimage.sha256,
+        description: None,
         address_signature: Some(addrs_sig.to_string()),
         address: Some(claim_address.clone()),
         claim_public_key,
