@@ -1,22 +1,23 @@
-use crate::error::Error;
-use crate::network::Chain;
-use crate::BtcSwapScript;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::secp256k1::{Keypair, Secp256k1};
-use bitcoin::ScriptBuf;
-use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
-
-use bitcoin::secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
-use lightning_invoice::Bolt11Invoice;
-
 use bitcoin::key::rand::{rngs::OsRng, RngCore};
-
+use bitcoin::secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
+use bitcoin::secp256k1::{Keypair, Secp256k1};
+use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
+use lightning_invoice::Bolt11Invoice;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::str::FromStr;
+use serde_json;
+
+use crate::error::Error;
+use crate::network::Chain;
 
 const SUBMARINE_SWAP_ACCOUNT: u32 = 21;
 const REVERSE_SWAP_ACCOUNT: u32 = 42;
@@ -194,7 +195,7 @@ fn rng_32b() -> [u8; 32] {
 }
 
 /// Helper to work with Preimage & Hashes required for swap scripts.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Preimage {
     pub bytes: Option<[u8; 32]>,
     pub sha256: sha256::Hash,
@@ -217,31 +218,42 @@ impl Preimage {
 
     /// Creates a struct from a preimage string.
     pub fn from_str(preimage: &str) -> Result<Preimage, Error> {
+        Self::from_vec(Vec::from_hex(preimage)?)
+    }
+
+    /// Creates a struct from a preimage vector.
+    pub fn from_vec(preimage: Vec<u8>) -> Result<Preimage, Error> {
         // Ensure the decoded bytes are exactly 32 bytes long
-        let preimage: [u8; 32] = Vec::from_hex(preimage)?
+        let preimage: [u8; 32] = preimage
             .try_into()
             .map_err(|_| Error::Protocol("Decoded Preimage input is not 32 bytes".to_string()))?;
         let sha256 = sha256::Hash::hash(&preimage);
         let hash160 = hash160::Hash::hash(&preimage);
         Ok(Preimage {
+            sha256,
+            hash160,
             bytes: Some(preimage),
-            sha256: sha256,
-            hash160: hash160,
         })
     }
 
     /// Creates a Preimage struct without a value and only a hash
     /// Used only in submarine swaps where we do not know the preimage, only the hash
     pub fn from_sha256_str(preimage_sha256: &str) -> Result<Preimage, Error> {
-        let sha256 = sha256::Hash::from_str(preimage_sha256)?;
+        Self::from_sha256_vec(Vec::from_hex(preimage_sha256)?)
+    }
+
+    /// Creates a Preimage struct without a value and only a hash
+    /// Used only in submarine swaps where we do not know the preimage, only the hash
+    pub fn from_sha256_vec(preimage_sha256: Vec<u8>) -> Result<Preimage, Error> {
+        let sha256 = sha256::Hash::from_slice(preimage_sha256.as_slice())?;
         let hash160 = hash160::Hash::from_slice(
             ripemd160::Hash::hash(sha256.as_byte_array()).as_byte_array(),
         )?;
         // will never fail as long as sha256 is a valid sha256::Hash
         Ok(Preimage {
+            sha256,
+            hash160,
             bytes: None,
-            sha256: sha256,
-            hash160: hash160,
         })
     }
 
@@ -262,10 +274,6 @@ impl Preimage {
         }
     }
 }
-use serde_json;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
 
 /// Boltz standard JSON refund swap file. Can be used to create a file that can be uploaded to boltz.exchange
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -482,8 +490,8 @@ impl RefundSwapFile {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+    use elements::pset::serialize::Serialize;
 
     #[test]
     fn test_derivation() {
@@ -497,13 +505,64 @@ mod tests {
                 return println!("Error converting to LiquidSwapKey: {:?}", e);
             }
         };
-        assert!(sk.fingerprint == lsk.fingerprint);
+        assert_eq!(sk.fingerprint, lsk.fingerprint);
         // println!("{:?}", derived.unwrap().Keypair.display_secret());
         assert_eq!(&sk.fingerprint.to_string().clone(), "9a6a2580");
         assert_eq!(
             &sk.keypair.display_secret().to_string(),
             "d8d26ab9ba4e2c44f1a1fb9e10dc9d78707aaaaf38b5d42cf5c8bf00306acd85"
         );
+    }
+
+    #[test]
+    fn test_preimage_from_str() {
+        let preimage = Preimage::new();
+        assert_eq!(
+            Preimage::from_str(&hex::encode(preimage.bytes.unwrap()).to_string()).unwrap(),
+            preimage
+        );
+    }
+
+    #[test]
+    fn test_preimage_from_vec() {
+        let preimage = Preimage::new();
+        assert_eq!(
+            Preimage::from_vec(Vec::from(preimage.bytes.unwrap())).unwrap(),
+            preimage
+        );
+    }
+
+    #[test]
+    fn test_preimage_from_vec_invalid_length() {
+        let mut bytes = [0u8; 33];
+        OsRng.fill_bytes(&mut bytes);
+        assert_eq!(
+            Preimage::from_vec(Vec::from(bytes))
+                .err()
+                .unwrap()
+                .message(),
+            "Decoded Preimage input is not 32 bytes".to_string()
+        );
+    }
+
+    #[test]
+    fn test_preimage_from_sha256_str() {
+        let preimage = Preimage::new();
+        let compare = Preimage::from_sha256_str(preimage.sha256.to_string().as_str()).unwrap();
+
+        assert_eq!(compare.bytes, None);
+        assert_eq!(compare.sha256, preimage.sha256);
+        assert_eq!(compare.hash160, preimage.hash160);
+    }
+
+    #[test]
+    fn test_preimage_from_sha256_vec() {
+        let preimage = Preimage::new();
+        let compare = Preimage::from_sha256_vec(preimage.sha256.serialize()).unwrap();
+
+        assert_eq!(compare.bytes, None);
+        assert_eq!(compare.sha256, preimage.sha256);
+        assert_eq!(compare.hash160, preimage.hash160);
     }
 
     // #[test]
