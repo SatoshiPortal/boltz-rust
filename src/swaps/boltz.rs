@@ -589,6 +589,13 @@ pub struct MrhResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Webhook {
+    pub url: String,
+    pub hash_swap_id: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateSubmarineRequest {
     pub from: String,
     pub to: String,
@@ -598,6 +605,8 @@ pub struct CreateSubmarineRequest {
     pub pair_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webhook: Option<Webhook>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -693,6 +702,8 @@ pub struct CreateReverseRequest {
     pub address_signature: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webhook: Option<Webhook>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -780,6 +791,8 @@ pub struct CreateChainRequest {
     pub pair_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webhook: Option<Webhook>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
