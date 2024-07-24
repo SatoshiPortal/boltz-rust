@@ -591,7 +591,8 @@ pub struct MrhResponse {
 #[serde(rename_all = "camelCase")]
 pub struct Webhook {
     pub url: String,
-    pub hash_swap_id: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash_swap_id: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
