@@ -45,6 +45,7 @@ fn bitcoin_liquid_v2_chain() {
         user_lock_amount: Some(1000000),
         server_lock_amount: None,
         pair_hash: None, // Add address signature here.
+        webhook: None,
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
@@ -280,6 +281,7 @@ fn liquid_bitcoin_v2_chain() {
         user_lock_amount: Some(1000000),
         server_lock_amount: None,
         pair_hash: None, // Add address signature here.
+        webhook: None,
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);

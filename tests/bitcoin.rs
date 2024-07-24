@@ -57,6 +57,7 @@ fn bitcoin_v2_submarine() {
         refund_public_key,
         pair_hash: None,
         referral_id: None,
+        webhook: None,
     };
 
     let create_swap_response = boltz_api_v2.post_swap_req(&create_swap_req).unwrap();
@@ -267,6 +268,7 @@ fn bitcoin_v2_reverse() {
         address: Some(claim_address.clone()),
         claim_public_key,
         referral_id: None, // Add address signature here.
+        webhook: None,
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
