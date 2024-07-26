@@ -127,7 +127,7 @@ pub struct ChainFees {
 
 impl ChainFees {
     pub fn total(&self, amount_sat: u64) -> u64 {
-        self.boltz(amount_sat) + self.claim_estimate() + self.lockup()
+        self.boltz(amount_sat) + self.claim_estimate() + self.lockup() + self.server()
     }
 
     pub fn boltz(&self, amount_sat: u64) -> u64 {
