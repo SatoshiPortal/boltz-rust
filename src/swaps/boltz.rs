@@ -589,12 +589,12 @@ pub struct MrhResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SubmarineWebhook {
+pub struct Webhook<T> {
     pub url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash_swap_id: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<Vec<SubSwapStates>>,
+    pub status: Option<Vec<T>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -609,7 +609,7 @@ pub struct CreateSubmarineRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub webhook: Option<SubmarineWebhook>,
+    pub webhook: Option<Webhook<SubSwapStates>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -691,16 +691,6 @@ impl Subscription {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReverseWebhook {
-    pub url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hash_swap_id: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<Vec<RevSwapStates>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CreateReverseRequest {
     pub invoice_amount: u32,
     pub from: String,
@@ -716,7 +706,7 @@ pub struct CreateReverseRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub webhook: Option<ReverseWebhook>,
+    pub webhook: Option<Webhook<RevSwapStates>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -788,16 +778,6 @@ pub struct ChainSwapDetails {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChainWebhook {
-    pub url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hash_swap_id: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<Vec<ChainSwapStates>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CreateChainRequest {
     pub from: String,
     pub to: String,
@@ -815,7 +795,7 @@ pub struct CreateChainRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub webhook: Option<ChainWebhook>,
+    pub webhook: Option<Webhook<ChainSwapStates>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
