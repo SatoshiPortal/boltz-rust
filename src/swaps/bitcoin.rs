@@ -746,6 +746,8 @@ impl BtcSwapTx {
             claim_tx.input[0].witness = witness;
         } else {
             // If Non-Cooperative claim use the Script Path spending
+            claim_tx.input[0].sequence = Sequence::ZERO;
+
             let leaf_hash =
                 TapLeafHash::from_script(&self.swap_script.claim_script(), LeafVersion::TapScript);
 

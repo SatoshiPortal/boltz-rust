@@ -386,3 +386,140 @@ fn bitcoin_v2_reverse() {
         }
     }
 }
+
+#[test]
+#[ignore = "Requires testnet invoice and refund address"]
+fn bitcoin_v2_reverse_script_path() {
+    setup_logger();
+
+    let secp = Secp256k1::new();
+    let preimage = Preimage::new();
+    let our_keys = Keypair::new(&secp, &mut thread_rng());
+    let invoice_amount = 100000;
+    let claim_public_key = PublicKey {
+        compressed: true,
+        inner: our_keys.public_key(),
+    };
+
+    // Give a valid claim address or else funds will be lost.
+    let claim_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
+
+    let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
+    let create_reverse_req = CreateReverseRequest {
+        invoice_amount,
+        from: "BTC".to_string(),
+        to: "BTC".to_string(),
+        preimage_hash: preimage.sha256,
+        description: None,
+        address_signature: Some(addrs_sig.to_string()),
+        address: Some(claim_address.clone()),
+        claim_public_key,
+        referral_id: None, // Add address signature here.
+        webhook: None,
+    };
+
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
+
+    let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
+
+    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet)
+        .unwrap()
+        .unwrap();
+
+    log::debug!("Got Reverse swap response: {:?}", reverse_resp);
+
+    let swap_script =
+        BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
+
+    // Subscribe to wss status updates
+    let mut socket = boltz_api_v2.connect_ws().unwrap();
+
+    let subscription = Subscription::new(&reverse_resp.id);
+
+    socket
+        .send(tungstenite::Message::Text(
+            serde_json::to_string(&subscription).unwrap(),
+        ))
+        .unwrap();
+
+    // Event handlers for various swap status.
+    loop {
+        let response = serde_json::from_str(&socket.read().unwrap().to_string());
+
+        if response.is_err() {
+            if response.err().expect("expected").is_eof() {
+                continue;
+            }
+        } else {
+            match response.as_ref().unwrap() {
+                SwapUpdate::Subscription {
+                    event,
+                    channel,
+                    args,
+                } => {
+                    assert!(event == "subscribe");
+                    assert!(channel == "swap.update");
+                    assert!(args.get(0).expect("expected") == &reverse_resp.id);
+                    log::info!("Subscription successful for swap : {}", &reverse_resp.id);
+                }
+
+                SwapUpdate::Update {
+                    event,
+                    channel,
+                    args,
+                } => {
+                    assert!(event == "update");
+                    assert!(channel == "swap.update");
+                    let update = args.get(0).expect("expected");
+                    assert!(&update.id == &reverse_resp.id);
+                    log::info!("Got Update from server: {}", update.status);
+
+                    if update.status == "swap.created" {
+                        log::info!("Waiting for Invoice to be paid: {}", &reverse_resp.invoice);
+                        continue;
+                    }
+
+                    if update.status == "transaction.mempool" {
+                        log::info!("Boltz broadcasted funding tx");
+
+                        std::thread::sleep(Duration::from_secs(15));
+
+                        let claim_tx = BtcSwapTx::new_claim(
+                            swap_script.clone(),
+                            claim_address.clone(),
+                            &ElectrumConfig::default_bitcoin(),
+                        )
+                        .expect("Funding tx expected");
+
+                        let tx = claim_tx
+                            .sign_claim(&our_keys, &preimage, 1000, None)
+                            .unwrap();
+
+                        claim_tx
+                            .broadcast(&tx, &ElectrumConfig::default_bitcoin())
+                            .unwrap();
+
+                        log::info!("Successfully broadcasted claim tx!");
+                        log::debug!("Claim Tx {:?}", tx);
+                    }
+
+                    if update.status == "invoice.settled" {
+                        log::info!("Reverse Swap Successful!");
+                        break;
+                    }
+                }
+
+                SwapUpdate::Error {
+                    event,
+                    channel,
+                    args,
+                } => {
+                    assert!(event == "update");
+                    assert!(channel == "swap.update");
+                    let error = args.get(0).expect("expected");
+                    println!("Got error : {} for swap: {}", error.error, error.id);
+                }
+            }
+        }
+    }
+}

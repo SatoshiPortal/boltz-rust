@@ -31,7 +31,6 @@ fn liquid_v2_submarine() {
 
     let secp = Secp256k1::new();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
-
     let refund_public_key = PublicKey {
         inner: our_keys.public_key(),
         compressed: true,
@@ -39,8 +38,8 @@ fn liquid_v2_submarine() {
 
     // Set a new invoice string and refund address for each test.
     let invoice = "lnbc12320n1pn9q9hlpp5v30gg9ylrpkgyn6pctthd22xvu0lsuctw9nee7t3emljvh5ty2nscqpjsp54p8gweqlqdnstedcmzy8ktgup4auaq6wy6lcryu0085kvr6a77gs9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllard4vsfze0gsqqqqlgqqqqqeqqjq3c4qzawwh62kzj3cdykcaszjd9l4wfcwlxhq4afwhvsjllu27pen26rsxaa0gfx602nl7feh87c4s39n5p47lfsu2k38vgfjc8nvhrspg50t63".to_string();
-    let refund_address = "lq1qqfwnyjvzmknjngqxfl50sfa2fhajcnsuwqnz0umvm3ttzaxf90n36ttc6vy3xu3m8tn3lfkcavrzfcl4nr0yqe2knk5u0l5m7".to_string();
-    let boltz_url = BOLTZ_MAINNET_URL_V2;
+    let refund_address = "tlq1qq05cvratqvsfmvdkag7rat2sav97f2aq3x9mzqhcgavygjnnetgy57zhurzvwwklexrxtdecw0ejfgwcjsxvqmrptdf25vrj8".to_string();
+    let boltz_url = BOLTZ_TESTNET_URL_V2;
     let chain = Chain::Liquid;
     let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
 
@@ -52,7 +51,6 @@ fn liquid_v2_submarine() {
     //     log::info!("Send {} to {}", amount, bip21_addrs);
     //     return;
     // }
-
     // Initiate the swap with Boltz
     let create_swap_req = CreateSubmarineRequest {
         from: "L-BTC".to_string(),
@@ -196,12 +194,13 @@ fn liquid_v2_submarine() {
                         match swap_tx.sign_refund(
                             &our_keys,
                             Amount::from_sat(1000),
-                            Some(Cooperative {
-                                boltz_api: &boltz_api_v2,
-                                swap_id: create_swap_response.id.clone(),
-                                pub_nonce: None,
-                                partial_sig: None,
-                            }),
+                            None,
+                            // Some(Cooperative {
+                            //     boltz_api: &boltz_api_v2,
+                            //     swap_id: create_swap_response.id.clone(),
+                            //     pub_nonce: None,
+                            //     partial_sig: None,
+                            // }),
                         ) {
                             Ok(tx) => {
                                 println!("{}", tx.serialize().to_lower_hex_string());
@@ -268,7 +267,7 @@ fn liquid_v2_reverse() {
     };
 
     // Give a valid claim address or else funds will be lost.
-    let claim_address = "lq1qqfwnyjvzmknjngqxfl50sfa2fhajcnsuwqnz0umvm3ttzaxf90n36ttc6vy3xu3m8tn3lfkcavrzfcl4nr0yqe2knk5u0l5m7".to_string();
+    let claim_address = "tlq1qq05cvratqvsfmvdkag7rat2sav97f2aq3x9mzqhcgavygjnnetgy57zhurzvwwklexrxtdecw0ejfgwcjsxvqmrptdf25vrj8".to_string();
     let boltz_url = BOLTZ_MAINNET_URL_V2;
     let chain = Chain::Liquid;
     let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
@@ -373,13 +372,171 @@ fn liquid_v2_reverse() {
                                 &our_keys,
                                 &preimage,
                                 Amount::from_sat(1000),
-                                Some(Cooperative {
-                                    boltz_api: &boltz_api_v2,
-                                    swap_id: swap_id.clone(),
-                                    pub_nonce: None,
-                                    partial_sig: None,
-                                }),
+                                None,
+                                // Some(Cooperative {
+                                //     boltz_api: &boltz_api_v2,
+                                //     swap_id: swap_id.clone(),
+                                //     pub_nonce: None,
+                                //     partial_sig: None,
+                                // }),
                             )
+                            .unwrap();
+
+                        claim_tx
+                            .broadcast(&tx, &ElectrumConfig::default_liquid(), None)
+                            .unwrap();
+
+                        // To test Lowball broadcast uncomment below line
+                        // claim_tx
+                        //     .broadcast(
+                        //         &tx,
+                        //         &ElectrumConfig::default_liquid(),
+                        //         Some((&boltz_api_v2, boltz_client::network::Chain::LiquidTestnet)),
+                        //     )
+                        //     .unwrap();
+
+                        log::info!("Succesfully broadcasted claim tx!");
+                        log::debug!("Claim Tx {:?}", tx);
+                    }
+
+                    if update.status == "invoice.settled" {
+                        log::info!("Reverse Swap Successful!");
+                        break;
+                    }
+                }
+
+                SwapUpdate::Error {
+                    event,
+                    channel,
+                    args,
+                } => {
+                    assert!(event == "update");
+                    assert!(channel == "swap.update");
+                    let error = args.get(0).expect("expected");
+                    println!("Got error : {} for swap: {}", error.error, error.id);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "Requires testnet invoice and refund address"]
+fn liquid_v2_reverse_script_path() {
+    setup_logger();
+
+    let secp = Secp256k1::new();
+    let preimage = Preimage::new();
+    let our_keys = Keypair::new(&secp, &mut thread_rng());
+    let invoice_amount = 11110;
+    let claim_public_key = PublicKey {
+        compressed: true,
+        inner: our_keys.public_key(),
+    };
+
+    // Give a valid claim address or else funds will be lost.
+    let claim_address = "tlq1qq05cvratqvsfmvdkag7rat2sav97f2aq3x9mzqhcgavygjnnetgy57zhurzvwwklexrxtdecw0ejfgwcjsxvqmrptdf25vrj8".to_string();
+    let boltz_url = BOLTZ_TESTNET_URL_V2;
+    let chain = Chain::LiquidTestnet;
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
+
+    let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
+
+    let create_reverse_req = CreateReverseRequest {
+        invoice_amount,
+        from: "BTC".to_string(),
+        to: "L-BTC".to_string(),
+        preimage_hash: preimage.sha256,
+        description: None,
+        address_signature: Some(addrs_sig.to_string()),
+        address: Some(claim_address.clone()),
+        claim_public_key,
+        referral_id: None,
+        webhook: None,
+    };
+
+    let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
+    reverse_resp
+        .validate(&preimage, &claim_public_key, chain)
+        .unwrap();
+    log::info!("VALIDATED RESPONSE!");
+
+    let swap_id = reverse_resp.clone().id;
+
+    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet)
+        .unwrap()
+        .unwrap();
+
+    log::debug!("Got Reverse swap response: {:?}", reverse_resp);
+
+    let swap_script =
+        LBtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
+    swap_script.to_address(Chain::LiquidTestnet).unwrap();
+
+    // Subscribe to wss status updates
+    let mut socket = boltz_api_v2.connect_ws().unwrap();
+
+    let subscription = Subscription::new(&swap_id);
+
+    socket
+        .send(tungstenite::Message::Text(
+            serde_json::to_string(&subscription).unwrap(),
+        ))
+        .unwrap();
+
+    // Event handlers for various swap status.
+    loop {
+        let response = serde_json::from_str(&socket.read().unwrap().to_string());
+
+        if response.is_err() {
+            if response.err().expect("expected").is_eof() {
+                continue;
+            }
+        } else {
+            match response.as_ref().unwrap() {
+                SwapUpdate::Subscription {
+                    event,
+                    channel,
+                    args,
+                } => {
+                    assert!(event == "subscribe");
+                    assert!(channel == "swap.update");
+                    assert!(args.get(0).expect("expected") == &swap_id);
+                    log::info!("Subscription successful for swap : {}", &swap_id);
+                }
+
+                SwapUpdate::Update {
+                    event,
+                    channel,
+                    args,
+                } => {
+                    assert!(event == "update");
+                    assert!(channel == "swap.update");
+                    let update = args.get(0).expect("expected");
+                    assert!(&update.id == &swap_id);
+                    log::info!("Got Update from server: {}", update.status);
+
+                    if update.status == "swap.created" {
+                        log::info!("Waiting for Invoice to be paid: {}", &reverse_resp.invoice);
+                        continue;
+                    }
+
+                    if update.status == "transaction.mempool" {
+                        log::info!("Boltz broadcasted funding tx");
+
+                        std::thread::sleep(Duration::from_secs(5));
+
+                        let claim_tx = LBtcSwapTx::new_claim(
+                            swap_script.clone(),
+                            claim_address.clone(),
+                            &ElectrumConfig::default_liquid(),
+                            BOLTZ_TESTNET_URL_V2.to_string(),
+                            swap_id.clone(),
+                        )
+                        .unwrap();
+
+                        let tx = claim_tx
+                            .sign_claim(&our_keys, &preimage, Amount::from_sat(1000), None)
                             .unwrap();
 
                         claim_tx
