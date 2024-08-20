@@ -151,6 +151,32 @@ fn test_bip21_parsing() {
     );
 }
 
+/// BIP21 amounts which can lead to rounding errors when converting from BTC amount (f64) to sats (u64).
+/// The format is: (sat amount, BIP21 BTC amount)
+fn get_bip21_rounding_test_vectors() -> Vec<(u64, f64)> {
+    vec![
+        (999, 0.0000_0999),
+        (1_000, 0.0000_1000),
+        (59_810, 0.0005_9810),
+    ]
+}
+
+#[test]
+fn test_bip21_parsing_with_rounding_edge_cases() {
+    let liquid_address = "tlq1qqt3sgky7zert7237tred5rqmmx0eargp625zkyhr2ldw6yqdvh5fusnm5xk0qfjpejvgm37q7mqtv5epfksv78jweytmqgpd8";
+    let asset_id = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a4";
+
+    for (amount_sat, amount_btc) in get_bip21_rounding_test_vectors() {
+        let uri = format!("liquidtestnet:{liquid_address}?amount={amount_btc}&assetid={asset_id}");
+        let (_network, _address, bip21_amount, _assetid) = parse_bip21(&uri).unwrap();
+
+        let parsed_amount_btc = bip21_amount;
+        let parsed_amount_sat = (parsed_amount_btc * 100_000_000.0) as u64;
+
+        assert_eq!(parsed_amount_sat, amount_sat);
+    }
+}
+
 #[test]
 fn test_mrh() {
     let route_hint = find_magic_routing_hint("lntb1m1pnrv328pp5zymney8y48234em5lakrkuk8rfrftn5dkwfys7zghe2c40hxfmusdpz2djkuepqw3hjqnpdgf2yxgrpv3j8yetnwvcqz95xqyp2xqrzjqwyg6p2yhhqvq5d97kkwuk0mnrp3su6sn5fvtxn63gppms9fkegajzzxeyqq28qqqqqqqqqqqqqqq9gq2ysp5znw62my456pnzq7vyfgje2yjfat8gzgf88q8rl30dt3cgpmpk9eq9qyyssq55qds9y2vrtmqxq00fgrnartdhs0wwlt7u5uflzs5wnx8wad8y3y86y8lgre4qaszhvhesa6ts99g7m088j6dgjfe6hhtkfglqfqwjcp03v2nh").unwrap().expect("route hint expected");
