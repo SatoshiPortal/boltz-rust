@@ -14,7 +14,9 @@ use bitcoin::{
     Address, OutPoint, PublicKey,
 };
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
-use bitcoin::{Amount, EcdsaSighashType, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey};
+use bitcoin::{
+    Amount, EcdsaSighashType, PrivateKey, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey,
+};
 use electrum_client::ElectrumApi;
 use elements::encode::serialize;
 use elements::pset::serialize::Serialize;
@@ -32,8 +34,8 @@ use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160};
 
 use super::boltz::{
     BoltzApiClientV2, ChainClaimTxResponse, ChainSwapDetails, Cooperative, CreateChainResponse,
-    CreateReverseResponse, CreateSubmarineResponse, PartialSig, Side, SubmarineClaimTxResponse,
-    SwapTxKind, SwapType, ToSign,
+    CreateReverseResponse, CreateSubmarineResponse, Leaf, PartialSig, Side,
+    SubmarineClaimTxResponse, SwapTree, SwapTxKind, SwapType, ToSign,
 };
 
 use elements::secp256k1_zkp::{
@@ -42,6 +44,25 @@ use elements::secp256k1_zkp::{
 };
 
 /// Bitcoin v2 swap script helper.
+///
+/// This struct is used to construct a Bitcoin swap script, which facilitates atomic swaps
+/// between two parties with boltz exchange.
+///
+/// # Fields
+///
+/// * `swap_type`: [`SwapType`] — Specifies the type of swap being conducted (Submarine, ReverseSubmarine, Chain).
+/// * `side`: [`Option<Side>`] — Indicates the side of the swap, "Lockup" or "Claim"
+///   This is optional and may not always be provided.
+/// * `funding_addrs`: [`Option<Address>`] — The Bitcoin address used to fund the swap. This field is optional.
+///   However, consider removing this field if it's only used to identify the network (e.g., regtest).
+/// * `hashlock`: [`hash160::Hash`] — The hash of the preimage that will be used to unlock the swap.
+///   The hashlock ensures that the funds can only be spent by the party with the correct preimage.
+/// * `receiver_pubkey`: [`PublicKey`] — The public key of the receiver in the swap. The receiver will
+///   need the corresponding private key to claim the funds.
+/// * `locktime`: [`LockTime`] — The locktime specifies the earliest time at which the swap can be completed.
+///   It prevents the sender from reclaiming the funds until the specified time has passed.
+/// * `sender_pubkey`: [`PublicKey`] — The public key of the sender in the swap. This key is used to return
+///   the funds to the sender if the swap is not completed before the locktime expires.
 // TODO: This should encode the network at global level.
 #[derive(Debug, PartialEq, Clone)]
 pub struct BtcSwapScript {
@@ -57,7 +78,64 @@ pub struct BtcSwapScript {
 }
 
 impl BtcSwapScript {
-    /// Create the struct for a submarine swap from boltz create swap response.
+    /// Creates a `BtcSwapScript` for a submarine swap from a Boltz create swap response.
+    ///
+    /// This method parses the swap scripts provided in the `CreateSubmarineResponse` and extracts
+    /// the necessary components to construct a `BtcSwapScript` for a submarine swap. It identifies
+    /// the hashlock and timelock values from the provided scripts and constructs the swap script
+    /// with the given public keys and the swap's funding address.
+    ///
+    /// # Arguments
+    ///
+    /// * `create_swap_response`: [`CreateSubmarineResponse`] — The response object containing the swap details,
+    /// including the claim and refund scripts used to extract the hashlock and timelock.
+    /// * `our_pubkey`: [`PublicKey`] — The public key of the sender, which will be used in the swap script.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing either the constructed `BtcSwapScript` or an `Error` if the creation fails.
+    ///
+    /// # Example
+    ///
+    ///```rust
+    /// use boltz_client::boltz::Leaf;
+    /// use boltz_client::boltz::SwapTree;
+    /// use boltz_client::Secp256k1;
+    /// use boltz_client::boltz::CreateSubmarineResponse;
+    /// use boltz_client::BtcSwapScript;
+    ///
+    ///
+    /// let claim_leaf = Leaf {
+    ///     output: "placeholder".to_string(),
+    ///     version: 0,
+    /// };
+    /// let refund_leaf = Leaf {
+    ///     output: "placeholder".to_string(),
+    ///     version: 1,
+    /// };
+    /// let swap_tree = SwapTree {
+    ///     claim_leaf,
+    ///     refund_leaf,
+    /// };
+    /// let secp = Secp256k1::new();
+    /// let (secret_key, our_pubkey) = secp.generate_keypair(&mut bitcoin::key::rand::thread_rng());       
+    /// let create_swap_response = CreateSubmarineResponse {
+    ///     accept_zero_conf: true,
+    ///     address: "placeholder".to_string(),
+    ///     bip21: "placeholder".to_string(),
+    ///     claim_public_key: our_pubkey.clone().into(),
+    ///     expected_amount: 2314,
+    ///     id: "placeholder".to_string(),
+    ///     referral_id: None,
+    ///     swap_tree,
+    ///     timeout_block_height: 90000,
+    ///     blinding_key: None,
+    /// };
+    /// let btc_swap_script = BtcSwapScript::submarine_from_swap_resp(&create_swap_response, our_pubkey.into())
+    ///     .expect("Failed to create BtcSwapScript");
+    ///  
+    /// // Use the `btc_swap_script` for further processing...
+    /// ```
     pub fn submarine_from_swap_resp(
         create_swap_response: &CreateSubmarineResponse,
         our_pubkey: PublicKey,
@@ -121,7 +199,29 @@ impl BtcSwapScript {
             sender_pubkey: our_pubkey,
         })
     }
-
+    /// Generates a MuSig2 key aggregation cache for the swap.
+    ///
+    /// This method creates a `MusigKeyAggCache` using the public keys of the sender and receiver
+    /// in the correct order based on the swap type and side. The key aggregation cache is used
+    /// in the MuSig2 signing process to ensure that all signers' public keys are correctly aggregated.
+    ///
+    /// # Returns
+    ///
+    /// A `MusigKeyAggCache` object that aggregates the public keys in the appropriate order.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use bitcoin::secp256k1::{Secp256k1, PublicKey};
+    /// # use submarine_swap::{BtcSwapScript, SwapType, Side};
+    /// # use secp256k1_zkp::MusigKeyAggCache;
+    ///
+    /// let btc_swap_script = /* ... construct a BtcSwapScript ... */;
+    ///
+    /// let musig_cache = btc_swap_script.musig_keyagg_cache();
+    ///
+    /// // Use `musig_cache` for further signing operations...
+    /// ```
     pub fn musig_keyagg_cache(&self) -> MusigKeyAggCache {
         match (self.swap_type, self.side.clone()) {
             (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::Claim)) => {
@@ -136,7 +236,39 @@ impl BtcSwapScript {
         }
     }
 
-    /// Create the struct for a reverse swap from a boltz create response.
+    /// Creates a `BtcSwapScript` for a reverse submarine swap from a Boltz create swap response.
+    ///
+    /// This method constructs a `BtcSwapScript` by parsing the provided `CreateReverseResponse`.
+    /// It extracts the hashlock and timelock from the claim and refund scripts, respectively.
+    /// The resulting `BtcSwapScript` can be used to manage the reverse submarine swap's logic.
+    ///
+    /// # Arguments
+    ///
+    /// * `reverse_response` - A reference to a `CreateReverseResponse` which contains the swap details.
+    /// * `our_pubkey` - The public key of the current participant, which will be set as the receiver's public key.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the constructed `BtcSwapScript` or an `Error` if something goes wrong during parsing.
+    ///
+    /// # Errors
+    ///
+    /// - Returns `Error::Protocol` if the claim script doesn't contain a valid hashlock or if the refund script doesn't contain a valid timelock.
+    /// - Returns any errors encountered during hex decoding or address parsing.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use bitcoin::secp256k1::PublicKey;
+    /// # use submarine_swap::{BtcSwapScript, SwapType, CreateReverseResponse};
+    ///
+    /// let reverse_response = /* construct a CreateReverseResponse */;
+    /// let our_pubkey = /* obtain our public key */;
+    ///
+    /// let swap_script = BtcSwapScript::reverse_from_swap_resp(&reverse_response, our_pubkey)?;
+    ///
+    /// // Use `swap_script` for further processing...
+    /// ```
     pub fn reverse_from_swap_resp(
         reverse_response: &CreateReverseResponse,
         our_pubkey: PublicKey,
@@ -200,7 +332,41 @@ impl BtcSwapScript {
         })
     }
 
-    /// Create the struct for a chain swap from a boltz create response.
+    /// Creates a `BtcSwapScript` for a chain swap from a Boltz create swap response.
+    ///
+    /// This method constructs a `BtcSwapScript` by parsing the provided `ChainSwapDetails`.
+    /// It extracts the hashlock and timelock from the claim and refund scripts, respectively.
+    /// The resulting `BtcSwapScript` can be used to manage the chain swap's logic.
+    ///
+    /// # Arguments
+    ///
+    /// * `side` - A `Side` enum indicating whether the current participant is on the `Lockup` or `Claim` side of the swap.
+    /// * `chain_swap_details` - A `ChainSwapDetails` struct containing details about the swap.
+    /// * `our_pubkey` - The public key of the current participant, used as either the sender or receiver's public key depending on the `side`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the constructed `BtcSwapScript` or an `Error` if something goes wrong during parsing.
+    ///
+    /// # Errors
+    ///
+    /// - Returns `Error::Protocol` if the claim script doesn't contain a valid hashlock or if the refund script doesn't contain a valid timelock.
+    /// - Returns any errors encountered during hex decoding or address parsing.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use bitcoin::secp256k1::PublicKey;
+    /// # use submarine_swap::{BtcSwapScript, SwapType, ChainSwapDetails, Side};
+    ///
+    /// let chain_swap_details = /* obtain or construct a ChainSwapDetails */;
+    /// let our_pubkey = /* obtain our public key */;
+    /// let side = Side::Lockup; // or Side::Claim
+    ///
+    /// let swap_script = BtcSwapScript::chain_from_swap_resp(side, chain_swap_details, our_pubkey)?;
+    ///
+    /// // Use `swap_script` for further processing...
+    /// ```
     pub fn chain_from_swap_resp(
         side: Side,
         chain_swap_details: ChainSwapDetails,
@@ -269,7 +435,23 @@ impl BtcSwapScript {
             sender_pubkey,
         })
     }
-
+    /// Generates the claim script for the swap.
+    ///
+    /// The claim script is used to claim the funds in the swap. The exact script structure depends on the type of swap.
+    ///
+    /// # Returns
+    ///
+    /// A `ScriptBuf` representing the claim script.
+    ///
+    /// # Script Structure
+    ///
+    /// - **Submarine Swap**:
+    ///   - `OP_HASH160 <hashlock> OP_EQUALVERIFY <receiver_pubkey> OP_CHECKSIG`
+    ///
+    /// - **Reverse Submarine Swap or Chain Swap**:
+    ///   - `OP_SIZE 32 OP_EQUALVERIFY OP_HASH160 <hashlock> OP_EQUALVERIFY <receiver_pubkey> OP_CHECKSIG`
+    ///
+    /// The script ensures that the correct preimage is provided (`hashlock`) and that the signature from the receiver's public key (`receiver_pubkey`) is valid.
     fn claim_script(&self) -> ScriptBuf {
         match self.swap_type {
             SwapType::Submarine => Builder::new()
@@ -292,7 +474,19 @@ impl BtcSwapScript {
                 .into_script(),
         }
     }
-
+    /// Generates the refund script for the swap.
+    ///
+    /// The refund script is used to reclaim the funds if the swap fails. This script is the same across all swap types.
+    ///
+    /// # Returns
+    ///
+    /// A `ScriptBuf` representing the refund script.
+    ///
+    /// # Script Structure
+    ///
+    /// - `OP_CHECKSIGVERIFY <sender_pubkey> OP_CLTV <locktime>`
+    ///
+    /// The script ensures that the sender's signature is valid and that the locktime has passed before the refund can be claimed.
     fn refund_script(&self) -> ScriptBuf {
         // Refund scripts are same for all swap types
         Builder::new()
@@ -304,6 +498,46 @@ impl BtcSwapScript {
     }
 
     /// Internally used to convert struct into a bitcoin::Script type
+    ///
+    /// This function constructs the Taproot structure using the `claim_script` and `refund_script`
+    /// as Taproot leaves. It verifies the Taproot construction against the funding address, if provided.
+    ///
+    /// # Returns
+    ///
+    /// A `Result<TaprootSpendInfo, Error>` containing the constructed Taproot spend information.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Error::Taproot` if the Taproot construction fails, or an `Error::Protocol` if the
+    /// verification of the Taproot construction against the funding address fails.
+    ///
+    /// # Implementation Details
+    ///
+    /// - **Key Aggregation**: The `musig_keyagg_cache` method is used to aggregate the sender and
+    ///   receiver public keys, forming the internal key of the Taproot.
+    ///
+    /// - **Taproot Leaves**:
+    ///   - The `claim_script` and `refund_script` are added as Taproot leaves.
+    ///
+    /// - **Taproot Finalization**:
+    ///   - The Taproot structure is finalized with the internal key and added leaves.
+    ///
+    /// - **Verification**:
+    ///   - If the `funding_addrs` field is present, the constructed Taproot is verified against the
+    ///     known funding address. The verification ensures the constructed Taproot matches the expected
+    ///     XOnly public key derived from the funding address.
+    ///
+    /// - **Logging**:
+    ///   - Logs a success message if the Taproot creation and verification succeed.
+    ///
+    /// # Security Considerations
+    ///
+    /// - The function performs a critical verification step where it checks if the Taproot construction
+    ///   aligns with the funding address, ensuring that the constructed Taproot is valid and matches
+    ///   the intended lockup conditions.
+    ///
+    /// - Skipping verification for certain test conditions (`regtest`) where the funding address is not
+    ///   available is a potential point of concern, but it is controlled and intended for testing environments only.
     fn taproot_spendinfo(&self) -> Result<TaprootSpendInfo, Error> {
         let secp = Secp256k1::new();
 
@@ -364,7 +598,23 @@ impl BtcSwapScript {
         Ok(taproot_spend_info)
     }
 
-    /// Get taproot address for the swap script.
+    /// Get the Taproot address for the swap script.
+    ///
+    /// This function derives the Taproot address associated with the swap script,
+    /// based on the provided Bitcoin network.
+    ///
+    /// # Arguments
+    ///
+    /// * `network` - The Bitcoin network (e.g., Mainnet, Testnet, Regtest) for which
+    ///   the address should be generated.
+    ///
+    /// # Returns
+    ///
+    /// A `Result<Address, Error>` containing the Taproot address.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Error::Protocol` if the function is used with an unsupported network.
     pub fn to_address(&self, network: Chain) -> Result<Address, Error> {
         let spend_info = self.taproot_spendinfo()?;
         let output_key = spend_info.output_key();
@@ -382,7 +632,23 @@ impl BtcSwapScript {
 
         Ok(Address::p2tr_tweaked(output_key, network))
     }
-
+    /// Validate the provided address against the swap script.
+    ///
+    /// This function compares a given address with the address derived from the swap script.
+    /// It verifies whether the provided address matches the expected Taproot address.
+    ///
+    /// # Arguments
+    ///
+    /// * `chain` - The Bitcoin network on which the address validation should occur.
+    /// * `address` - The address to be validated as a `String`.
+    ///
+    /// # Returns
+    ///
+    /// A `Result<(), Error>` indicating whether the validation succeeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Error::Protocol` if the provided address does not match the derived address.
     pub fn validate_address(&self, chain: Chain, address: String) -> Result<(), Error> {
         let to_address = self.to_address(chain)?;
         if to_address.to_string() == address {
@@ -392,7 +658,24 @@ impl BtcSwapScript {
         }
     }
 
-    /// Get the balance of the script
+    /// Get the balance of the swap script.
+    ///
+    /// This function queries the Electrum server for the balance associated with the swap script.
+    /// It returns both confirmed and unconfirmed balances.
+    ///
+    /// # Arguments
+    ///
+    /// * `network_config` - The configuration details for the Electrum client.
+    ///
+    /// # Returns
+    ///
+    /// A `Result<(u64, i64), Error>` where:
+    /// - The first value is the confirmed balance in satoshis.
+    /// - The second value is the unconfirmed balance in satoshis.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Error::Protocol` if the balance retrieval fails.
     pub fn get_balance(&self, network_config: &ElectrumConfig) -> Result<(u64, i64), Error> {
         let electrum_client = network_config.build_client()?;
         let spk = self.to_address(network_config.network())?.script_pubkey();
@@ -400,8 +683,24 @@ impl BtcSwapScript {
         Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
 
-    /// Fetch (utxo,amount) pair for the script_pubkey of this swap.
-    /// Returns None if no utxo for the script_pubkey is found.
+    /// Fetch the UTXO and its amount for the swap script.
+    ///
+    /// This function queries the Electrum server to find the unspent transaction output (UTXO)
+    /// associated with the swap script's public key. It returns the first found UTXO, if any.
+    ///
+    /// # Arguments
+    ///
+    /// * `network_config` - The configuration details for the Electrum client.
+    ///
+    /// # Returns
+    ///
+    /// A `Result<Option<(OutPoint, TxOut)>, Error>` containing:
+    /// - `Some((OutPoint, TxOut))` if a UTXO is found.
+    /// - `None` if no UTXO is found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Error::Protocol` if the UTXO retrieval fails.
     pub fn fetch_utxo(
         &self,
         network_config: &ElectrumConfig,
@@ -434,6 +733,40 @@ pub fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
 
 /// A structure representing either a Claim or a Refund Tx.
 /// This Tx spends from the HTLC.
+/// Represents a Bitcoin swap transaction that can either be a Claim or a Refund transaction.
+/// This transaction spends from an HTLC (Hash Time-Locked Contract).
+///
+/// # Fields:
+///
+/// * `kind` - The type of swap transaction, specified by [SwapTxKind]. This indicates whether
+///   the transaction is a Claim or a Refund.
+///
+/// * `swap_script` - The [BtcSwapScript] used in the swap transaction. This script governs
+///   the conditions under which the swap can be executed.
+///
+/// * `output_address` - The [Address] where the output of the swap transaction will be sent.
+///
+/// * `utxo` - A tuple consisting of:
+///   - `OutPoint` - The outpoint of the HTLC UTXO, identifying the specific UTXO to be spent.
+///   - `TxOut` - The transaction output associated with the HTLC UTXO, which includes details like
+///     the value and script.
+///
+/// # Example:
+///
+/// ```rust
+/// use some_crate::{BtcSwapTx, SwapTxKind, BtcSwapScript, Address, OutPoint, TxOut};
+///
+/// // Example instantiation of BtcSwapTx
+/// let tx = BtcSwapTx {
+///     kind: SwapTxKind::Claim,
+///     swap_script: BtcSwapScript::new(...),  // Replace with actual BtcSwapScript creation
+///     output_address: Address::new(...),      // Replace with actual Address creation
+///     utxo: (
+///         OutPoint::new(...),                 // Replace with actual OutPoint creation
+///         TxOut::new(...)                     // Replace with actual TxOut creation
+///     ),
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct BtcSwapTx {
     pub kind: SwapTxKind, // These fields needs to be public to do manual creation in IT.
@@ -444,8 +777,54 @@ pub struct BtcSwapTx {
 }
 
 impl BtcSwapTx {
-    /// Craft a new ClaimTx. Only works for Reverse and Chain Swaps.
-    /// Returns None, if the HTLC utxo doesn't exist for the swap.
+    /// Creates a new Claim transaction for Reverse and Chain swaps.
+    ///
+    /// This function constructs a `Claim` transaction using the provided `swap_script` and `claim_address`.
+    /// It verifies that the swap type is compatible with claim transactions and checks the validity
+    /// of the provided address for the appropriate network (Bitcoin or Testnet).
+    ///
+    /// **Important:** Claim transactions cannot be constructed for Submarine swaps. If the HTLC UTXO
+    /// does not exist for the swap, the function returns an error.
+    ///
+    /// # Arguments:
+    ///
+    /// * `swap_script` - A [BtcSwapScript] defining the script used for the swap. This should match the
+    ///   expected script for the swap type.
+    /// * `claim_address` - A string representation of the address to which the output of the Claim
+    ///   transaction will be sent. This address must be valid for the network specified in the
+    ///   `network_config`.
+    /// * `network_config` - A reference to [ElectrumConfig] containing network configuration details.
+    ///   This is used to determine the network type and fetch relevant UTXO information.
+    ///
+    /// # Returns:
+    ///
+    /// Returns a `Result` containing:
+    /// * `Ok(BtcSwapTx)` - A new `BtcSwapTx` instance of type `Claim` if the UTXO is found and address is valid.
+    /// * `Err(Error)` - An error if:
+    ///   - The swap type is Submarine, which is not supported for claim transactions.
+    ///   - The address is invalid for the specified network.
+    ///   - No UTXO is detected for the given script.
+    ///
+    /// # Errors:
+    ///
+    /// * `Error::Protocol` - If the swap type is Submarine or if no UTXO is found for the script.
+    /// * `AddressError` - If the provided `claim_address` is not valid for the specified network.
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// use some_crate::{BtcSwapTx, BtcSwapScript, Address, ElectrumConfig, Error};
+    ///
+    /// // Example setup
+    /// let swap_script = BtcSwapScript::new(...); // actual script creation
+    /// let claim_address = "your_claim_address".to_string();
+    /// let network_config = ElectrumConfig::new(...); // actual network configuration
+    ///
+    /// match BtcSwapTx::new_claim(swap_script, claim_address, &network_config) {
+    ///     Ok(tx) => println!("Claim transaction created: {:?}", tx),
+    ///     Err(e) => eprintln!("Error creating claim transaction: {:?}", e),
+    /// }
+    /// ```
     pub fn new_claim(
         swap_script: BtcSwapScript,
         claim_address: String,
@@ -481,8 +860,54 @@ impl BtcSwapTx {
         }
     }
 
-    /// Construct a RefundTX corresponding to the swap_script. Only works for Submarine and Chain Swaps.
-    /// Returns None, if the HTLC UTXO for the swap doesn't exist in blockhcian.
+    /// Constructs a Refund transaction corresponding to the provided `swap_script`.
+    ///
+    /// This function creates a `Refund` transaction for the specified swap script. It supports
+    /// Submarine and Chain swaps, but not Reverse Submarine swaps. The function checks for
+    /// the existence of the HTLC UTXO in the blockchain. If the UTXO does not exist, it returns an error.
+    ///
+    /// **Important:** Refund transactions cannot be constructed for Reverse Submarine swaps.
+    ///
+    /// # Arguments:
+    ///
+    /// * `swap_script` - A [BtcSwapScript] that defines the script associated with the swap.
+    ///   This script should match the swap type for which the refund is being created.
+    /// * `refund_address` - A reference to a string containing the address where the refund
+    ///   transaction output will be sent. This address must be valid for the network specified in
+    ///   the `network_config`.
+    /// * `network_config` - A reference to [ElectrumConfig] providing the network configuration.
+    ///   This is used to determine the network type and fetch relevant UTXO information.
+    ///
+    /// # Returns:
+    ///
+    /// Returns a `Result` containing:
+    /// * `Ok(BtcSwapTx)` - A new `BtcSwapTx` instance of type `Refund` if the UTXO is found and
+    ///   the address is valid.
+    /// * `Err(Error)` - An error if:
+    ///   - The swap type is Reverse Submarine, which is not supported for refund transactions.
+    ///   - The provided address is invalid for the specified network.
+    ///   - No UTXO is detected for the given script.
+    ///
+    /// # Errors:
+    ///
+    /// * `Error::Protocol` - If the swap type is Reverse Submarine or if no UTXO is found for the script.
+    /// * `Error::Address` - If the provided `refund_address` is not valid for the specified network.
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// use some_crate::{BtcSwapTx, BtcSwapScript, Address, ElectrumConfig, Error};
+    ///
+    /// // Example setup
+    /// let swap_script = BtcSwapScript::new(...); // actual script creation
+    /// let refund_address = "your_refund_address".to_string();
+    /// let network_config = ElectrumConfig::new(...); // actual network configuration
+    ///
+    /// match BtcSwapTx::new_refund(swap_script, &refund_address, &network_config) {
+    ///     Ok(tx) => println!("Refund transaction created: {:?}", tx),
+    ///     Err(e) => eprintln!("Error creating refund transaction: {:?}", e),
+    /// }
+    /// ```
     pub fn new_refund(
         swap_script: BtcSwapScript,
         refund_address: &String,
@@ -520,8 +945,59 @@ impl BtcSwapTx {
         }
     }
 
-    /// Compute the Musig partial signature.
-    /// This is used to cooperatively settle a Submarine or Chain Swap.
+    /// Computes the MuSig partial signature for a cooperative settlement of a Submarine or Chain swap.
+    ///
+    /// This function performs the necessary steps to generate a MuSig partial signature as part of a
+    /// cooperative swap process. It uses the provided keypair, public nonce, and transaction hash to
+    /// compute the partial signature and the corresponding public nonce.
+    ///
+    /// **Steps:**
+    /// 1. Initializes the MuSig KeyAgg cache.
+    /// 2. Applies a tweak to the public key aggregation cache.
+    /// 3. Generates nonces for the MuSig signing session.
+    /// 4. Creates the MuSig signing session and computes the partial signature.
+    ///
+    /// # Arguments:
+    ///
+    /// * `keys` - A reference to a [Keypair] containing the private key used for signing and the corresponding
+    ///   public key.
+    /// * `pub_nonce` - A string representation of the public nonce used in the MuSig signing process.
+    /// * `transaction_hash` - A string containing the hash of the transaction to be signed, represented as a hex string.
+    ///
+    /// # Returns:
+    ///
+    /// Returns a `Result` containing:
+    /// * `Ok((MusigPartialSignature, MusigPubNonce))` - A tuple with the computed partial signature and the
+    ///   generated public nonce if successful.
+    /// * `Err(Error)` - An error if any issues occur during the signing process. Potential errors include
+    ///   problems with nonce generation, key aggregation, or invalid inputs.
+    ///
+    /// # Errors:
+    ///
+    /// The function may return errors if:
+    /// * Key aggregation or nonce generation fails.
+    /// * The public nonce or transaction hash is invalid.
+    /// * There are issues with cryptographic operations or key parsing.
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// use some_crate::{BtcSwapTx, Keypair, MusigPartialSignature, MusigPubNonce, Error};
+    ///
+    /// // Example setup
+    /// let swap_tx = BtcSwapTx::new(...); // actual BtcSwapTx initialization
+    /// let keys = Keypair::new(); // actual keypair initialization
+    /// let pub_nonce = "your_public_nonce".to_string();
+    /// let transaction_hash = "your_transaction_hash".to_string();
+    ///
+    /// match swap_tx.partial_sign(&keys, &pub_nonce, &transaction_hash) {
+    ///     Ok((partial_sig, gen_pub_nonce)) => {
+    ///         println!("Partial signature: {:?}", partial_sig);
+    ///         println!("Generated public nonce: {:?}", gen_pub_nonce);
+    ///     },
+    ///     Err(e) => eprintln!("Error computing partial signature: {:?}", e),
+    /// }
+    /// ```
     pub fn partial_sign(
         &self,
         keys: &Keypair,
@@ -570,10 +1046,66 @@ impl BtcSwapTx {
         Ok((partial_sig, gen_pub_nonce))
     }
 
-    /// Sign a claim transaction.
-    /// Errors if called on a Submarine Swap or Refund Tx.
-    /// If the claim is cooperative, provide the other party's partial sigs.
-    /// If this is None, transaction will be claimed via taproot script path.
+    /// Signs a claim transaction for a swap, handling both cooperative and non-cooperative claims.
+    ///
+    /// This function signs a claim transaction based on the type of swap and the provided parameters.
+    /// It supports both cooperative claims (where the signature involves multiple parties) and
+    /// non-cooperative claims (where only the local party's signature is required).
+    /// Errors are returned if the function is called for a Submarine Swap or Refund transaction.
+    ///
+    /// **Note:** For cooperative claims, you must provide the other party's partial signatures. If this is
+    /// not provided, the transaction will be claimed via the taproot script path.
+    ///
+    /// # Arguments:
+    ///
+    /// * `keys` - A reference to a [Keypair] containing the private key used for signing and the corresponding
+    ///   public key.
+    /// * `preimage` - A [Preimage] object containing the preimage required for the claim transaction.
+    /// * `absolute_fees` - The absolute fee amount to be deducted from the UTXO value for the claim transaction.
+    /// * `is_cooperative` - An optional [Cooperative] struct containing details for a cooperative claim,
+    ///   including the API for Boltz, swap ID, public nonce, and partial signatures.
+    ///
+    /// # Returns:
+    ///
+    /// Returns a `Result` containing:
+    /// * `Ok(Transaction)` - The signed Bitcoin transaction if successful.
+    /// * `Err(Error)` - An error if:
+    ///   - The swap type is Submarine, which is not supported for claim signing.
+    ///   - The transaction kind is Refund, which is not applicable for signing a claim.
+    ///   - The preimage is not provided.
+    ///   - There are issues with the cooperative claim process, including errors with partial signatures or
+    ///     nonce generation.
+    ///
+    /// # Errors:
+    ///
+    /// The function may return errors if:
+    /// * The swap type is Submarine or Refund.
+    /// * The preimage is missing.
+    /// * There are issues with nonce generation, signature creation, or signature verification.
+    /// * The cooperative claim details are incomplete or invalid.
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// use some_crate::{BtcSwapTx, Keypair, Preimage, Cooperative, Error};
+    ///
+    /// // Example setup
+    /// let swap_tx = BtcSwapTx::new(...); // actual BtcSwapTx initialization
+    /// let keys = Keypair::new(); // actual keypair initialization
+    /// let preimage = Preimage::new(...); // actual preimage initialization
+    /// let absolute_fees = 1000; // actual fee amount
+    /// let cooperative = Some(Cooperative {
+    ///     boltz_api: ..., // actual Boltz API instance
+    ///     swap_id: "swap_id".to_string(),
+    ///     pub_nonce: Some("public_nonce".to_string()),
+    ///     partial_sig: Some("partial_signature".to_string()),
+    /// });
+    ///
+    /// match swap_tx.sign_claim(&keys, &preimage, absolute_fees, cooperative) {
+    ///     Ok(tx) => println!("Claim transaction signed: {:?}", tx),
+    ///     Err(e) => eprintln!("Error signing claim transaction: {:?}", e),
+    /// }
+    /// ```
     pub fn sign_claim(
         &self,
         keys: &Keypair,
@@ -786,8 +1318,62 @@ impl BtcSwapTx {
         Ok(claim_tx)
     }
 
-    /// Sign a refund transaction.
-    /// Errors if called for a Reverse Swap.
+    /// Signs a refund transaction for a swap.
+    ///
+    /// This function signs a refund transaction for a Bitcoin swap. It checks that the swap type is
+    /// appropriate for a refund and handles both cooperative and non-cooperative refund claims.
+    /// Errors are returned if the function is called for a Reverse Submarine Swap or if the transaction
+    /// type is Claim.
+    ///
+    /// **Note:** For cooperative refunds, the MuSig2 signing process involves multiple parties, and
+    /// both public and secret nonces are used to generate the final Schnorr signature. If not cooperative,
+    /// the script path spending is used for the refund.
+    ///
+    /// # Arguments:
+    ///
+    /// * `keys` - A reference to a [Keypair] containing the private key used for signing and the corresponding
+    ///   public key.
+    /// * `absolute_fees` - The absolute fee amount to be deducted from the UTXO value for the refund transaction.
+    /// * `is_cooperative` - An optional [Cooperative] struct containing details for a cooperative refund,
+    ///   including the API for Boltz and swap ID.
+    ///
+    /// # Returns:
+    ///
+    /// Returns a `Result` containing:
+    /// * `Ok(Transaction)` - The signed Bitcoin transaction if successful.
+    /// * `Err(Error)` - An error if:
+    ///   - The swap type is Reverse Submarine, which is not supported for refund signing.
+    ///   - The transaction type is Claim, which is not applicable for signing a refund.
+    ///   - There are issues with nonce generation, signature creation, or signature verification.
+    ///   - The cooperative refund details are incomplete or invalid.
+    ///
+    /// # Errors:
+    ///
+    /// The function may return errors if:
+    /// * The swap type is Reverse Submarine or the transaction type is Claim.
+    /// * There are issues extracting the timelock from the refund script or generating signatures.
+    /// * There are issues with the cooperative refund process, including errors with partial signatures or
+    ///   nonce generation.
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// use some_crate::{BtcSwapTx, Keypair, Error};
+    ///
+    /// // Example setup
+    /// let swap_tx = BtcSwapTx::new(...); // actual BtcSwapTx initialization
+    /// let keys = Keypair::new(); // actual keypair initialization
+    /// let absolute_fees = 1000; // actual fee amount
+    /// let cooperative = Some(Cooperative {
+    ///     boltz_api: ..., // actual Boltz API instance
+    ///     swap_id: "swap_id".to_string(),
+    /// });
+    ///
+    /// match swap_tx.sign_refund(&keys, absolute_fees, cooperative) {
+    ///     Ok(tx) => println!("Refund transaction signed: {:?}", tx),
+    ///     Err(e) => eprintln!("Error signing refund transaction: {:?}", e),
+    /// }
+    /// ```
     pub fn sign_refund(
         &self,
         keys: &Keypair,
@@ -1022,7 +1608,51 @@ impl BtcSwapTx {
         Ok(tx.vsize())
     }
 
-    /// Broadcast transaction to the network.
+    /// Broadcasts a signed transaction to the Bitcoin network.
+    ///
+    /// This function sends a transaction to the Bitcoin network using an Electrum client configured
+    /// with the provided network configuration. It handles the communication with the Electrum server
+    /// and returns the transaction ID (Txid) of the broadcasted transaction.
+    ///
+    /// **Note:** Ensure that the transaction is fully signed before broadcasting to avoid transaction
+    /// rejection or issues with incomplete signatures.
+    ///
+    /// # Arguments:
+    ///
+    /// * `signed_tx` - A reference to the [Transaction] object that has been signed and is ready to be
+    ///   broadcasted.
+    /// * `network_config` - A reference to [ElectrumConfig], which contains the configuration needed to
+    ///   create an Electrum client for broadcasting the transaction.
+    ///
+    /// # Returns:
+    ///
+    /// Returns a `Result` containing:
+    /// * `Ok(Txid)` - The transaction ID of the broadcasted transaction if successful.
+    /// * `Err(Error)` - An error if there are issues with:
+    ///   - Building the Electrum client.
+    ///   - Broadcasting the transaction through the Electrum client.
+    ///
+    /// # Errors:
+    ///
+    /// The function may return errors if:
+    /// * There are issues creating the Electrum client, such as network problems or configuration errors.
+    /// * The transaction broadcast fails due to connectivity issues or invalid transaction data.
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// use some_crate::{BtcSwapTx, Transaction, ElectrumConfig, Error};
+    ///
+    /// // Example setup
+    /// let swap_tx = BtcSwapTx::new(...); // actual BtcSwapTx initialization
+    /// let signed_tx = Transaction::new(...); // actual signed transaction
+    /// let network_config = ElectrumConfig::new(...); // actual ElectrumConfig
+    ///
+    /// match swap_tx.broadcast(&signed_tx, &network_config) {
+    ///     Ok(txid) => println!("Transaction broadcasted with Txid: {:?}", txid),
+    ///     Err(e) => eprintln!("Error broadcasting transaction: {:?}", e),
+    /// }
+    /// ```
     pub fn broadcast(
         &self,
         signed_tx: &Transaction,
