@@ -65,7 +65,8 @@ pub fn parse_bip21(uri: &str) -> Result<(String, String, bitcoin::Amount, Option
         let pair: Vec<&str> = param.split('=').collect();
         match pair[0] {
             "amount" => {
-                amount = match bitcoin::Amount::from_str_in(pair[1], bitcoin::Denomination::Bitcoin) {
+                amount = match bitcoin::Amount::from_str_in(pair[1], bitcoin::Denomination::Bitcoin)
+                {
                     Ok(r) => r,
                     Err(e) => {
                         return Err(Error::Generic(
