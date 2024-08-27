@@ -53,16 +53,16 @@ pub struct HeightResponse {
     pub lbtc: u32,
 }
 
-fn check_limits_within(maximal: u64, minimal: u64, output_amount: u64) -> Result<(), Error> {
-    if output_amount < minimal as u64 {
+fn check_limits_within(maximal: u64, minimal: u64, swap_amount: u64) -> Result<(), Error> {
+    if swap_amount < minimal as u64 {
         return Err(Error::Protocol(format!(
-            "Output amount is below minimum {}",
+            "Swap amount is below minimum {}",
             minimal
         )));
     }
-    if output_amount > maximal as u64 {
+    if swap_amount > maximal as u64 {
         return Err(Error::Protocol(format!(
-            "Output amount is above maximum {}",
+            "Swap amount is above maximum {}",
             maximal
         )));
     }
@@ -82,9 +82,9 @@ pub struct PairLimits {
 }
 
 impl PairLimits {
-    /// Check whether the output amount intended is within the Limits
-    pub fn within(&self, output_amount: u64) -> Result<(), Error> {
-        check_limits_within(self.maximal, self.minimal, output_amount)
+    /// Check whether the intended swap amount (input amount) is within the Limits
+    pub fn within(&self, swap_amount: u64) -> Result<(), Error> {
+        check_limits_within(self.maximal, self.minimal, swap_amount)
     }
 }
 
@@ -98,9 +98,9 @@ pub struct ReverseLimits {
 }
 
 impl ReverseLimits {
-    /// Check whether the output amount intended is within the Limits
-    pub fn within(&self, output_amount: u64) -> Result<(), Error> {
-        check_limits_within(self.maximal, self.minimal, output_amount)
+    /// Check whether the intended swap amount (input amount) is within the Limits
+    pub fn within(&self, swap_amount: u64) -> Result<(), Error> {
+        check_limits_within(self.maximal, self.minimal, swap_amount)
     }
 }
 
