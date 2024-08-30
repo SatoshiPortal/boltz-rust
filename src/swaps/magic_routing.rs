@@ -32,7 +32,7 @@ pub fn find_magic_routing_hint(invoice: &str) -> Result<Option<RouteHintHop>, Er
 }
 
 /// Parse a BIP21 String and get the network, address, asset_id if present
-pub fn parse_bip21(uri: &str) -> Result<(String, String, f64, Option<String>), Error> {
+pub fn parse_bip21(uri: &str) -> Result<(String, String, bitcoin::Amount, Option<String>), Error> {
     let parts: Vec<&str> = uri.split('?').collect();
 
     let (network_address, params) = (parts[0], parts[1]);
@@ -58,14 +58,15 @@ pub fn parse_bip21(uri: &str) -> Result<(String, String, f64, Option<String>), E
 
     // Parse URI parameters
     let params: Vec<&str> = params.split('&').collect();
-    let mut amount = 0f64;
+    let mut amount = bitcoin::Amount::from_sat(0);
     let mut assetid = None::<String>;
 
     for param in params {
         let pair: Vec<&str> = param.split('=').collect();
         match pair[0] {
             "amount" => {
-                amount = match f64::from_str(pair[1]) {
+                amount = match bitcoin::Amount::from_str_in(pair[1], bitcoin::Denomination::Bitcoin)
+                {
                     Ok(r) => r,
                     Err(e) => {
                         return Err(Error::Generic(
@@ -88,7 +89,7 @@ pub fn check_for_mrh(
     boltz_api_v2: &BoltzApiClientV2,
     invoice: &str,
     network: Chain,
-) -> Result<Option<(String, f64)>, Error> {
+) -> Result<Option<(String, bitcoin::Amount)>, Error> {
     if let Some(route_hint) = find_magic_routing_hint(&invoice)? {
         let mrh_resp = boltz_api_v2.get_mrh_bip21(&invoice)?;
 
@@ -144,11 +145,36 @@ fn test_bip21_parsing() {
 
     assert_eq!(network, "liquidtestnet");
     assert_eq!(address, "tlq1qqt3sgky7zert7237tred5rqmmx0eargp625zkyhr2ldw6yqdvh5fusnm5xk0qfjpejvgm37q7mqtv5epfksv78jweytmqgpd8");
-    assert_eq!(amount, 0.00005122);
+    assert_eq!(amount.to_btc(), 0.00005122);
     assert_eq!(
         assetid,
         Some("144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a4".to_string())
     );
+}
+
+/// BIP21 amounts which can lead to rounding errors when converting from BTC amount (f64) to sats (u64).
+/// The format is: (sat amount, BIP21 BTC amount)
+fn get_bip21_rounding_test_vectors() -> Vec<(u64, f64)> {
+    vec![
+        (999, 0.0000_0999),
+        (1_000, 0.0000_1000),
+        (59_810, 0.0005_9810),
+    ]
+}
+
+#[test]
+fn test_bip21_parsing_with_rounding_edge_cases() {
+    let liquid_address = "tlq1qqt3sgky7zert7237tred5rqmmx0eargp625zkyhr2ldw6yqdvh5fusnm5xk0qfjpejvgm37q7mqtv5epfksv78jweytmqgpd8";
+    let asset_id = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a4";
+
+    for (amount_sat, amount_btc) in get_bip21_rounding_test_vectors() {
+        let uri = format!("liquidtestnet:{liquid_address}?amount={amount_btc}&assetid={asset_id}");
+        let (_network, _address, bip21_amount, _assetid) = parse_bip21(&uri).unwrap();
+
+        let parsed_amount_sat = bip21_amount.to_sat();
+
+        assert_eq!(parsed_amount_sat, amount_sat);
+    }
 }
 
 #[test]
