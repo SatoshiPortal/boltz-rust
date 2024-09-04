@@ -439,19 +439,32 @@ impl LBtcSwapScript {
         network_config: &ElectrumConfig,
         boltz_url: &str,
         swap_id: &str,
+        tx_kind: SwapTxKind,
     ) -> Result<(OutPoint, TxOut), Error> {
         let boltz_client = BoltzApiClientV2::new(boltz_url);
         let hex = match self.swap_type {
-            SwapType::Chain => {
-                boltz_client
-                    .get_chain_txs(swap_id)?
-                    .user_lock
-                    .ok_or(Error::Protocol(
-                        "No user_lock transaction for Chain Swap available".to_string(),
-                    ))?
-                    .transaction
-                    .hex
-            }
+            SwapType::Chain => match tx_kind {
+                SwapTxKind::Claim => {
+                    boltz_client
+                        .get_chain_txs(swap_id)?
+                        .server_lock
+                        .ok_or(Error::Protocol(
+                            "No server_lock transaction for Chain Swap available".to_string(),
+                        ))?
+                        .transaction
+                        .hex
+                }
+                SwapTxKind::Refund => {
+                    boltz_client
+                        .get_chain_txs(swap_id)?
+                        .user_lock
+                        .ok_or(Error::Protocol(
+                            "No user_lock transaction for Chain Swap available".to_string(),
+                        ))?
+                        .transaction
+                        .hex
+                }
+            },
             SwapType::ReverseSubmarine => boltz_client.get_reverse_tx(swap_id)?.hex,
             SwapType::Submarine => boltz_client.get_submarine_tx(swap_id)?.hex,
         };
@@ -520,7 +533,12 @@ impl LBtcSwapTx {
 
         let (funding_outpoint, funding_utxo) = match swap_script.fetch_utxo(&network_config) {
             Ok(r) => r,
-            Err(_) => swap_script.fetch_lockup_utxo_boltz(&network_config, &boltz_url, &swap_id)?,
+            Err(_) => swap_script.fetch_lockup_utxo_boltz(
+                &network_config,
+                &boltz_url,
+                &swap_id,
+                SwapTxKind::Claim,
+            )?,
         };
 
         let electrum = network_config.build_client()?;
@@ -553,7 +571,12 @@ impl LBtcSwapTx {
         let address = Address::from_str(&output_address)?;
         let (funding_outpoint, funding_utxo) = match swap_script.fetch_utxo(&network_config) {
             Ok(r) => r,
-            Err(_) => swap_script.fetch_lockup_utxo_boltz(&network_config, &boltz_url, &swap_id)?,
+            Err(_) => swap_script.fetch_lockup_utxo_boltz(
+                &network_config,
+                &boltz_url,
+                &swap_id,
+                SwapTxKind::Refund,
+            )?,
         };
 
         let electrum = network_config.build_client()?;

@@ -5,7 +5,7 @@ use crate::error::Error;
 use super::Chain;
 
 pub const DEFAULT_TESTNET_NODE: &str = "electrum.blockstream.info:60002";
-pub const DEFAULT_MAINNET_NODE: &str = "electrum.blockstream.info:50002";
+pub const DEFAULT_MAINNET_NODE: &str = "wes.bullbitcoin.com:50002";
 pub const DEFAULT_LIQUID_TESTNET_NODE: &str = "blockstream.info:465";
 pub const DEFAULT_LIQUID_MAINNET_NODE: &str = "blockstream.info:995";
 pub const DEFAULT_ELECTRUM_TIMEOUT: u8 = 10;
@@ -146,11 +146,11 @@ mod tests {
 
     #[test]
     fn test_electrum_default_clients() {
-        let network_config = ElectrumConfig::default_bitcoin();
+        let network_config = ElectrumConfig::default(Chain::Bitcoin, None).unwrap();
         let electrum_client = network_config.build_client().unwrap();
         assert!(electrum_client.ping().is_ok());
 
-        let network_config = ElectrumConfig::default_liquid();
+        let network_config = ElectrumConfig::default(Chain::Liquid, None).unwrap();
         let electrum_client = network_config.build_client().unwrap();
         assert!(electrum_client.ping().is_ok());
     }
@@ -158,7 +158,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_raw_electrum_calls() {
-        let network_config = ElectrumConfig::default_bitcoin();
+        let network_config = ElectrumConfig::default(Chain::Liquid, None).unwrap();
         let electrum_client = network_config.build_client().unwrap();
         let numblocks = "blockchain.numblocks.subscribe";
         let blockheight = electrum_client.raw_call(numblocks, []).unwrap();
