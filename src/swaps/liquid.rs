@@ -429,7 +429,7 @@ impl LBtcSwapScript {
             vout += 1;
         }
         return Err(Error::Protocol(
-            "Electrum could not find utxos for script".to_string(),
+            "Electrum could not find a Liquid UTXO for script".to_string(),
         ));
     }
 
@@ -481,7 +481,7 @@ impl LBtcSwapScript {
             vout += 1;
         }
         return Err(Error::Protocol(
-            "Boltz could not find utxos for script".to_string(),
+            "Boltz could not find a Liquid UTXO for script".to_string(),
         ));
     }
 

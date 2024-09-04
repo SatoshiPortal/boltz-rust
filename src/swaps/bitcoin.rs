@@ -476,7 +476,7 @@ impl BtcSwapTx {
             })
         } else {
             Err(Error::Protocol(
-                "No utxos detected for this script".to_string(),
+                "No Bitcoin UTXO detected for this script".to_string(),
             ))
         }
     }
@@ -515,7 +515,7 @@ impl BtcSwapTx {
             })
         } else {
             Err(Error::Protocol(
-                "No utxos detected for this script".to_string(),
+                "No Bitcoin UTXO detected for this script".to_string(),
             ))
         }
     }
