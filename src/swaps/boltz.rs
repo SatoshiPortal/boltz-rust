@@ -1279,3 +1279,93 @@ pub struct GetFeeEstimationResponse {
     #[serde(rename = "L-BTC")]
     pub lbtc: f64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_fee_estimation() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let result = client.get_fee_estimation();
+        assert!(result.is_ok(), "Failed to get fee estimation");
+    }
+
+    #[test]
+    fn test_get_height() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let result = client.get_height();
+        assert!(result.is_ok(), "Failed to get height");
+    }
+
+    #[test]
+    fn test_get_submarine_pairs() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let result = client.get_submarine_pairs();
+        assert!(result.is_ok(), "Failed to get submarine pairs");
+    }
+
+    #[test]
+    fn test_get_reverse_pairs() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let result = client.get_reverse_pairs();
+        assert!(result.is_ok(), "Failed to get reverse pairs");
+    }
+
+    #[test]
+    fn test_get_chain_pairs() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let result = client.get_chain_pairs();
+        assert!(result.is_ok(), "Failed to get chain pairs");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_get_submarine_claim_tx_details() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let id = "G6c6GJJY8eXz".to_string();
+        let result = client.get_submarine_claim_tx_details(&id);
+        assert!(
+            result.is_ok(),
+            "Failed to get submarine claim transaction details"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_get_chain_claim_tx_details() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let id = "3BIJf8UqGaSC".to_string();
+        let result = client.get_chain_claim_tx_details(&id);
+        assert!(
+            result.is_ok(),
+            "Failed to get chain claim transaction details"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_get_reverse_tx() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let id = "G6c6GJJY8eXz";
+        let result = client.get_reverse_tx(id);
+        assert!(result.is_ok(), "Failed to get reverse transaction");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_get_submarine_tx() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let id = "G6c6GJJY8eXz";
+        let result = client.get_submarine_tx(id);
+        assert!(result.is_ok(), "Failed to get submarine transaction");
+    }
+
+    #[test]
+    fn test_get_chain_txs() {
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2);
+        let id = "G6c6GJJY8eXz";
+        let result = client.get_chain_txs(id);
+        assert!(result.is_ok(), "Failed to get chain transactions");
+    }
+}
