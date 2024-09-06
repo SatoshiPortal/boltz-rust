@@ -859,7 +859,7 @@ pub struct ChainSwapTx {
 #[serde(rename_all = "camelCase")]
 pub struct ChainSwapTxTimeout {
     pub block_height: u32,
-    pub eta: u32,
+    pub eta: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
