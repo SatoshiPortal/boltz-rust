@@ -146,6 +146,7 @@ mod tests {
 
     #[test]
     fn test_electrum_default_clients() {
+        // let network_config = ElectrumConfig::default(Chain::Bitcoin, None).unwrap();
         let network_config = ElectrumConfig::default(Chain::Bitcoin, None).unwrap();
         let electrum_client = network_config.build_client().unwrap();
         assert!(electrum_client.ping().is_ok());
@@ -155,6 +156,20 @@ mod tests {
         assert!(electrum_client.ping().is_ok());
     }
 
+    #[test]
+    #[ignore]
+    fn test_blockstream_electrum() {
+        // let network_config = ElectrumConfig::default(Chain::Bitcoin, None).unwrap();
+        let network_config = ElectrumConfig::default_bitcoin();
+
+        let electrum_client = network_config.build_client().unwrap();
+        print!("{:?}", electrum_client.block_header(1).unwrap());
+        assert!(electrum_client.ping().is_ok());
+
+        let network_config = ElectrumConfig::default_liquid();
+        let electrum_client = network_config.build_client().unwrap();
+        assert!(electrum_client.ping().is_ok());
+    }
     #[test]
     #[ignore]
     fn test_raw_electrum_calls() {

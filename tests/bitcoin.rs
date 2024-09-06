@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::Duration};
+use std::{mem::swap, str::FromStr, time::Duration};
 
 use boltz_client::{
     network::{electrum::ElectrumConfig, Chain},
@@ -68,7 +68,7 @@ fn bitcoin_v2_submarine() {
 
     let swap_script =
         BtcSwapScript::submarine_from_swap_resp(&create_swap_response, refund_public_key).unwrap();
-
+    let swap_id = create_swap_response.id.clone();
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
     // Subscribe to websocket updates
@@ -76,12 +76,14 @@ fn bitcoin_v2_submarine() {
 
     socket
         .send(tungstenite::Message::Text(
-            serde_json::to_string(&Subscription::new(&create_swap_response.id)).unwrap(),
+            serde_json::to_string(&Subscription::new(&swap_id.clone())).unwrap(),
         ))
         .unwrap();
 
     // Event handlers for various swap status.
     loop {
+        let swap_id = &swap_id.clone();
+
         let response = serde_json::from_str(&socket.read().unwrap().to_string());
 
         if response.is_err() {
@@ -97,10 +99,10 @@ fn bitcoin_v2_submarine() {
                 } => {
                     assert!(event == "subscribe");
                     assert!(channel == "swap.update");
-                    assert!(args.get(0).expect("expected") == &create_swap_response.id);
+                    assert!(args.get(0).expect("expected") == swap_id);
                     log::info!(
                         "Successfully subscribed for Swap updates. Swap ID : {}",
-                        create_swap_response.id
+                        swap_id
                     );
                 }
 
@@ -112,7 +114,7 @@ fn bitcoin_v2_submarine() {
                     assert!(event == "update");
                     assert!(channel == "swap.update");
                     let update = args.get(0).expect("expected");
-                    assert!(update.id == create_swap_response.id);
+                    assert!(update.id == swap_id.to_owned());
                     log::info!("Got Update from server: {}", update.status);
 
                     // Invoice is Set. Waiting for us to send onchain tx.
@@ -135,11 +137,13 @@ fn bitcoin_v2_submarine() {
                             swap_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_bitcoin(),
+                            BOLTZ_TESTNET_URL_V2.to_owned(),
+                            swap_id.to_owned(),
                         )
                         .expect("Funding UTXO not found");
 
                         let claim_tx_response = boltz_api_v2
-                            .get_submarine_claim_tx_details(&create_swap_response.id)
+                            .get_submarine_claim_tx_details(&swap_id)
                             .unwrap();
 
                         log::debug!("Received claim tx details : {:?}", claim_tx_response);
@@ -162,11 +166,7 @@ fn bitcoin_v2_submarine() {
                             )
                             .unwrap();
                         boltz_api_v2
-                            .post_submarine_claim_tx_details(
-                                &create_swap_response.id,
-                                pub_nonce,
-                                partial_sig,
-                            )
+                            .post_submarine_claim_tx_details(&swap_id, pub_nonce, partial_sig)
                             .unwrap();
                         log::info!("Successfully Sent partial signature");
                     }
@@ -185,6 +185,8 @@ fn bitcoin_v2_submarine() {
                             swap_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_bitcoin(),
+                            BOLTZ_TESTNET_URL_V2.to_owned(),
+                            swap_id.to_owned(),
                         )
                         .expect("Funding UTXO not found");
 
@@ -193,7 +195,7 @@ fn bitcoin_v2_submarine() {
                             1000,
                             Some(Cooperative {
                                 boltz_api: &boltz_api_v2,
-                                swap_id: create_swap_response.id.clone(),
+                                swap_id: swap_id.clone(),
                                 pub_nonce: None,
                                 partial_sig: None,
                             }),
@@ -284,11 +286,11 @@ fn bitcoin_v2_reverse() {
 
     let swap_script =
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
-
+    let swap_id = reverse_resp.id.clone();
     // Subscribe to wss status updates
     let mut socket = boltz_api_v2.connect_ws().unwrap();
 
-    let subscription = Subscription::new(&reverse_resp.id);
+    let subscription = Subscription::new(&swap_id);
 
     socket
         .send(tungstenite::Message::Text(
@@ -298,8 +300,8 @@ fn bitcoin_v2_reverse() {
 
     // Event handlers for various swap status.
     loop {
+        let swap_id = reverse_resp.id.clone();
         let response = serde_json::from_str(&socket.read().unwrap().to_string());
-
         if response.is_err() {
             if response.err().expect("expected").is_eof() {
                 continue;
@@ -313,8 +315,8 @@ fn bitcoin_v2_reverse() {
                 } => {
                     assert!(event == "subscribe");
                     assert!(channel == "swap.update");
-                    assert!(args.get(0).expect("expected") == &reverse_resp.id);
-                    log::info!("Subscription successful for swap : {}", &reverse_resp.id);
+                    assert!(args.get(0).expect("expected") == &swap_id);
+                    log::info!("Subscription successful for swap : {}", &swap_id);
                 }
 
                 SwapUpdate::Update {
@@ -325,7 +327,7 @@ fn bitcoin_v2_reverse() {
                     assert!(event == "update");
                     assert!(channel == "swap.update");
                     let update = args.get(0).expect("expected");
-                    assert!(&update.id == &reverse_resp.id);
+                    assert!(&update.id == &swap_id);
                     log::info!("Got Update from server: {}", update.status);
 
                     if update.status == "swap.created" {
@@ -342,6 +344,8 @@ fn bitcoin_v2_reverse() {
                             swap_script.clone(),
                             claim_address.clone(),
                             &ElectrumConfig::default_bitcoin(),
+                            BOLTZ_TESTNET_URL_V2.to_owned(),
+                            swap_id.clone(),
                         )
                         .expect("Funding tx expected");
 
@@ -352,7 +356,7 @@ fn bitcoin_v2_reverse() {
                                 1000,
                                 Some(Cooperative {
                                     boltz_api: &boltz_api_v2,
-                                    swap_id: reverse_resp.id.clone(),
+                                    swap_id: swap_id.clone(),
                                     pub_nonce: None,
                                     partial_sig: None,
                                 }),
@@ -423,7 +427,7 @@ fn bitcoin_v2_reverse_script_path() {
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
 
     let reverse_resp = boltz_api_v2.post_reverse_req(create_reverse_req).unwrap();
-
+    let swap_id = reverse_resp.id.clone();
     let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, Chain::BitcoinTestnet)
         .unwrap()
         .unwrap();
@@ -436,7 +440,7 @@ fn bitcoin_v2_reverse_script_path() {
     // Subscribe to wss status updates
     let mut socket = boltz_api_v2.connect_ws().unwrap();
 
-    let subscription = Subscription::new(&reverse_resp.id);
+    let subscription = Subscription::new(&swap_id.clone());
 
     socket
         .send(tungstenite::Message::Text(
@@ -446,6 +450,8 @@ fn bitcoin_v2_reverse_script_path() {
 
     // Event handlers for various swap status.
     loop {
+        let swap_id = reverse_resp.id.clone();
+
         let response = serde_json::from_str(&socket.read().unwrap().to_string());
 
         if response.is_err() {
@@ -461,8 +467,8 @@ fn bitcoin_v2_reverse_script_path() {
                 } => {
                     assert!(event == "subscribe");
                     assert!(channel == "swap.update");
-                    assert!(args.get(0).expect("expected") == &reverse_resp.id);
-                    log::info!("Subscription successful for swap : {}", &reverse_resp.id);
+                    assert!(args.get(0).expect("expected") == &swap_id);
+                    log::info!("Subscription successful for swap : {}", &swap_id);
                 }
 
                 SwapUpdate::Update {
@@ -473,7 +479,7 @@ fn bitcoin_v2_reverse_script_path() {
                     assert!(event == "update");
                     assert!(channel == "swap.update");
                     let update = args.get(0).expect("expected");
-                    assert!(&update.id == &reverse_resp.id);
+                    assert!(&update.id == &swap_id);
                     log::info!("Got Update from server: {}", update.status);
 
                     if update.status == "swap.created" {
@@ -490,6 +496,8 @@ fn bitcoin_v2_reverse_script_path() {
                             swap_script.clone(),
                             claim_address.clone(),
                             &ElectrumConfig::default_bitcoin(),
+                            BOLTZ_TESTNET_URL_V2.to_owned(),
+                            swap_id,
                         )
                         .expect("Funding tx expected");
 

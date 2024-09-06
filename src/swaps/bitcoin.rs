@@ -422,6 +422,59 @@ impl BtcSwapScript {
             Ok(Some((outpoint_0, txout)))
         }
     }
+
+    /// Fetch utxo for script from BoltzApi
+    pub fn fetch_lockup_utxo_boltz(
+        &self,
+        network_config: &ElectrumConfig,
+        boltz_url: &str,
+        swap_id: &str,
+        tx_kind: SwapTxKind,
+    ) -> Result<Option<(OutPoint, TxOut)>, Error> {
+        let boltz_client: BoltzApiClientV2 = BoltzApiClientV2::new(boltz_url);
+        let hex = match self.swap_type {
+            SwapType::Chain => match tx_kind {
+                SwapTxKind::Claim => {
+                    boltz_client
+                        .get_chain_txs(swap_id)?
+                        .server_lock
+                        .ok_or(Error::Protocol(
+                            "No server_lock transaction for Chain Swap available".to_string(),
+                        ))?
+                        .transaction
+                        .hex
+                }
+                SwapTxKind::Refund => {
+                    boltz_client
+                        .get_chain_txs(swap_id)?
+                        .user_lock
+                        .ok_or(Error::Protocol(
+                            "No user_lock transaction for Chain Swap available".to_string(),
+                        ))?
+                        .transaction
+                        .hex
+                }
+            },
+            SwapType::ReverseSubmarine => boltz_client.get_reverse_tx(swap_id)?.hex,
+            SwapType::Submarine => boltz_client.get_submarine_tx(swap_id)?.hex,
+        };
+        if (hex.is_none()) {
+            return Err(Error::Hex(
+                "No transaction hex found in boltz response".to_string(),
+            ));
+        }
+        let address = self.to_address(network_config.network())?;
+        let tx: Transaction = bitcoin::consensus::deserialize(&hex::decode(&hex.unwrap())?)?;
+        let mut vout = 0;
+        for output in tx.clone().output {
+            if output.script_pubkey == address.script_pubkey() {
+                let outpoint_0 = OutPoint::new(tx.txid(), vout);
+                return Ok(Some((outpoint_0, output)));
+            }
+            vout += 1;
+        }
+        return Ok(None);
+    }
 }
 
 pub fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
@@ -450,6 +503,8 @@ impl BtcSwapTx {
         swap_script: BtcSwapScript,
         claim_address: String,
         network_config: &ElectrumConfig,
+        boltz_url: String,
+        swap_id: String,
     ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::Submarine {
             return Err(Error::Protocol(
@@ -466,7 +521,15 @@ impl BtcSwapTx {
 
         address.is_valid_for_network(network);
 
-        let utxo_info = swap_script.fetch_utxo(network_config)?;
+        let utxo_info = match swap_script.fetch_utxo(&network_config) {
+            Ok(r) => r,
+            Err(_) => swap_script.fetch_lockup_utxo_boltz(
+                &network_config,
+                &boltz_url,
+                &swap_id,
+                SwapTxKind::Claim,
+            )?,
+        };
         if let Some(utxo) = utxo_info {
             Ok(BtcSwapTx {
                 kind: SwapTxKind::Claim,
@@ -487,6 +550,8 @@ impl BtcSwapTx {
         swap_script: BtcSwapScript,
         refund_address: &String,
         network_config: &ElectrumConfig,
+        boltz_url: String,
+        swap_id: String,
     ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
             return Err(Error::Protocol(
@@ -505,7 +570,16 @@ impl BtcSwapTx {
             return Err(Error::Address("Address validation failed".to_string()));
         };
 
-        let utxo_info = swap_script.fetch_utxo(network_config)?;
+        let utxo_info = match swap_script.fetch_utxo(&network_config) {
+            Ok(r) => r,
+            Err(_) => swap_script.fetch_lockup_utxo_boltz(
+                &network_config,
+                &boltz_url,
+                &swap_id,
+                SwapTxKind::Refund,
+            )?,
+        };
+
         if let Some(utxo) = utxo_info {
             Ok(BtcSwapTx {
                 kind: SwapTxKind::Refund,

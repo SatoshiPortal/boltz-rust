@@ -94,10 +94,12 @@ fn bitcoin_liquid_v2_chain() {
 
     socket
         .send(tungstenite::Message::Text(
-            serde_json::to_string(&Subscription::new(&create_chain_response.id)).unwrap(),
+            serde_json::to_string(&Subscription::new(&swap_id)).unwrap(),
         ))
         .unwrap();
     loop {
+        let swap_id = swap_id.clone();
+
         let response = serde_json::from_str(&socket.read().unwrap().to_string());
 
         if response.is_err() {
@@ -113,10 +115,10 @@ fn bitcoin_liquid_v2_chain() {
                 } => {
                     assert!(event == "subscribe");
                     assert!(channel == "swap.update");
-                    assert!(args.get(0).expect("expected") == &create_chain_response.id);
+                    assert!(args.get(0).expect("expected") == &swap_id);
                     log::info!(
                         "Successfully subscribed for Swap updates. Swap ID : {}",
-                        create_chain_response.id
+                        swap_id
                     );
                 }
 
@@ -161,6 +163,8 @@ fn bitcoin_liquid_v2_chain() {
                             lockup_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_bitcoin(),
+                            BOLTZ_TESTNET_URL_V2.to_owned(),
+                            swap_id.clone(),
                         )
                         .unwrap();
                         let claim_tx_response =
@@ -206,6 +210,8 @@ fn bitcoin_liquid_v2_chain() {
                             lockup_script.clone(),
                             &refund_address,
                             &ElectrumConfig::default_bitcoin(),
+                            BOLTZ_TESTNET_URL_V2.to_owned(),
+                            swap_id.clone(),
                         )
                         .unwrap();
                         let tx = refund_tx
@@ -329,7 +335,7 @@ fn liquid_bitcoin_v2_chain() {
 
     socket
         .send(tungstenite::Message::Text(
-            serde_json::to_string(&Subscription::new(&create_chain_response.id)).unwrap(),
+            serde_json::to_string(&Subscription::new(&swap_id)).unwrap(),
         ))
         .unwrap();
     loop {
@@ -348,10 +354,10 @@ fn liquid_bitcoin_v2_chain() {
                 } => {
                     assert!(event == "subscribe");
                     assert!(channel == "swap.update");
-                    assert!(args.get(0).expect("expected") == &create_chain_response.id);
+                    assert!(args.get(0).expect("expected") == &swap_id);
                     log::info!(
                         "Successfully subscribed for Swap updates. Swap ID : {}",
-                        create_chain_response.id
+                        swap_id
                     );
                 }
 
@@ -388,6 +394,8 @@ fn liquid_bitcoin_v2_chain() {
                             claim_script.clone(),
                             claim_address.clone(),
                             &ElectrumConfig::default_bitcoin(),
+                            BOLTZ_TESTNET_URL_V2.to_owned(),
+                            swap_id.clone(),
                         )
                         .unwrap();
                         let refund_tx = LBtcSwapTx::new_refund(
