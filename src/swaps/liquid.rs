@@ -468,9 +468,13 @@ impl LBtcSwapScript {
             SwapType::ReverseSubmarine => boltz_client.get_reverse_tx(swap_id)?.hex,
             SwapType::Submarine => boltz_client.get_submarine_tx(swap_id)?.hex,
         };
-
+        if (hex.is_none()) {
+            return Err(Error::Hex(
+                "No transaction hex found in boltz response".to_string(),
+            ));
+        }
         let address = self.to_address(network_config.network())?;
-        let tx: Transaction = elements::encode::deserialize(&hex::decode(&hex)?)?;
+        let tx: Transaction = elements::encode::deserialize(&hex::decode(&hex.unwrap())?)?;
         let mut vout = 0;
         for output in tx.clone().output {
             if output.script_pubkey == address.script_pubkey() {

@@ -621,9 +621,11 @@ pub struct CreateSubmarineResponse {
     pub claim_public_key: PublicKey,
     pub expected_amount: u64,
     pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
     pub swap_tree: SwapTree,
     pub timeout_block_height: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub blinding_key: Option<String>,
 }
 impl CreateSubmarineResponse {
@@ -721,6 +723,7 @@ pub struct CreateReverseResponse {
     pub refund_public_key: PublicKey,
     pub timeout_block_height: u32,
     pub onchain_amount: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub blinding_key: Option<String>,
 }
 impl CreateReverseResponse {
@@ -772,9 +775,13 @@ pub struct ChainSwapDetails {
     pub server_public_key: PublicKey,
     pub timeout_block_height: u32,
     pub amount: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub blinding_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub claim_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bip21: Option<String>,
 }
 
@@ -852,13 +859,15 @@ impl CreateChainResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ChainSwapTx {
     pub id: String,
-    pub hex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hex: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainSwapTxTimeout {
     pub block_height: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub eta: Option<u32>,
 }
 
@@ -872,7 +881,9 @@ pub struct ChainSwapTxLock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainSwapTxResp {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub user_lock: Option<ChainSwapTxLock>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub server_lock: Option<ChainSwapTxLock>,
 }
 
@@ -880,7 +891,8 @@ pub struct ChainSwapTxResp {
 #[serde(rename_all = "camelCase")]
 pub struct ReverseSwapTxResp {
     pub id: String,
-    pub hex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hex: Option<String>,
     pub timeout_block_height: u32,
 }
 
@@ -888,9 +900,12 @@ pub struct ReverseSwapTxResp {
 #[serde(rename_all = "camelCase")]
 pub struct SubmarineSwapTxResp {
     pub id: String,
-    pub hex: String,
-    pub timeout_block_height: u32,
-    pub timeout_eta: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_block_height: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_eta: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -928,7 +943,9 @@ pub struct SwapUpdateTxDetails {
 pub struct Update {
     pub id: String,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction: Option<SwapUpdateTxDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub zero_conf_rejected: Option<bool>,
 }
 
