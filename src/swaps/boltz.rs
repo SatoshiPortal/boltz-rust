@@ -311,6 +311,7 @@ impl GetChainPairsResponse {
 }
 
 /// Reference Documnetation: https://api.boltz.exchange/swagger
+#[derive(Debug, Clone)]
 pub struct BoltzApiClientV2 {
     base_url: String,
 }
@@ -923,6 +924,7 @@ pub struct ToSign {
     pub index: u32,
 }
 
+#[derive(Debug, Clone)]
 pub struct Cooperative<'a> {
     pub boltz_api: &'a BoltzApiClientV2,
     pub swap_id: String,
