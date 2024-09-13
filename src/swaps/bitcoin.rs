@@ -400,27 +400,36 @@ impl BtcSwapScript {
         Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
 
-    /// Fetch (utxo,amount) pair for the script_pubkey of this swap.
-    /// Returns None if no utxo for the script_pubkey is found.
+    /// Fetch (utxo,amount) pairs for all utxos of the script_pubkey of this swap.
+    pub fn fetch_utxos(
+        &self,
+        network_config: &ElectrumConfig,
+    ) -> Result<Vec<(OutPoint, TxOut)>, Error> {
+        let electrum_client = network_config.build_client()?;
+        let spk = self.to_address(network_config.network())?.script_pubkey();
+        let utxos = electrum_client.script_list_unspent(spk.as_script())?;
+        let utxo_pairs = utxos
+            .iter()
+            .map(|unspent| {
+                let outpoint = OutPoint::new(unspent.tx_hash, unspent.tx_pos as u32);
+                let txout = TxOut {
+                    script_pubkey: spk.clone(),
+                    value: Amount::from_sat(unspent.value),
+                };
+                (outpoint, txout)
+            })
+            .collect();
+        Ok(utxo_pairs)
+    }
+
+    /// Fetch the first (utxo,amount) pair for the script_pubkey of this swap, which is typically
+    /// the lockup utxo. Returns None if no utxo for the script_pubkey is found.
     pub fn fetch_utxo(
         &self,
         network_config: &ElectrumConfig,
     ) -> Result<Option<(OutPoint, TxOut)>, Error> {
-        let electrum_client = network_config.build_client()?;
-        let spk = self.to_address(network_config.network())?.script_pubkey();
-        let utxos = electrum_client.script_list_unspent(spk.as_script())?;
-
-        if utxos.len() == 0 {
-            // No utxo found. Return None.
-            return Ok(None);
-        } else {
-            let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
-            let txout = TxOut {
-                script_pubkey: spk,
-                value: Amount::from_sat(utxos[0].value),
-            };
-            Ok(Some((outpoint_0, txout)))
-        }
+        let utxo_pairs = self.fetch_utxos(network_config)?;
+        Ok(utxo_pairs.first().cloned())
     }
 
     /// Fetch utxo for script from BoltzApi
@@ -491,8 +500,14 @@ pub struct BtcSwapTx {
     pub kind: SwapTxKind, // These fields needs to be public to do manual creation in IT.
     pub swap_script: BtcSwapScript,
     pub output_address: Address,
-    // The HTLC utxo in (Outpoint, Amount) Pair
+    /// The first utxo for the script_pubkey, in (Outpoint, Amount) format
     pub utxo: (OutPoint, TxOut),
+
+    /// All utxos for the script_pubkey of this swap:
+    /// - the initial lockup utxo, if not yet refunded claimed or refunded
+    ///     TODO: how to reflect this in utxo field above? Optional?
+    /// - any further utxos, if not yet refunded
+    pub utxos: Vec<(OutPoint, TxOut)>,
 }
 
 impl BtcSwapTx {
@@ -534,7 +549,8 @@ impl BtcSwapTx {
                 kind: SwapTxKind::Claim,
                 swap_script,
                 output_address: address.assume_checked(),
-                utxo,
+                utxo: utxo.clone(),
+                utxos: vec![utxo], // When claiming, we only consider the first utxo
             })
         } else {
             Err(Error::Protocol(
@@ -569,6 +585,7 @@ impl BtcSwapTx {
             return Err(Error::Address("Address validation failed".to_string()));
         };
 
+        let utxo_infos = swap_script.fetch_utxos(&network_config)?;
         let utxo_info = match swap_script.fetch_utxo(&network_config) {
             Ok(r) => r,
             Err(_) => swap_script.fetch_lockup_utxo_boltz(
@@ -585,6 +602,7 @@ impl BtcSwapTx {
                 swap_script,
                 output_address: address.assume_checked(),
                 utxo,
+                utxos: utxo_infos,
             })
         } else {
             Err(Error::Protocol(
@@ -885,18 +903,26 @@ impl BtcSwapTx {
         //     script_sig: ScriptBuf::new(),
         //     witness: Witness::new(),
         // };
-        let output_amount: Amount = Amount::from_sat(self.utxo.1.value.to_sat() - absolute_fees);
+        let utxos_amount = self
+            .utxos
+            .iter()
+            .fold(Amount::ZERO, |acc, (_, txo)| acc + txo.value);
+        let output_amount: Amount = utxos_amount - Amount::from_sat(absolute_fees);
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
             value: output_amount,
         };
 
-        let input = TxIn {
-            previous_output: self.utxo.0,
-            script_sig: ScriptBuf::new(),
-            sequence: Sequence::MAX,
-            witness: Witness::new(),
-        };
+        let inputs = self
+            .utxos
+            .iter()
+            .map(|(outpoint, _txo)| TxIn {
+                previous_output: outpoint.clone(),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::MAX,
+                witness: Witness::new(),
+            })
+            .collect();
 
         let lock_time = match self
             .swap_script
@@ -929,7 +955,7 @@ impl BtcSwapTx {
         let mut refund_tx = Transaction {
             version: Version::TWO,
             lock_time,
-            input: vec![input],
+            input: inputs,
             output: vec![output],
         };
 
