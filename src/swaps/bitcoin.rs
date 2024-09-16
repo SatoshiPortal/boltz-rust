@@ -500,13 +500,9 @@ pub struct BtcSwapTx {
     pub kind: SwapTxKind, // These fields needs to be public to do manual creation in IT.
     pub swap_script: BtcSwapScript,
     pub output_address: Address,
-    /// The first utxo for the script_pubkey, in (Outpoint, Amount) format
-    pub utxo: (OutPoint, TxOut),
-
-    /// All utxos for the script_pubkey of this swap:
-    /// - the initial lockup utxo, if not yet refunded claimed or refunded
-    ///     TODO: how to reflect this in utxo field above? Optional?
-    /// - any further utxos, if not yet refunded
+    /// All utxos for the script_pubkey of this swap, at this point in time:
+    /// - the initial lockup utxo, if not yet spent (claimed or refunded)
+    /// - any further utxos, if not yet spent
     pub utxos: Vec<(OutPoint, TxOut)>,
 }
 
@@ -549,7 +545,6 @@ impl BtcSwapTx {
                 kind: SwapTxKind::Claim,
                 swap_script,
                 output_address: address.assume_checked(),
-                utxo: utxo.clone(),
                 utxos: vec![utxo], // When claiming, we only consider the first utxo
             })
         } else {
@@ -585,29 +580,34 @@ impl BtcSwapTx {
             return Err(Error::Address("Address validation failed".to_string()));
         };
 
-        let utxo_infos = swap_script.fetch_utxos(&network_config)?;
-        let utxo_info = match swap_script.fetch_utxo(&network_config) {
-            Ok(r) => r,
-            Err(_) => swap_script.fetch_lockup_utxo_boltz(
-                &network_config,
-                &boltz_url,
-                &swap_id,
-                SwapTxKind::Refund,
-            )?,
+        let utxos_temp = swap_script.fetch_utxos(&network_config)?;
+        let utxos_final = match utxos_temp.is_empty() {
+            true => {
+                let lockup_utxo_info = swap_script.fetch_lockup_utxo_boltz(
+                    &network_config,
+                    &boltz_url,
+                    &swap_id,
+                    SwapTxKind::Refund,
+                )?;
+
+                match lockup_utxo_info {
+                    Some(r) => vec![r],
+                    None => vec![],
+                }
+            }
+            false => utxos_temp,
         };
 
-        if let Some(utxo) = utxo_info {
-            Ok(BtcSwapTx {
+        match utxos_final.is_empty() {
+            true => Err(Error::Protocol(
+                "No Bitcoin UTXO detected for this script".to_string(),
+            )),
+            false => Ok(BtcSwapTx {
                 kind: SwapTxKind::Refund,
                 swap_script,
                 output_address: address.assume_checked(),
-                utxo,
-                utxos: utxo_infos,
-            })
-        } else {
-            Err(Error::Protocol(
-                "No Bitcoin UTXO detected for this script".to_string(),
-            ))
+                utxos: utxos_final,
+            }),
         }
     }
 
@@ -692,8 +692,12 @@ impl BtcSwapTx {
             )));
         };
 
+        // For claim, we only consider 1 utxo
+        let utxo = self.utxos.first().ok_or(Error::Protocol(
+            "No Bitcoin UTXO detected for this script".to_string(),
+        ))?;
         let txin = TxIn {
-            previous_output: self.utxo.0,
+            previous_output: utxo.0,
             sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
@@ -703,7 +707,7 @@ impl BtcSwapTx {
 
         let txout = TxOut {
             script_pubkey: destination_spk,
-            value: Amount::from_sat(self.utxo.1.value.to_sat() - absolute_fees),
+            value: Amount::from_sat(utxo.1.value.to_sat() - absolute_fees),
         };
 
         let mut claim_tx = Transaction {
@@ -728,7 +732,7 @@ impl BtcSwapTx {
             let claim_tx_taproot_hash = SighashCache::new(claim_tx.clone())
                 .taproot_key_spend_signature_hash(
                     0,
-                    &Prevouts::All(&[&self.utxo.1]),
+                    &Prevouts::All(&[&utxo.1]),
                     bitcoin::TapSighashType::Default,
                 )?;
 
@@ -844,7 +848,7 @@ impl BtcSwapTx {
 
             let sighash = SighashCache::new(claim_tx.clone()).taproot_script_spend_signature_hash(
                 0,
-                &Prevouts::All(&[&self.utxo.1]),
+                &Prevouts::All(&[&utxo.1]),
                 leaf_hash,
                 TapSighashType::Default,
             )?;
@@ -897,33 +901,6 @@ impl BtcSwapTx {
             ));
         }
 
-        // let unsigned_input: TxIn = TxIn {
-        //     sequence: Sequence::ZERO, // enables absolute locktime
-        //     previous_output: self.utxo.0,
-        //     script_sig: ScriptBuf::new(),
-        //     witness: Witness::new(),
-        // };
-        let utxos_amount = self
-            .utxos
-            .iter()
-            .fold(Amount::ZERO, |acc, (_, txo)| acc + txo.value);
-        let output_amount: Amount = utxos_amount - Amount::from_sat(absolute_fees);
-        let output: TxOut = TxOut {
-            script_pubkey: self.output_address.script_pubkey(),
-            value: output_amount,
-        };
-
-        let inputs = self
-            .utxos
-            .iter()
-            .map(|(outpoint, _txo)| TxIn {
-                previous_output: outpoint.clone(),
-                script_sig: ScriptBuf::new(),
-                sequence: Sequence::MAX,
-                witness: Witness::new(),
-            })
-            .collect();
-
         let lock_time = match self
             .swap_script
             .refund_script()
@@ -952,27 +929,56 @@ impl BtcSwapTx {
             }
         };
 
-        let mut refund_tx = Transaction {
-            version: Version::TWO,
-            lock_time,
-            input: inputs,
-            output: vec![output],
+        let build_refund_tx_from_utxos = |utxos: &Vec<(OutPoint, TxOut)>| {
+            let utxos_amount = utxos
+                .iter()
+                .fold(Amount::ZERO, |acc, (_, txo)| acc + txo.value);
+            let output_amount: Amount = utxos_amount - Amount::from_sat(absolute_fees);
+            let output: TxOut = TxOut {
+                script_pubkey: self.output_address.script_pubkey(),
+                value: output_amount,
+            };
+
+            let unsigned_inputs = self
+                .utxos
+                .iter()
+                .map(|(outpoint, _txo)| TxIn {
+                    previous_output: outpoint.clone(),
+                    script_sig: ScriptBuf::new(),
+                    sequence: Sequence::MAX,
+                    witness: Witness::new(),
+                })
+                .collect();
+
+            Transaction {
+                version: Version::TWO,
+                lock_time,
+                input: unsigned_inputs,
+                output: vec![output],
+            }
         };
 
         let secp = Secp256k1::new();
 
-        if let Some(Cooperative {
+        let refund_tx = if let Some(Cooperative {
             boltz_api, swap_id, ..
         }) = is_cooperative
         {
             // Start the Musig session
-            refund_tx.lock_time = LockTime::ZERO; // No locktime for cooperative spend
+
+            // For cooperative refund, we only consider 1 utxo (the first)
+            let utxo = self.utxos.first().cloned().ok_or(Error::Protocol(
+                "No Bitcoin UTXO detected for this script".to_string(),
+            ))?;
+            let mut refund_tx_cooperative = build_refund_tx_from_utxos(&vec![utxo.clone()]);
+
+            refund_tx_cooperative.lock_time = LockTime::ZERO; // No locktime for cooperative spend
 
             // Step 1: Get the sighash
-            let refund_tx_taproot_hash = SighashCache::new(refund_tx.clone())
+            let refund_tx_taproot_hash = SighashCache::new(refund_tx_cooperative.clone())
                 .taproot_key_spend_signature_hash(
                     0,
-                    &Prevouts::All(&[&self.utxo.1]),
+                    &Prevouts::All(&[&utxo.1]),
                     bitcoin::TapSighashType::Default,
                 )?;
 
@@ -1005,7 +1011,7 @@ impl BtcSwapTx {
             )?;
 
             // Step 7: Get boltz's partial sig
-            let refund_tx_hex = serialize(&refund_tx).to_lower_hex_string();
+            let refund_tx_hex = serialize(&refund_tx_cooperative).to_lower_hex_string();
             let partial_sig_resp = match self.swap_script.swap_type {
                 SwapType::Chain => {
                     boltz_api.get_chain_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)
@@ -1062,30 +1068,14 @@ impl BtcSwapTx {
 
             let mut witness = Witness::new();
             witness.push(final_schnorr_sig.to_vec());
+            refund_tx_cooperative.input[0].witness = witness;
 
-            refund_tx.input[0].witness = witness;
+            refund_tx_cooperative
         } else {
-            refund_tx.input[0].sequence = Sequence::ZERO;
+            let mut refund_tx_non_cooperative = build_refund_tx_from_utxos(&self.utxos);
 
             let leaf_hash =
                 TapLeafHash::from_script(&self.swap_script.refund_script(), LeafVersion::TapScript);
-
-            let sighash = SighashCache::new(refund_tx.clone())
-                .taproot_script_spend_signature_hash(
-                    0,
-                    &Prevouts::All(&[&self.utxo.1]),
-                    leaf_hash,
-                    TapSighashType::Default,
-                )?;
-
-            let msg = Message::from_digest_slice(sighash.as_byte_array())?;
-
-            let sig = Secp256k1::new().sign_schnorr(&msg, &keys);
-
-            let final_sig = Signature {
-                sig,
-                hash_ty: TapSighashType::Default,
-            };
 
             let control_block = self
                 .swap_script
@@ -1094,16 +1084,39 @@ impl BtcSwapTx {
                     self.swap_script.refund_script().clone(),
                     LeafVersion::TapScript,
                 ))
-                .expect("Control block calculation failed");
+                .ok_or(Error::Protocol(
+                    "Control block calculation failed".to_string(),
+                ))?;
 
-            let mut witness = Witness::new();
+            for input_index in 0..refund_tx_non_cooperative.input.len() {
+                refund_tx_non_cooperative.input[input_index].sequence = Sequence::ZERO;
 
-            witness.push(final_sig.to_vec());
-            witness.push(self.swap_script.refund_script().as_bytes());
-            witness.push(control_block.serialize());
+                let sighash = SighashCache::new(refund_tx_non_cooperative.clone())
+                    .taproot_script_spend_signature_hash(
+                        input_index,
+                        &Prevouts::All(&[&self.utxos[input_index].1]),
+                        leaf_hash,
+                        TapSighashType::Default,
+                    )?;
 
-            refund_tx.input[0].witness = witness;
-        }
+                let msg = Message::from_digest_slice(sighash.as_byte_array())?;
+
+                let sig = Secp256k1::new().sign_schnorr(&msg, &keys);
+
+                let final_sig = Signature {
+                    sig,
+                    hash_ty: TapSighashType::Default,
+                };
+
+                let mut witness = Witness::new();
+                witness.push(final_sig.to_vec());
+                witness.push(self.swap_script.refund_script().as_bytes());
+                witness.push(control_block.serialize());
+                refund_tx_non_cooperative.input[input_index].witness = witness;
+            }
+
+            refund_tx_non_cooperative
+        };
 
         Ok(refund_tx)
     }
