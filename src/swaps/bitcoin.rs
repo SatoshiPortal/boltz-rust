@@ -995,12 +995,18 @@ impl BtcSwapTx {
                 // Step 7: Get boltz's partial sig
                 let refund_tx_hex = serialize(&refund_tx).to_lower_hex_string();
                 let partial_sig_resp = match self.swap_script.swap_type {
-                    SwapType::Chain => {
-                        boltz_api.get_chain_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)
-                    }
-                    SwapType::Submarine => {
-                        boltz_api.get_submarine_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)
-                    }
+                    SwapType::Chain => boltz_api.get_chain_partial_sig(
+                        &swap_id,
+                        input_index,
+                        &pub_nonce,
+                        &refund_tx_hex,
+                    ),
+                    SwapType::Submarine => boltz_api.get_submarine_partial_sig(
+                        &swap_id,
+                        input_index,
+                        &pub_nonce,
+                        &refund_tx_hex,
+                    ),
                     _ => Err(Error::Protocol(format!(
                         "Cannot get partial sig for {:?} Swap",
                         self.swap_script.swap_type
