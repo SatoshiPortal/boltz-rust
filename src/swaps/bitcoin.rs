@@ -570,9 +570,9 @@ impl BtcSwapTx {
             return Err(Error::Address("Address validation failed".to_string()));
         };
 
-        let utxos_temp = swap_script.fetch_utxos(&network_config)?;
-        let utxos_final = match utxos_temp.is_empty() {
-            true => {
+        let utxos = match swap_script.fetch_utxos(&network_config) {
+            Ok(r) => r,
+            Err(_) => {
                 let lockup_utxo_info = swap_script.fetch_lockup_utxo_boltz(
                     &network_config,
                     &boltz_url,
@@ -585,10 +585,9 @@ impl BtcSwapTx {
                     None => vec![],
                 }
             }
-            false => utxos_temp,
         };
 
-        match utxos_final.is_empty() {
+        match utxos.is_empty() {
             true => Err(Error::Protocol(
                 "No Bitcoin UTXO detected for this script".to_string(),
             )),
@@ -596,7 +595,7 @@ impl BtcSwapTx {
                 kind: SwapTxKind::Refund,
                 swap_script,
                 output_address: address.assume_checked(),
-                utxos: utxos_final,
+                utxos,
             }),
         }
     }
