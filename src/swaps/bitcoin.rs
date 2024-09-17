@@ -422,16 +422,6 @@ impl BtcSwapScript {
         Ok(utxo_pairs)
     }
 
-    /// Fetch the first (utxo,amount) pair for the script_pubkey of this swap, which is typically
-    /// the lockup utxo. Returns None if no utxo for the script_pubkey is found.
-    pub fn fetch_utxo(
-        &self,
-        network_config: &ElectrumConfig,
-    ) -> Result<Option<(OutPoint, TxOut)>, Error> {
-        let utxo_pairs = self.fetch_utxos(network_config)?;
-        Ok(utxo_pairs.first().cloned())
-    }
-
     /// Fetch utxo for script from BoltzApi
     pub fn fetch_lockup_utxo_boltz(
         &self,
@@ -531,8 +521,8 @@ impl BtcSwapTx {
 
         address.is_valid_for_network(network);
 
-        let utxo_info = match swap_script.fetch_utxo(&network_config) {
-            Ok(r) => r,
+        let utxo_info = match swap_script.fetch_utxos(&network_config) {
+            Ok(v) => v.first().cloned(),
             Err(_) => swap_script.fetch_lockup_utxo_boltz(
                 &network_config,
                 &boltz_url,
