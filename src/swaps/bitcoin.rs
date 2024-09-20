@@ -1086,7 +1086,7 @@ impl BtcSwapTx {
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
     pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, Error> {
-        let dummy_abs_fee = 5_000;
+        let dummy_abs_fee = 0;
         // Can only calculate non-coperative claims
         let tx = match self.kind {
             SwapTxKind::Claim => self.sign_claim(keys, preimage, dummy_abs_fee, None)?,
