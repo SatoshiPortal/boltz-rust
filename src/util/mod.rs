@@ -9,6 +9,7 @@ use crate::{error::Error, network::electrum::ElectrumConfig};
 
 pub mod ec;
 pub mod secrets;
+mod lnurl;
 
 /// Setup function that will only run once, even if called multiple times.
 
