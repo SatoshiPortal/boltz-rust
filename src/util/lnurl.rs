@@ -55,5 +55,8 @@ mod tests {
 
         test_lnurl_case(lowercase_lnurl, amount_msats);
         test_lnurl_case(&uppercase_lnurl, amount_msats);
+
+        let email_lnurl = "drunksteel17@walletofsatoshi.com";
+        test_lnurl_case(email_lnurl, amount_msats);
     }
 }
