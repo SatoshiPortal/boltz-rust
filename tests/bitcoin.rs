@@ -37,7 +37,7 @@ fn bitcoin_v2_submarine() {
     };
 
     // Set a new invoice string and refund address for each test.
-    let invoice = "lntb510u1pnpuwgxpp5arh2aw92wv5vxmndm0704zu2qhj6k8xhg38dlylt2atcc3vcs88qdqgdverzvm2xqyjw5qcqp2sp52vgwm4s6pc2q38hxrma9h4ycgtn4kzaq0we0d4mjtq030fu6zsfqrzjq2gyp9za7vc7vd8m59fvu63pu00u4pak35n4upuv4mhyw5l586dvkf6vkyqq20gqqqqqqqqpqqqqqzsqqc9qyyssq6frgq8gly29thefxg83y57hv564npas5dqc0cslml2q3cj0usrdptqa5p2el3df0c0xc6raxnty06m745l87v4qausuq9xh0wj2x57cpxsxxcz".to_string();
+    let invoice = "lntb5125180n1pnwmtnvpp5rt2ptzc4329nr8f9qnaeg8nszs2w40rr922wnqe6uw6rt6sfz0escqpjsp5lcvu233r6wmd6tvqvpnwpe97tjwzh0kygtjz9htw2y7j6h5grgkq9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwfn3p9278ttzzpe0e00uhyxhned3j5d9acqak5emwfpflp8z2cnflctr6qq3f9n3gqqqqlgqqqqqeqqjqmrtu79yvjazp5tcn6nscf27arhevexq64yd0jjmkc8hxlqkh5ywzwk209xvmf484uutvjqv5rtgq0aulm9e4al72wwljm97a3vdcgxcq4vcmxq".to_string();
     let refund_address = "tb1qq20a7gqewc0un9mxxlqyqwn7ut7zjrj9y3d0mu".to_string();
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_TESTNET_URL_V2);
