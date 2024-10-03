@@ -8,6 +8,7 @@ use lightning_invoice::{Bolt11Invoice, RouteHintHop};
 use crate::{error::Error, network::electrum::ElectrumConfig};
 
 pub mod ec;
+mod lnurl;
 pub mod secrets;
 
 /// Setup function that will only run once, even if called multiple times.
