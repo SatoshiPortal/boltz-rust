@@ -4,16 +4,24 @@ use lnurl::lightning_address::LightningAddress;
 use lnurl::{lnurl::LnUrl, Builder, LnUrlResponse};
 use std::str::FromStr;
 
+pub fn validate_lnurl(string: &str) -> bool {
+    let string = string.to_lowercase();
+    match LnUrl::from_str(&string) {
+        Ok(lnurl) => true,
+        Err(_) => match LightningAddress::from_str(&string) {
+            Ok(lightning_address) => true,
+            Err(_) => false,
+        },
+    }
+}
+
 pub fn fetch_invoice(address: &str, amount_msats: u64) -> Result<String, Error> {
-    let lnurl = match LnUrl::from_str(address) {
+    let address = address.to_lowercase();
+    let lnurl = match LnUrl::from_str(&address) {
         Ok(lnurl) => lnurl,
-        Err(_) => match LightningAddress::from_str(address) {
+        Err(_) => match LightningAddress::from_str(&address) {
             Ok(lightning_address) => lightning_address.lnurl(),
-            Err(_) => {
-                return Err(Error::Generic(
-                    "Not a valude LnUrl or LnAddress".to_string(),
-                ))
-            }
+            Err(_) => return Err(Error::Generic("Not a valid LnUrl or LnAddress".to_string())),
         },
     };
 
@@ -21,7 +29,7 @@ pub fn fetch_invoice(address: &str, amount_msats: u64) -> Result<String, Error> 
         .build_blocking()
         .map_err(|e| Error::Generic(e.to_string()))?;
     let res = client
-        .make_request(&lnurl.url.to_lowercase())
+        .make_request(&lnurl.url)
         .map_err(|e| Error::HTTP(e.to_string()))?;
 
     match res {
@@ -71,11 +79,12 @@ mod tests {
         let amount_msats = 100000;
         let lnurl = "lnurl1dp68gurn8ghj7um9wfmxjcm99e3k7mf0v9cxj0m385ekvcenxc6r2c35xvukxefcv5mkvv34x5ekzd3ev56nyd3hxqurzepexejxxepnxscrvwfnv9nxzcn9xq6xyefhvgcxxcmyxymnserxfq5fns";
         let uppercase_lnurl = lnurl.to_uppercase();
-
+        assert!(validate_lnurl(lnurl));
         test_address(lnurl, amount_msats, "LNURL");
         test_address(&uppercase_lnurl, amount_msats, "LNURL");
 
         let email_lnurl = "drunksteel17@walletofsatoshi.com";
+        assert!(validate_lnurl(email_lnurl));
         test_address(email_lnurl, amount_msats, "Lightning Address");
     }
 }
