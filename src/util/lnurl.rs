@@ -1,6 +1,8 @@
 use crate::error::Error;
 use lightning_invoice::Bolt11Invoice;
 use lnurl::lightning_address::LightningAddress;
+use lnurl::pay::LnURLPayInvoice;
+use lnurl::withdraw::WithdrawalResponse;
 use lnurl::{lnurl::LnUrl, Builder, LnUrlResponse};
 use std::str::FromStr;
 
@@ -52,6 +54,27 @@ pub fn fetch_invoice(address: &str, amount_msats: u64) -> Result<String, Error> 
     }
 }
 
+pub fn process_withdrawal(invoice: &str, voucher: LnUrl) -> Result<String, Error> {
+    let client = Builder::default()
+        .build_blocking()
+        .map_err(|e| Error::Generic(e.to_string()))?;
+    let res = client
+        .make_request(&voucher.url)
+        .map_err(|e| Error::HTTP(e.to_string()))?;
+
+    match res {
+        LnUrlResponse::LnUrlWithdrawResponse(withdraw) => {
+            let withdraw_result = client
+                .do_withdrawal(&withdraw, invoice)
+                .map_err(|e| Error::HTTP(e.to_string()))?;
+            Ok("Withdrawal successful".to_string())
+        }
+        _ => Err(Error::Generic(
+            "Unexpected response type. Expected LNURL-withdraw.".to_string(),
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,5 +109,24 @@ mod tests {
         let email_lnurl = "drunksteel17@walletofsatoshi.com";
         assert!(validate_lnurl(email_lnurl));
         test_address(email_lnurl, amount_msats, "Lightning Address");
+    }
+
+    #[test]
+    fn test_process_withdrawal() {
+        let invoice = "lnbc100n1pn0lkmspp5t7trh5scm8jhsdy5uzcx9cn9hf4nlt5q95mm7tq9p6tcggk9hxeqcqpjsp5e99x0gqznhh63gwjg87lxcn2rk9paen9wref9z5kavkhn2qh0ngs9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllard4vsfze0gsqqqqlgqqqqqeqqjq0hv3zky9sa5jukpyl2pdvs8lgnwg37kzh2pmuucnrvntm7tukux3d3sqt55qqlrqu6dg40c438djdu7mv26el0wjujz3yrys3lp62mcpxx76kf";
+        let voucher = "LNURL1DP68GURN8GHJ7CTYDAEXJMN8WP5KWMR9WSMZUMRWVF5HGUEWVDHK6TMHD96XSERJV9MJ7CTSDYHHVVF0D3H82UNV9UUKS63J0FYYCS34WDPXX7FC8P6XGAMTFPFKVT65F4T8J324GA89WNRSVE99YSJWXE8RGKZ9VC7D73T6";
+        assert!(validate_lnurl(voucher));
+        let lnurl = LnUrl::from_str(voucher).expect("");
+        let result = process_withdrawal(invoice, lnurl);
+
+        match result {
+            Ok(message) => {
+                assert_eq!(message, "Withdrawal successful");
+                println!("Withdrawal processed successfully");
+            }
+            Err(e) => {
+                println!("Withdrawal processing failed: {}", e.message());
+            }
+        }
     }
 }
