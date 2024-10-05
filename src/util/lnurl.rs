@@ -4,6 +4,7 @@ use lnurl::lightning_address::LightningAddress;
 use lnurl::pay::LnURLPayInvoice;
 use lnurl::withdraw::WithdrawalResponse;
 use lnurl::{lnurl::LnUrl, Builder, LnUrlResponse};
+use std::cmp::max;
 use std::str::FromStr;
 
 pub fn validate_lnurl(string: &str) -> bool {
@@ -55,8 +56,8 @@ pub fn fetch_invoice(address: &str, amount_msats: u64) -> Result<String, Error> 
 }
 
 pub fn create_withdraw_response(voucher: &str) -> Result<WithdrawalResponse, Error> {
-    let lnurl =
-        LnUrl::from_str(voucher).map_err(|_| Error::Generic("Invalid LNURL".to_string()))?;
+    let lnurl = LnUrl::from_str(&*voucher.to_lowercase())
+        .map_err(|_| Error::Generic("Invalid LNURL".to_string()))?;
 
     let client = Builder::default()
         .build_blocking()
@@ -120,10 +121,11 @@ mod tests {
         test_address(email_lnurl, amount_msats, "Lightning Address");
     }
 
+    #[ignore = "Requires using an new lnurl-w voucher and invoice to match the max_withdrawble amount"]
     #[test]
     fn test_process_withdrawal() {
-        let invoice = "lnbc50u1pnsqfxhpp55c04g7ku3d9k89z286twfh6z9zym43cskms842zkxmgn5dq3ls5qcqpjsp5yw4taatpjkmq3as42pfhq47e7zhs3mr6u5jgsx5ttvdcxamx34hs9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllm8u4a8gvusysqqqqlgqqqqqeqqjqjmdpw5m89ce7gtycnw5d8557gduyjzeqetzecekv54spjtxfqzk4hfhzjec3w7ur6zvy4v3yxrfpeeccsz5npwxhfy77tjfr3mkmeacq0suj0n";
-        let voucher = "LNURL1DP68GURN8GHJ7ER9D4HJUMRWVF5HGUEWVDHK6TMHD96XSERJV9MJ7CTSDYHHVVF0D3H82UNV9ARRY5JTDP49XUJPXDHH2VJHG4ZY6K3NV9PHSTMP29ZH2JMFXFVKW4ZDXVEH57RX2P5NYNTWGGVNVP88";
+        let invoice = "lnbc5m1pnszpmwpp5vdu4qrghzq4c3uzvll0d82aa8vw2xtywukwgq5jncwwk7av7rdcscqpjsp5pav6wyrk0zaqc6gyfr4048qmnfj7h7ydpul5ds4dmqj4xam679zq9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllm8u4a8gvusysqqqqlgqqqqqeqqjq6g9v7ejekz6uxqqmjjuaaa2s63nzx3d4n9pu8m6h68nmh7rgprky4pn5qae9878q5wpg72p66djy7ywsa7v4mfecdmnyj38etln394cqqzhnzt";
+        let voucher = "LNURL1DP68GURN8GHJ7ER9D4HJUMRWVF5HGUEWVDHK6TMHD96XSERJV9MJ7CTSDYHHVVF0D3H82UNV9AZXY56N89F5CDFJW34K63N2GEJXK5N2VD2K6TMRWARKJVN8D565WCNNDFT85WR42FP5GUN2VSDZTX2W";
         assert!(validate_lnurl(voucher));
         let withdraw_response = match create_withdraw_response(voucher) {
             Ok(response) => response,
@@ -133,6 +135,20 @@ mod tests {
             }
         };
 
+        let invoice_amount = match Bolt11Invoice::from_str(invoice) {
+            Ok(invoice) => invoice.amount_milli_satoshis().unwrap() / 1000,
+            Err(e) => {
+                println!("Failed to parse invoice: {:?}", e);
+                return;
+            }
+        };
+
+        assert!(
+            invoice_amount <= withdraw_response.max_withdrawable,
+            "Invoice of {} exceeds max withdrawable {} sats",
+            invoice_amount,
+            withdraw_response.max_withdrawable
+        );
         println!("Successfully created withdraw response");
         let result = process_withdrawal(&withdraw_response, invoice);
 
