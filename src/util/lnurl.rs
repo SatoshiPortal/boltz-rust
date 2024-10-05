@@ -54,25 +54,34 @@ pub fn fetch_invoice(address: &str, amount_msats: u64) -> Result<String, Error> 
     }
 }
 
-pub fn process_withdrawal(invoice: &str, voucher: LnUrl) -> Result<String, Error> {
+pub fn create_withdraw_response(voucher: &str) -> Result<WithdrawalResponse, Error> {
+    let lnurl =
+        LnUrl::from_str(voucher).map_err(|_| Error::Generic("Invalid LNURL".to_string()))?;
+
     let client = Builder::default()
         .build_blocking()
         .map_err(|e| Error::Generic(e.to_string()))?;
+
     let res = client
-        .make_request(&voucher.url)
+        .make_request(&lnurl.url)
         .map_err(|e| Error::HTTP(e.to_string()))?;
 
     match res {
-        LnUrlResponse::LnUrlWithdrawResponse(withdraw) => {
-            let withdraw_result = client
-                .do_withdrawal(&withdraw, invoice)
-                .map_err(|e| Error::HTTP(e.to_string()))?;
-            Ok("Withdrawal successful".to_string())
-        }
-        _ => Err(Error::Generic(
-            "Unexpected response type. Expected LNURL-withdraw.".to_string(),
-        )),
+        LnUrlResponse::LnUrlWithdrawResponse(withdraw) => Ok(withdraw),
+        _ => Err(Error::Generic("Unexpected response type".to_string())),
     }
+}
+
+pub fn process_withdrawal(withdraw: &WithdrawalResponse, invoice: &str) -> Result<String, Error> {
+    let client = Builder::default()
+        .build_blocking()
+        .map_err(|e| Error::Generic(e.to_string()))?;
+
+    let withdraw_result = client
+        .do_withdrawal(withdraw, invoice)
+        .map_err(|e| Error::HTTP(e.to_string()))?;
+
+    Ok("Withdrawal successful".to_string())
 }
 
 #[cfg(test)]
@@ -113,20 +122,23 @@ mod tests {
 
     #[test]
     fn test_process_withdrawal() {
-        let invoice = "lnbc100n1pn0lkmspp5t7trh5scm8jhsdy5uzcx9cn9hf4nlt5q95mm7tq9p6tcggk9hxeqcqpjsp5e99x0gqznhh63gwjg87lxcn2rk9paen9wref9z5kavkhn2qh0ngs9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllard4vsfze0gsqqqqlgqqqqqeqqjq0hv3zky9sa5jukpyl2pdvs8lgnwg37kzh2pmuucnrvntm7tukux3d3sqt55qqlrqu6dg40c438djdu7mv26el0wjujz3yrys3lp62mcpxx76kf";
-        let voucher = "LNURL1DP68GURN8GHJ7CTYDAEXJMN8WP5KWMR9WSMZUMRWVF5HGUEWVDHK6TMHD96XSERJV9MJ7CTSDYHHVVF0D3H82UNV9UUKS63J0FYYCS34WDPXX7FC8P6XGAMTFPFKVT65F4T8J324GA89WNRSVE99YSJWXE8RGKZ9VC7D73T6";
+        let invoice = "lnbc50u1pnsqfxhpp55c04g7ku3d9k89z286twfh6z9zym43cskms842zkxmgn5dq3ls5qcqpjsp5yw4taatpjkmq3as42pfhq47e7zhs3mr6u5jgsx5ttvdcxamx34hs9q7sqqqqqqqqqqqqqqqqqqqsqqqqqysgqdqqmqz9gxqyjw5qrzjqwryaup9lh50kkranzgcdnn2fgvx390wgj5jd07rwr3vxeje0glcllm8u4a8gvusysqqqqlgqqqqqeqqjqjmdpw5m89ce7gtycnw5d8557gduyjzeqetzecekv54spjtxfqzk4hfhzjec3w7ur6zvy4v3yxrfpeeccsz5npwxhfy77tjfr3mkmeacq0suj0n";
+        let voucher = "LNURL1DP68GURN8GHJ7ER9D4HJUMRWVF5HGUEWVDHK6TMHD96XSERJV9MJ7CTSDYHHVVF0D3H82UNV9ARRY5JTDP49XUJPXDHH2VJHG4ZY6K3NV9PHSTMP29ZH2JMFXFVKW4ZDXVEH57RX2P5NYNTWGGVNVP88";
         assert!(validate_lnurl(voucher));
-        let lnurl = LnUrl::from_str(voucher).expect("");
-        let result = process_withdrawal(invoice, lnurl);
-
-        match result {
-            Ok(message) => {
-                assert_eq!(message, "Withdrawal successful");
-                println!("Withdrawal processed successfully");
-            }
+        let withdraw_response = match create_withdraw_response(voucher) {
+            Ok(response) => response,
             Err(e) => {
-                println!("Withdrawal processing failed: {}", e.message());
+                println!("Failed to create withdraw response: {:?}", e);
+                return;
             }
-        }
+        };
+
+        println!("Successfully created withdraw response");
+        let result = process_withdrawal(&withdraw_response, invoice);
+
+        assert!(result.is_ok(), "Withdrawal failed: {:?}", result.err());
+        assert_eq!(result.unwrap(), "Withdrawal successful");
+
+        println!("Withdrawal test passed successfully");
     }
 }
