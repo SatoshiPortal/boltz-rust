@@ -17,6 +17,7 @@ pub use bitcoin;
 pub use electrum_client;
 pub use elements;
 pub use lightning_invoice;
+pub use lnurl;
 
 // Re-export relevant structs under boltz_client::StructName for simplicity
 pub use bitcoin::{
