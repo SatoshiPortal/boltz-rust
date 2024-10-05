@@ -73,7 +73,7 @@ pub fn create_withdraw_response(voucher: &str) -> Result<WithdrawalResponse, Err
     }
 }
 
-pub fn process_withdrawal(withdraw: &WithdrawalResponse, invoice: &str) -> Result<String, Error> {
+pub fn process_withdrawal(withdraw: &WithdrawalResponse, invoice: &str) -> Result<(), Error> {
     let client = Builder::default()
         .build_blocking()
         .map_err(|e| Error::Generic(e.to_string()))?;
@@ -82,7 +82,7 @@ pub fn process_withdrawal(withdraw: &WithdrawalResponse, invoice: &str) -> Resul
         .do_withdrawal(withdraw, invoice)
         .map_err(|e| Error::HTTP(e.to_string()))?;
 
-    Ok("Withdrawal successful".to_string())
+    Ok(())
 }
 
 #[cfg(test)]
@@ -153,7 +153,6 @@ mod tests {
         let result = process_withdrawal(&withdraw_response, invoice);
 
         assert!(result.is_ok(), "Withdrawal failed: {:?}", result.err());
-        assert_eq!(result.unwrap(), "Withdrawal successful");
 
         println!("Withdrawal test passed successfully");
     }
