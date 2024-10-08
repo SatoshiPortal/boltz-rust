@@ -894,7 +894,13 @@ impl BtcSwapTx {
             .utxos
             .iter()
             .fold(Amount::ZERO, |acc, (_, txo)| acc + txo.value);
-        let output_amount: Amount = utxos_amount - Amount::from_sat(absolute_fees);
+        let absolute_fees_amount = Amount::from_sat(absolute_fees);
+        if utxos_amount <= absolute_fees_amount {
+            return Err(Error::Generic(
+                format!("Cannot sign Refund Tx because utxos_amount ({utxos_amount}) <= absolute_fees ({absolute_fees_amount})")
+            ));
+        }
+        let output_amount: Amount = utxos_amount - absolute_fees_amount;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
             value: output_amount,
@@ -947,6 +953,7 @@ impl BtcSwapTx {
         };
 
         let secp = Secp256k1::new();
+        let tx_outs: Vec<&TxOut> = self.utxos.iter().map(|(_, out)| out).collect();
 
         if let Some(Cooperative {
             boltz_api, swap_id, ..
@@ -960,7 +967,7 @@ impl BtcSwapTx {
                 let refund_tx_taproot_hash = SighashCache::new(refund_tx.clone())
                     .taproot_key_spend_signature_hash(
                         input_index,
-                        &Prevouts::All(&[&self.utxos[input_index].1]),
+                        &Prevouts::All(&tx_outs),
                         bitcoin::TapSighashType::Default,
                     )?;
 
@@ -1080,7 +1087,7 @@ impl BtcSwapTx {
                 let sighash = SighashCache::new(refund_tx.clone())
                     .taproot_script_spend_signature_hash(
                         input_index,
-                        &Prevouts::All(&[&self.utxos[input_index].1]),
+                        &Prevouts::All(&tx_outs),
                         leaf_hash,
                         TapSighashType::Default,
                     )?;
