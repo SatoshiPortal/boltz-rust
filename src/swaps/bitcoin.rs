@@ -1081,9 +1081,12 @@ impl BtcSwapTx {
                     "Control block calculation failed".to_string(),
                 ))?;
 
+            // Input sequence has to be set for all inputs before signing
             for input_index in 0..refund_tx.input.len() {
                 refund_tx.input[input_index].sequence = Sequence::ZERO;
+            }
 
+            for input_index in 0..refund_tx.input.len() {
                 let sighash = SighashCache::new(refund_tx.clone())
                     .taproot_script_spend_signature_hash(
                         input_index,
