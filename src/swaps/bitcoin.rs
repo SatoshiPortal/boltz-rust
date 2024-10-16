@@ -400,27 +400,26 @@ impl BtcSwapScript {
         Ok((script_balance.confirmed, script_balance.unconfirmed))
     }
 
-    /// Fetch (utxo,amount) pair for the script_pubkey of this swap.
-    /// Returns None if no utxo for the script_pubkey is found.
-    pub fn fetch_utxo(
+    /// Fetch (utxo,amount) pairs for all utxos of the script_pubkey of this swap.
+    pub fn fetch_utxos(
         &self,
         network_config: &ElectrumConfig,
-    ) -> Result<Option<(OutPoint, TxOut)>, Error> {
+    ) -> Result<Vec<(OutPoint, TxOut)>, Error> {
         let electrum_client = network_config.build_client()?;
         let spk = self.to_address(network_config.network())?.script_pubkey();
         let utxos = electrum_client.script_list_unspent(spk.as_script())?;
-
-        if utxos.len() == 0 {
-            // No utxo found. Return None.
-            return Ok(None);
-        } else {
-            let outpoint_0 = OutPoint::new(utxos[0].tx_hash, utxos[0].tx_pos as u32);
-            let txout = TxOut {
-                script_pubkey: spk,
-                value: Amount::from_sat(utxos[0].value),
-            };
-            Ok(Some((outpoint_0, txout)))
-        }
+        let utxo_pairs = utxos
+            .iter()
+            .map(|unspent| {
+                let outpoint = OutPoint::new(unspent.tx_hash, unspent.tx_pos as u32);
+                let txout = TxOut {
+                    script_pubkey: spk.clone(),
+                    value: Amount::from_sat(unspent.value),
+                };
+                (outpoint, txout)
+            })
+            .collect();
+        Ok(utxo_pairs)
     }
 
     /// Fetch utxo for script from BoltzApi
@@ -491,8 +490,10 @@ pub struct BtcSwapTx {
     pub kind: SwapTxKind, // These fields needs to be public to do manual creation in IT.
     pub swap_script: BtcSwapScript,
     pub output_address: Address,
-    // The HTLC utxo in (Outpoint, Amount) Pair
-    pub utxo: (OutPoint, TxOut),
+    /// All utxos for the script_pubkey of this swap, at this point in time:
+    /// - the initial lockup utxo, if not yet spent (claimed or refunded)
+    /// - any further utxos, if not yet spent
+    pub utxos: Vec<(OutPoint, TxOut)>,
 }
 
 impl BtcSwapTx {
@@ -520,8 +521,8 @@ impl BtcSwapTx {
 
         address.is_valid_for_network(network);
 
-        let utxo_info = match swap_script.fetch_utxo(&network_config) {
-            Ok(r) => r,
+        let utxo_info = match swap_script.fetch_utxos(&network_config) {
+            Ok(v) => v.first().cloned(),
             Err(_) => swap_script.fetch_lockup_utxo_boltz(
                 &network_config,
                 &boltz_url,
@@ -534,7 +535,7 @@ impl BtcSwapTx {
                 kind: SwapTxKind::Claim,
                 swap_script,
                 output_address: address.assume_checked(),
-                utxo,
+                utxos: vec![utxo], // When claiming, we only consider the first utxo
             })
         } else {
             Err(Error::Protocol(
@@ -569,27 +570,33 @@ impl BtcSwapTx {
             return Err(Error::Address("Address validation failed".to_string()));
         };
 
-        let utxo_info = match swap_script.fetch_utxo(&network_config) {
+        let utxos = match swap_script.fetch_utxos(&network_config) {
             Ok(r) => r,
-            Err(_) => swap_script.fetch_lockup_utxo_boltz(
-                &network_config,
-                &boltz_url,
-                &swap_id,
-                SwapTxKind::Refund,
-            )?,
+            Err(_) => {
+                let lockup_utxo_info = swap_script.fetch_lockup_utxo_boltz(
+                    &network_config,
+                    &boltz_url,
+                    &swap_id,
+                    SwapTxKind::Refund,
+                )?;
+
+                match lockup_utxo_info {
+                    Some(r) => vec![r],
+                    None => vec![],
+                }
+            }
         };
 
-        if let Some(utxo) = utxo_info {
-            Ok(BtcSwapTx {
+        match utxos.is_empty() {
+            true => Err(Error::Protocol(
+                "No Bitcoin UTXO detected for this script".to_string(),
+            )),
+            false => Ok(BtcSwapTx {
                 kind: SwapTxKind::Refund,
                 swap_script,
                 output_address: address.assume_checked(),
-                utxo,
-            })
-        } else {
-            Err(Error::Protocol(
-                "No Bitcoin UTXO detected for this script".to_string(),
-            ))
+                utxos,
+            }),
         }
     }
 
@@ -674,8 +681,12 @@ impl BtcSwapTx {
             )));
         };
 
+        // For claim, we only consider 1 utxo
+        let utxo = self.utxos.first().ok_or(Error::Protocol(
+            "No Bitcoin UTXO detected for this script".to_string(),
+        ))?;
         let txin = TxIn {
-            previous_output: self.utxo.0,
+            previous_output: utxo.0,
             sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             script_sig: ScriptBuf::new(),
             witness: Witness::new(),
@@ -685,7 +696,7 @@ impl BtcSwapTx {
 
         let txout = TxOut {
             script_pubkey: destination_spk,
-            value: Amount::from_sat(self.utxo.1.value.to_sat() - absolute_fees),
+            value: Amount::from_sat(utxo.1.value.to_sat() - absolute_fees),
         };
 
         let mut claim_tx = Transaction {
@@ -710,7 +721,7 @@ impl BtcSwapTx {
             let claim_tx_taproot_hash = SighashCache::new(claim_tx.clone())
                 .taproot_key_spend_signature_hash(
                     0,
-                    &Prevouts::All(&[&self.utxo.1]),
+                    &Prevouts::All(&[&utxo.1]),
                     bitcoin::TapSighashType::Default,
                 )?;
 
@@ -826,7 +837,7 @@ impl BtcSwapTx {
 
             let sighash = SighashCache::new(claim_tx.clone()).taproot_script_spend_signature_hash(
                 0,
-                &Prevouts::All(&[&self.utxo.1]),
+                &Prevouts::All(&[&utxo.1]),
                 leaf_hash,
                 TapSighashType::Default,
             )?;
@@ -879,24 +890,32 @@ impl BtcSwapTx {
             ));
         }
 
-        // let unsigned_input: TxIn = TxIn {
-        //     sequence: Sequence::ZERO, // enables absolute locktime
-        //     previous_output: self.utxo.0,
-        //     script_sig: ScriptBuf::new(),
-        //     witness: Witness::new(),
-        // };
-        let output_amount: Amount = Amount::from_sat(self.utxo.1.value.to_sat() - absolute_fees);
+        let utxos_amount = self
+            .utxos
+            .iter()
+            .fold(Amount::ZERO, |acc, (_, txo)| acc + txo.value);
+        let absolute_fees_amount = Amount::from_sat(absolute_fees);
+        if utxos_amount <= absolute_fees_amount {
+            return Err(Error::Generic(
+                format!("Cannot sign Refund Tx because utxos_amount ({utxos_amount}) <= absolute_fees ({absolute_fees_amount})")
+            ));
+        }
+        let output_amount: Amount = utxos_amount - absolute_fees_amount;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
             value: output_amount,
         };
 
-        let input = TxIn {
-            previous_output: self.utxo.0,
-            script_sig: ScriptBuf::new(),
-            sequence: Sequence::MAX,
-            witness: Witness::new(),
-        };
+        let unsigned_inputs = self
+            .utxos
+            .iter()
+            .map(|(outpoint, _txo)| TxIn {
+                previous_output: outpoint.clone(),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::MAX,
+                witness: Witness::new(),
+            })
+            .collect();
 
         let lock_time = match self
             .swap_script
@@ -929,11 +948,12 @@ impl BtcSwapTx {
         let mut refund_tx = Transaction {
             version: Version::TWO,
             lock_time,
-            input: vec![input],
+            input: unsigned_inputs,
             output: vec![output],
         };
 
         let secp = Secp256k1::new();
+        let tx_outs: Vec<&TxOut> = self.utxos.iter().map(|(_, out)| out).collect();
 
         if let Some(Cooperative {
             boltz_api, swap_id, ..
@@ -942,124 +962,113 @@ impl BtcSwapTx {
             // Start the Musig session
             refund_tx.lock_time = LockTime::ZERO; // No locktime for cooperative spend
 
-            // Step 1: Get the sighash
-            let refund_tx_taproot_hash = SighashCache::new(refund_tx.clone())
-                .taproot_key_spend_signature_hash(
-                    0,
-                    &Prevouts::All(&[&self.utxo.1]),
-                    bitcoin::TapSighashType::Default,
+            for input_index in 0..refund_tx.input.len() {
+                // Step 1: Get the sighash
+                let refund_tx_taproot_hash = SighashCache::new(refund_tx.clone())
+                    .taproot_key_spend_signature_hash(
+                        input_index,
+                        &Prevouts::All(&tx_outs),
+                        bitcoin::TapSighashType::Default,
+                    )?;
+
+                let msg = Message::from_digest_slice(refund_tx_taproot_hash.as_byte_array())?;
+
+                // Step 2: Get the Public and Secret nonces
+
+                let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
+
+                let tweak = SecretKey::from_slice(
+                    self.swap_script
+                        .taproot_spendinfo()?
+                        .tap_tweak()
+                        .as_byte_array(),
                 )?;
 
-            let msg = Message::from_digest_slice(refund_tx_taproot_hash.as_byte_array())?;
+                let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
 
-            // Step 2: Get the Public and Secret nonces
+                let session_id = MusigSessionId::new(&mut thread_rng());
 
-            let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
+                let mut extra_rand = [0u8; 32];
+                OsRng.fill_bytes(&mut extra_rand);
 
-            let tweak = SecretKey::from_slice(
-                self.swap_script
-                    .taproot_spendinfo()?
-                    .tap_tweak()
-                    .as_byte_array(),
-            )?;
+                let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
+                    &secp,
+                    session_id,
+                    keys.public_key(),
+                    msg,
+                    Some(extra_rand),
+                )?;
 
-            let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+                // Step 7: Get boltz's partial sig
+                let refund_tx_hex = serialize(&refund_tx).to_lower_hex_string();
+                let partial_sig_resp = match self.swap_script.swap_type {
+                    SwapType::Chain => boltz_api.get_chain_partial_sig(
+                        &swap_id,
+                        input_index,
+                        &pub_nonce,
+                        &refund_tx_hex,
+                    ),
+                    SwapType::Submarine => boltz_api.get_submarine_partial_sig(
+                        &swap_id,
+                        input_index,
+                        &pub_nonce,
+                        &refund_tx_hex,
+                    ),
+                    _ => Err(Error::Protocol(format!(
+                        "Cannot get partial sig for {:?} Swap",
+                        self.swap_script.swap_type
+                    ))),
+                }?;
 
-            let session_id = MusigSessionId::new(&mut thread_rng());
+                let boltz_public_nonce =
+                    MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
 
-            let mut extra_rand = [0u8; 32];
-            OsRng.fill_bytes(&mut extra_rand);
+                let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+                    &partial_sig_resp.partial_signature,
+                )?)?;
 
-            let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
-                &secp,
-                session_id,
-                keys.public_key(),
-                msg,
-                Some(extra_rand),
-            )?;
+                // Aggregate Our's and Other's Nonce and start the Musig session.
+                let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
 
-            // Step 7: Get boltz's partial sig
-            let refund_tx_hex = serialize(&refund_tx).to_lower_hex_string();
-            let partial_sig_resp = match self.swap_script.swap_type {
-                SwapType::Chain => {
-                    boltz_api.get_chain_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)
+                let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+
+                // Verify the Boltz's sig.
+                let boltz_partial_sig_verify = musig_session.partial_verify(
+                    &secp,
+                    &key_agg_cache,
+                    boltz_partial_sig,
+                    boltz_public_nonce,
+                    self.swap_script.receiver_pubkey.inner, //boltz key
+                );
+
+                if !boltz_partial_sig_verify {
+                    return Err(Error::Protocol(
+                        "Invalid partial-sig received from Boltz".to_string(),
+                    ));
                 }
-                SwapType::Submarine => {
-                    boltz_api.get_submarine_partial_sig(&swap_id, &pub_nonce, &refund_tx_hex)
-                }
-                _ => Err(Error::Protocol(format!(
-                    "Cannot get partial sig for {:?} Swap",
-                    self.swap_script.swap_type
-                ))),
-            }?;
 
-            let boltz_public_nonce =
-                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
+                let our_partial_sig =
+                    musig_session.partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)?;
 
-            let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
-                &partial_sig_resp.partial_signature,
-            )?)?;
+                let schnorr_sig =
+                    musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
 
-            // Aggregate Our's and Other's Nonce and start the Musig session.
-            let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
+                let final_schnorr_sig = Signature {
+                    sig: schnorr_sig,
+                    hash_ty: TapSighashType::Default,
+                };
 
-            let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+                let output_key = self.swap_script.taproot_spendinfo()?.output_key();
 
-            // Verify the Boltz's sig.
-            let boltz_partial_sig_verify = musig_session.partial_verify(
-                &secp,
-                &key_agg_cache,
-                boltz_partial_sig,
-                boltz_public_nonce,
-                self.swap_script.receiver_pubkey.inner, //boltz key
-            );
+                secp.verify_schnorr(&final_schnorr_sig.sig, &msg, &output_key.to_inner())?;
 
-            if !boltz_partial_sig_verify {
-                return Err(Error::Protocol(
-                    "Invalid partial-sig received from Boltz".to_string(),
-                ));
+                let mut witness = Witness::new();
+                witness.push(final_schnorr_sig.to_vec());
+                refund_tx.input[input_index].witness = witness;
             }
-
-            let our_partial_sig =
-                musig_session.partial_sign(&secp, sec_nonce, &keys, &key_agg_cache)?;
-
-            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
-
-            let final_schnorr_sig = Signature {
-                sig: schnorr_sig,
-                hash_ty: TapSighashType::Default,
-            };
-
-            let output_key = self.swap_script.taproot_spendinfo()?.output_key();
-
-            let _ = secp.verify_schnorr(&final_schnorr_sig.sig, &msg, &output_key.to_inner())?;
-
-            let mut witness = Witness::new();
-            witness.push(final_schnorr_sig.to_vec());
-
-            refund_tx.input[0].witness = witness;
         } else {
-            refund_tx.input[0].sequence = Sequence::ZERO;
-
             let leaf_hash =
                 TapLeafHash::from_script(&self.swap_script.refund_script(), LeafVersion::TapScript);
-
-            let sighash = SighashCache::new(refund_tx.clone())
-                .taproot_script_spend_signature_hash(
-                    0,
-                    &Prevouts::All(&[&self.utxo.1]),
-                    leaf_hash,
-                    TapSighashType::Default,
-                )?;
-
-            let msg = Message::from_digest_slice(sighash.as_byte_array())?;
-
-            let sig = Secp256k1::new().sign_schnorr(&msg, &keys);
-
-            let final_sig = Signature {
-                sig,
-                hash_ty: TapSighashType::Default,
-            };
 
             let control_block = self
                 .swap_script
@@ -1068,16 +1077,40 @@ impl BtcSwapTx {
                     self.swap_script.refund_script().clone(),
                     LeafVersion::TapScript,
                 ))
-                .expect("Control block calculation failed");
+                .ok_or(Error::Protocol(
+                    "Control block calculation failed".to_string(),
+                ))?;
 
-            let mut witness = Witness::new();
+            // Input sequence has to be set for all inputs before signing
+            for input_index in 0..refund_tx.input.len() {
+                refund_tx.input[input_index].sequence = Sequence::ZERO;
+            }
 
-            witness.push(final_sig.to_vec());
-            witness.push(self.swap_script.refund_script().as_bytes());
-            witness.push(control_block.serialize());
+            for input_index in 0..refund_tx.input.len() {
+                let sighash = SighashCache::new(refund_tx.clone())
+                    .taproot_script_spend_signature_hash(
+                        input_index,
+                        &Prevouts::All(&tx_outs),
+                        leaf_hash,
+                        TapSighashType::Default,
+                    )?;
 
-            refund_tx.input[0].witness = witness;
-        }
+                let msg = Message::from_digest_slice(sighash.as_byte_array())?;
+
+                let sig = Secp256k1::new().sign_schnorr(&msg, &keys);
+
+                let final_sig = Signature {
+                    sig,
+                    hash_ty: TapSighashType::Default,
+                };
+
+                let mut witness = Witness::new();
+                witness.push(final_sig.to_vec());
+                witness.push(self.swap_script.refund_script().as_bytes());
+                witness.push(control_block.serialize());
+                refund_tx.input[input_index].witness = witness;
+            }
+        };
 
         Ok(refund_tx)
     }

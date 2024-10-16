@@ -60,7 +60,7 @@ fn btc_reverse_claim() {
     assert_eq!(scan_result.total_amount, Amount::from_sat(10000));
 
     // Create a refund spending transaction from the swap
-    let utxo = scan_result
+    let utxos: Vec<(OutPoint, TxOut)> = scan_result
         .unspents
         .iter()
         .map(|utxo| {
@@ -71,8 +71,7 @@ fn btc_reverse_claim() {
             };
             (outpoint, txout)
         })
-        .last()
-        .expect("value expected");
+        .collect();
 
     let test_wallet = test_framework.get_test_wallet();
     let refund_addrs = test_wallet
@@ -84,7 +83,7 @@ fn btc_reverse_claim() {
         kind: SwapTxKind::Claim,
         swap_script,
         output_address: refund_addrs,
-        utxo,
+        utxos,
     };
 
     let claim_tx = swap_tx
@@ -154,7 +153,7 @@ fn btc_submarine_refund() {
     assert_eq!(scan_result.total_amount, Amount::from_sat(10000));
 
     // Create a refund spending transaction from the swap
-    let utxo = scan_result
+    let utxos: Vec<(OutPoint, TxOut)> = scan_result
         .unspents
         .iter()
         .map(|utxo| {
@@ -165,8 +164,7 @@ fn btc_submarine_refund() {
             };
             (outpoint, txout)
         })
-        .last()
-        .expect("value expected");
+        .collect();
 
     let test_wallet = test_framework.get_test_wallet();
     let refund_addrs = test_wallet
@@ -178,7 +176,7 @@ fn btc_submarine_refund() {
         kind: SwapTxKind::Refund,
         swap_script,
         output_address: refund_addrs,
-        utxo,
+        utxos,
     };
 
     let refund_tx = swap_tx.sign_refund(&sender_keypair, 1000, None).unwrap();

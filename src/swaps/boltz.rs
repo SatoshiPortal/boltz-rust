@@ -509,6 +509,7 @@ impl BoltzApiClientV2 {
     pub fn get_submarine_partial_sig(
         &self,
         id: &String,
+        input_index: usize,
         pub_nonce: &MusigPubNonce,
         refund_tx_hex: &String,
     ) -> Result<PartialSig, Error> {
@@ -516,7 +517,7 @@ impl BoltzApiClientV2 {
             {
                 "pubNonce": pub_nonce.serialize().to_lower_hex_string(),
                 "transaction": refund_tx_hex,
-                "index": 0
+                "index": input_index
             }
         );
 
@@ -527,6 +528,7 @@ impl BoltzApiClientV2 {
     pub fn get_chain_partial_sig(
         &self,
         id: &String,
+        input_index: usize,
         pub_nonce: &MusigPubNonce,
         refund_tx_hex: &String,
     ) -> Result<PartialSig, Error> {
@@ -534,7 +536,7 @@ impl BoltzApiClientV2 {
             {
                 "pubNonce": pub_nonce.serialize().to_lower_hex_string(),
                 "transaction": refund_tx_hex,
-                "index": 0
+                "index": input_index
             }
         );
 
