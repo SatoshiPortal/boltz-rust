@@ -1212,7 +1212,7 @@ impl LBtcSwapTx {
     /// Use this before calling drain to help calculate the absolute fees.
     /// Multiply the size by the fee_rate to get the absolute fees.
     pub fn size(&self, keys: &Keypair, preimage: &Preimage) -> Result<usize, Error> {
-        let dummy_abs_fee = Amount::from_sat(5_000);
+        let dummy_abs_fee = Amount::from_sat(0);
         let tx = match self.kind {
             SwapTxKind::Claim => self.sign_claim(keys, preimage, dummy_abs_fee, None)?, // TODO: Hardcode cooperative spend size
             SwapTxKind::Refund => self.sign_refund(keys, dummy_abs_fee, None)?,
