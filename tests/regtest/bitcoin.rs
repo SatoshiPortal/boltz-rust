@@ -3,8 +3,6 @@
 use boltz_client::network::electrum::ElectrumBitcoinClient;
 #[cfg(feature = "esplora")]
 use boltz_client::network::esplora::EsploraBitcoinClient;
-use std::str::FromStr;
-
 use boltz_client::{
     network::Chain,
     swaps::{
@@ -14,6 +12,8 @@ use boltz_client::{
     util::{secrets::Preimage, setup_logger},
     Bolt11Invoice, BtcSwapScript, BtcSwapTx, Secp256k1,
 };
+use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::regtest::WAIT_TIME_MS;
 use crate::utils;
@@ -101,169 +101,131 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
     let swap_id = create_swap_response.id.clone();
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
-    // Subscribe to websocket updates
-    let (mut sender, mut receiver) = boltz_api_v2.connect_ws().await.unwrap().split();
-
-    sender
-        .send(Message::text(
-            serde_json::to_string(&WsRequest::subscribe_swap_request(&swap_id)).unwrap(),
-        ))
-        .await
-        .unwrap();
-
+    let ws_api = Arc::new(boltz_api_v2.ws());
+    ws_api.clone().start();
+    ws_api.subscribe(&swap_id).unwrap();
     // Event handlers for various swap status.
+    let mut rx = ws_api.updates();
     loop {
-        let response = receiver.next().await.unwrap().unwrap().into_text().unwrap();
-
-        match serde_json::from_str(&response) {
-            Ok(WsResponse::Subscribe(subscribe)) => {
-                assert_eq!(subscribe.channel, SubscriptionChannel::SwapUpdate);
-                assert_eq!(subscribe.args.first().expect("expected"), &swap_id);
+        let update = rx.recv().await.unwrap();
+        match update.status.as_str() {
+            "invoice.set" => {
                 log::info!(
-                    "Successfully subscribed for Swap updates. Swap ID : {}",
-                    swap_id
+                    "Send {} sats to BTC address {}",
+                    create_swap_response.expected_amount,
+                    create_swap_response.address
                 );
+
+                let amount = match underpay {
+                    true => create_swap_response.expected_amount - 1,
+                    false => create_swap_response.expected_amount,
+                };
+                utils::send_to_address_bitcoind(&create_swap_response.address, amount)
+                    .await
+                    .unwrap();
+            }
+            "transaction.mempool" => {
+                utils::mine_blocks(1).await.unwrap();
+            }
+            "transaction.claim.pending" => {
+                // Create the refund transaction at this stage
+                // This will fail if the funding transaction isn't confirmed yet. Which should not happen.
+                let swap_tx = BtcSwapTx::new_refund(
+                    swap_script.clone(),
+                    &refund_address,
+                    bitcoin_client,
+                    BOLTZ_REGTEST.to_owned(),
+                    swap_id.to_owned(),
+                )
+                .await
+                .expect("Funding UTXO not found");
+
+                let claim_tx_response = boltz_api_v2
+                    .get_submarine_claim_tx_details(&swap_id)
+                    .await
+                    .unwrap();
+
+                log::debug!("Received claim tx details : {:?}", claim_tx_response);
+
+                // Check that boltz have the correct preimage.
+                // At this stage the client should verify that LN invoice has been paid.
+                let preimage = Vec::from_hex(&claim_tx_response.preimage).unwrap();
+                let preimage_hash = sha256::Hash::hash(&preimage);
+                let invoice = Bolt11Invoice::from_str(&create_swap_req.invoice).unwrap();
+                let invoice_payment_hash = invoice.payment_hash();
+                assert_eq!(invoice_payment_hash.to_string(), preimage_hash.to_string());
+                log::info!("Correct Hash preimage received from Boltz.");
+
+                // Compute and send Musig2 partial sig
+                let (partial_sig, pub_nonce) = swap_tx
+                    .partial_sign(
+                        &our_keys,
+                        &claim_tx_response.pub_nonce,
+                        &claim_tx_response.transaction_hash,
+                    )
+                    .unwrap();
+                boltz_api_v2
+                    .post_submarine_claim_tx_details(&swap_id, pub_nonce, partial_sig)
+                    .await
+                    .unwrap();
+                log::info!("Successfully Sent partial signature");
             }
 
-            Ok(WsResponse::Update(update)) => {
-                assert_eq!(update.channel, SubscriptionChannel::SwapUpdate);
-                let update = update.args.first().expect("expected");
-                assert_eq!(update.id, *swap_id);
+            "transaction.claimed" => {
+                log::info!("Successfully completed submarine swap");
+                break;
+            }
+
+            // This means the funding transaction was rejected by Boltz for whatever reason, and we need to get
+            // the funds back via refund.
+            "transaction.lockupFailed" | "invoice.failedToPay" => {
+                async_sleep(WAIT_TIME_MS).await;
+                let swap_tx = BtcSwapTx::new_refund(
+                    swap_script.clone(),
+                    &refund_address,
+                    bitcoin_client,
+                    BOLTZ_REGTEST.to_owned(),
+                    swap_id.to_owned(),
+                )
+                .await
+                .expect("Funding UTXO not found");
+
+                let tx = swap_tx
+                    .sign_refund(
+                        &our_keys,
+                        Fee::Absolute(1000),
+                        Some(Cooperative {
+                            boltz_api: &boltz_api_v2,
+                            swap_id: swap_id.clone(),
+                            pub_nonce: None,
+                            partial_sig: None,
+                        }),
+                    )
+                    .await
+                    .unwrap();
+
+                let txid = swap_tx.broadcast(&tx, bitcoin_client).await.unwrap();
+                log::info!("Cooperative Refund Successfully broadcasted: {}", txid);
+
+                // Non cooperative refund requires expired swap
+                /*log::info!("Cooperative refund failed. {:?}", e);
+                log::info!("Attempting Non-cooperative refund.");
+
+                let tx = swap_tx
+                    .sign_refund(&our_keys, Fee::Absolute(1000), None)
+                    .await
+                    .unwrap();
+                let txid = swap_tx
+                    .broadcast(&tx, bitcoin_client)
+                    .await
+                    .unwrap();
+                log::info!("Non-cooperative Refund Successfully broadcasted: {}", txid);*/
+                break;
+            }
+            _ => {
                 log::info!("Got Update from server: {}", update.status);
-
-                // Invoice is Set. Waiting for us to send onchain tx.
-                if update.status == "invoice.set" {
-                    log::info!(
-                        "Send {} sats to BTC address {}",
-                        create_swap_response.expected_amount,
-                        create_swap_response.address
-                    );
-
-                    let amount = match underpay {
-                        true => create_swap_response.expected_amount - 1,
-                        false => create_swap_response.expected_amount,
-                    };
-                    utils::send_to_address_bitcoind(&create_swap_response.address, amount)
-                        .await
-                        .unwrap();
-                }
-
-                if update.status == "transaction.mempool" {
-                    utils::mine_blocks(1).await.unwrap();
-                }
-
-                // Boltz has paid the invoice, and waiting for our partial sig.
-                if update.status == "transaction.claim.pending" {
-                    // Create the refund transaction at this stage
-                    // This will fail if the funding transaction isn't confirmed yet. Which should not happen.
-                    let swap_tx = BtcSwapTx::new_refund(
-                        swap_script.clone(),
-                        &refund_address,
-                        bitcoin_client,
-                        BOLTZ_REGTEST.to_owned(),
-                        swap_id.to_owned(),
-                    )
-                    .await
-                    .expect("Funding UTXO not found");
-
-                    let claim_tx_response = boltz_api_v2
-                        .get_submarine_claim_tx_details(&swap_id)
-                        .await
-                        .unwrap();
-
-                    log::debug!("Received claim tx details : {:?}", claim_tx_response);
-
-                    // Check that boltz have the correct preimage.
-                    // At this stage the client should verify that LN invoice has been paid.
-                    let preimage = Vec::from_hex(&claim_tx_response.preimage).unwrap();
-                    let preimage_hash = sha256::Hash::hash(&preimage);
-                    let invoice = Bolt11Invoice::from_str(&create_swap_req.invoice).unwrap();
-                    let invoice_payment_hash = invoice.payment_hash();
-                    assert_eq!(invoice_payment_hash.to_string(), preimage_hash.to_string());
-                    log::info!("Correct Hash preimage received from Boltz.");
-
-                    // Compute and send Musig2 partial sig
-                    let (partial_sig, pub_nonce) = swap_tx
-                        .partial_sign(
-                            &our_keys,
-                            &claim_tx_response.pub_nonce,
-                            &claim_tx_response.transaction_hash,
-                        )
-                        .unwrap();
-                    boltz_api_v2
-                        .post_submarine_claim_tx_details(&swap_id, pub_nonce, partial_sig)
-                        .await
-                        .unwrap();
-                    log::info!("Successfully Sent partial signature");
-                }
-
-                if update.status == "transaction.claimed" {
-                    log::info!("Successfully completed submarine swap");
-                    break;
-                }
-
-                // This means the funding transaction was rejected by Boltz for whatever reason, and we need to get
-                // the funds back via refund.
-                if update.status == "transaction.lockupFailed"
-                    || update.status == "invoice.failedToPay"
-                {
-                    async_sleep(WAIT_TIME_MS).await;
-                    let swap_tx = BtcSwapTx::new_refund(
-                        swap_script.clone(),
-                        &refund_address,
-                        bitcoin_client,
-                        BOLTZ_REGTEST.to_owned(),
-                        swap_id.to_owned(),
-                    )
-                    .await
-                    .expect("Funding UTXO not found");
-
-                    let tx = swap_tx
-                        .sign_refund(
-                            &our_keys,
-                            Fee::Absolute(1000),
-                            Some(Cooperative {
-                                boltz_api: &boltz_api_v2,
-                                swap_id: swap_id.clone(),
-                                pub_nonce: None,
-                                partial_sig: None,
-                            }),
-                        )
-                        .await
-                        .unwrap();
-
-                    let txid = swap_tx.broadcast(&tx, bitcoin_client).await.unwrap();
-                    log::info!("Cooperative Refund Successfully broadcasted: {}", txid);
-
-                    // Non cooperative refund requires expired swap
-                    /*log::info!("Cooperative refund failed. {:?}", e);
-                    log::info!("Attempting Non-cooperative refund.");
-
-                    let tx = swap_tx
-                        .sign_refund(&our_keys, Fee::Absolute(1000), None)
-                        .await
-                        .unwrap();
-                    let txid = swap_tx
-                        .broadcast(&tx, bitcoin_client)
-                        .await
-                        .unwrap();
-                    log::info!("Non-cooperative Refund Successfully broadcasted: {}", txid);*/
-                    break;
-                }
             }
-            Ok(WsResponse::Unsubscribe(unsubscribe)) => {
-                log::error!(
-                    "Got unexpected boltz unsubscribe response : {:?}",
-                    unsubscribe
-                );
-            }
-            Ok(WsResponse::Pong) => {
-                log::error!("Got unexpected boltz pong response");
-            }
-            Err(e) => {
-                log::error!("Failed to parse boltz response: {e} - response: {response}");
-            }
-        }
+        };
     }
 }
 

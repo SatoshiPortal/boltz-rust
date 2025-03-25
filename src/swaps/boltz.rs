@@ -17,6 +17,8 @@
 //!     output_amount - base_fees - claim_fee
 //! );
 
+use crate::{error::Error, network::Chain, util::secrets::Preimage};
+use crate::{BtcSwapScript, LBtcSwapScript};
 use bitcoin::{hashes::sha256, hex::DisplayHex, PublicKey};
 use lightning_invoice::Bolt11Invoice;
 use serde::{Deserialize, Serialize};
@@ -25,13 +27,11 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use crate::{error::Error, network::Chain, util::secrets::Preimage};
-use crate::{BtcSwapScript, LBtcSwapScript};
-
 pub const BOLTZ_TESTNET_URL_V2: &str = "https://api.testnet.boltz.exchange/v2";
 pub const BOLTZ_MAINNET_URL_V2: &str = "https://api.boltz.exchange/v2";
 pub const BOLTZ_REGTEST: &str = "http://localhost:9001/v2";
 
+use crate::swaps::status_stream::BoltzWsApi;
 use elements::secp256k1_zkp::{MusigPartialSignature, MusigPubNonce};
 pub use tokio_tungstenite_wasm;
 use tokio_tungstenite_wasm::{connect, WebSocketStream};
@@ -321,6 +321,11 @@ impl BoltzApiClientV2 {
     pub async fn connect_ws(&self) -> Result<WebSocketStream, Error> {
         let ws_string = self.base_url.clone().replace("http", "ws") + "/ws";
         Ok(connect(ws_string).await?)
+    }
+
+    pub fn ws(&self) -> BoltzWsApi {
+        let ws_string = self.base_url.clone().replace("http", "ws") + "/ws";
+        BoltzWsApi::new(ws_string)
     }
 
     /// Make a get request. returns the Response
@@ -748,9 +753,13 @@ pub enum WsRequest {
 
 impl WsRequest {
     pub fn subscribe_swap_request(swap_id: &str) -> Self {
+        Self::subscribe_swaps_request(vec![swap_id.to_string()])
+    }
+
+    pub fn subscribe_swaps_request(swap_ids: Vec<String>) -> Self {
         Self::Subscribe(SubscribeRequest {
             channel: SubscriptionChannel::SwapUpdate,
-            args: vec![swap_id.to_string()],
+            args: swap_ids,
         })
     }
 }
