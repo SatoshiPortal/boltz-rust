@@ -2,6 +2,7 @@ use crate::boltz::{SwapStatus, WsRequest, WsResponse};
 use crate::error::Error;
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, oneshot, Mutex};
@@ -34,7 +35,7 @@ impl BoltzWsConnection {
 
 pub struct BoltzWsApi {
     ws_url: String,
-    swap_ids: Mutex<Vec<String>>,
+    swap_ids: Mutex<HashSet<String>>,
     subscription_notifier: broadcast::Sender<String>,
     update_notifier: broadcast::Sender<SwapStatus>,
     shutdown_sender: Mutex<Option<oneshot::Sender<()>>>,
@@ -46,7 +47,7 @@ impl BoltzWsApi {
         let (update_notifier, _) = broadcast::channel(16);
         Self {
             ws_url,
-            swap_ids: Mutex::new(vec![]),
+            swap_ids: Mutex::new(HashSet::new()),
             subscription_notifier,
             update_notifier,
             shutdown_sender: Mutex::new(None),
@@ -82,7 +83,7 @@ impl BoltzWsApi {
                     Ok(mut connection) => {
                         {
                             let ids = self.swap_ids.lock().await;
-                            match connection.subscribe(ids.to_owned()).await {
+                            match connection.subscribe(ids.iter().cloned().collect()).await {
                                 Ok(_) => {}
                                 Err(e) => {
                                     error!("Error subscribing to swaps: {:?}", e);
@@ -111,7 +112,7 @@ impl BoltzWsApi {
                                     Ok(swap_id) => {
                                         if let Err(e) = connection.subscribe(vec![swap_id.clone()]).await {
                                             let mut ids = self.swap_ids.lock().await;
-                                            ids.push(swap_id.clone());
+                                            ids.insert(swap_id.clone());
                                             error!("Failed to subscribe to swap {swap_id}: {e:?}");
                                         }
                                     },
