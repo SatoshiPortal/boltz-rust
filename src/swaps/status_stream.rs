@@ -70,108 +70,121 @@ impl BoltzWsApi {
     }
 
     pub fn start(self: Arc<Self>) {
+        // create the receiver rightaway to make sure one can call subscribe before the ws loop actually runs
+        let sub_stream = self.subscription_notifier.subscribe();
+        let future = self.run_ws_loop(sub_stream);
+
+        #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+        {
+            tokio::spawn(future);
+        }
+
+        #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+        {
+            // In WASM, we can use spawn_local since we don't need Send
+            tokio::task::spawn_local(future);
+        }
+    }
+
+    async fn run_ws_loop(self: Arc<Self>, mut sub_stream: broadcast::Receiver<String>) {
+        let (shutdown_sender, mut shutdown_receiver) = oneshot::channel();
+        let _ = self.shutdown_sender.lock().await.replace(shutdown_sender);
+
         let keep_alive_ping_interval = Duration::from_secs(15);
         let reconnect_delay = Duration::from_secs(2);
-        let mut sub_stream = self.subscription_notifier.subscribe();
 
-        tokio::spawn(async move {
-            let (shutdown_sender, mut shutdown_receiver) = oneshot::channel();
-            let _ = self.shutdown_sender.lock().await.replace(shutdown_sender);
-
-            'outer: loop {
-                match BoltzWsConnection::new(self.ws_url.as_str()).await {
-                    Ok(mut connection) => {
-                        {
-                            let ids = self.swap_ids.lock().await;
-                            match connection.subscribe(ids.iter().cloned().collect()).await {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!("Error subscribing to swaps: {:?}", e);
-                                    tokio::time::sleep(reconnect_delay).await;
-                                    continue;
-                                }
+        'outer: loop {
+            match BoltzWsConnection::new(self.ws_url.as_str()).await {
+                Ok(mut connection) => {
+                    {
+                        let ids = self.swap_ids.lock().await;
+                        match connection.subscribe(ids.iter().cloned().collect()).await {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!("Error subscribing to swaps: {:?}", e);
+                                tokio::time::sleep(reconnect_delay).await;
+                                continue;
                             }
                         }
-                        let mut interval = tokio::time::interval(keep_alive_ping_interval);
+                    }
+                    let mut interval = tokio::time::interval(keep_alive_ping_interval);
 
-                        loop {
-                            tokio::select! {
-                                _ = &mut shutdown_receiver => {
-                                    info!("Received shutdown signal, exiting socket loop");
-                                    break 'outer;
-                                },
+                    loop {
+                        tokio::select! {
+                            _ = &mut shutdown_receiver => {
+                                info!("Received shutdown signal, exiting socket loop");
+                                break 'outer;
+                            },
 
-                                _ = interval.tick() => {
-                                    match connection.send_json(&WsRequest::Ping).await {
-                                        Ok(_) => debug!("Sent keep-alive ping"),
-                                        Err(e) => warn!("Failed to send keep-alive ping: {e:?}"),
+                            _ = interval.tick() => {
+                                match connection.send_json(&WsRequest::Ping).await {
+                                    Ok(_) => debug!("Sent keep-alive ping"),
+                                    Err(e) => warn!("Failed to send keep-alive ping: {e:?}"),
+                                }
+                            },
+
+                            swap_res = sub_stream.recv() => match swap_res {
+                                Ok(swap_id) => {
+                                    if let Err(e) = connection.subscribe(vec![swap_id.clone()]).await {
+                                        let mut ids = self.swap_ids.lock().await;
+                                        ids.insert(swap_id.clone());
+                                        error!("Failed to subscribe to swap {swap_id}: {e:?}");
                                     }
                                 },
+                                Err(e) => error!("Received error on subscription stream: {e:?}"),
+                            },
 
-                                swap_res = sub_stream.recv() => match swap_res {
-                                    Ok(swap_id) => {
-                                        if let Err(e) = connection.subscribe(vec![swap_id.clone()]).await {
-                                            let mut ids = self.swap_ids.lock().await;
-                                            ids.insert(swap_id.clone());
-                                            error!("Failed to subscribe to swap {swap_id}: {e:?}");
-                                        }
-                                    },
-                                    Err(e) => error!("Received error on subscription stream: {e:?}"),
-                                },
-
-                                maybe_next = connection.ws.next() => match maybe_next {
-                                    Some(msg) => match msg {
-                                        Ok(Message::Close(_)) => {
-                                            warn!("Received close msg, exiting socket loop");
-                                            tokio::time::sleep(reconnect_delay).await;
-                                            break;
-                                        },
-                                        Ok(Message::Text(payload)) => {
-                                            let payload = payload.as_str();
-                                            info!("Received text msg: {payload:?}");
-                                            match serde_json::from_str::<WsResponse>(payload) {
-                                                // Subscribing/unsubscribing confirmation
-                                                Ok(WsResponse::Subscribe { .. }) | Ok(WsResponse::Unsubscribe { .. }) => {}
-
-                                                // Status update(s)
-                                                Ok(WsResponse::Update(update)) => {
-                                                    for update in update.args {
-                                                        let _ = self.update_notifier.send(update);
-                                                    }
-                                                }
-
-                                                // A response to one of our pings
-                                                Ok(WsResponse::Pong) => debug!("Received pong"),
-
-                                                // Either an invalid response, or an error related to subscription
-                                                Err(e) => error!("Failed to parse websocket response: {e:?} - response: {payload}"),
-                                            }
-                                        },
-                                        Ok(msg) => warn!("Unhandled msg: {msg:?}"),
-                                        Err(e) => {
-                                            error!("Received stream error: {e:?}");
-                                            let _ = connection.ws.close().await;
-                                            break;
-                                        }
-                                    },
-                                    None => {
-                                        warn!("Received nothing from the stream");
-                                        let _ = connection.ws.close().await;
+                            maybe_next = connection.ws.next() => match maybe_next {
+                                Some(msg) => match msg {
+                                    Ok(Message::Close(_)) => {
+                                        warn!("Received close msg, exiting socket loop");
                                         tokio::time::sleep(reconnect_delay).await;
                                         break;
                                     },
-                                }
+                                    Ok(Message::Text(payload)) => {
+                                        let payload = payload.as_str();
+                                        info!("Received text msg: {payload:?}");
+                                        match serde_json::from_str::<WsResponse>(payload) {
+                                            // Subscribing/unsubscribing confirmation
+                                            Ok(WsResponse::Subscribe { .. }) | Ok(WsResponse::Unsubscribe { .. }) => {}
 
+                                            // Status update(s)
+                                            Ok(WsResponse::Update(update)) => {
+                                                for update in update.args {
+                                                    let _ = self.update_notifier.send(update);
+                                                }
+                                            }
+
+                                            // A response to one of our pings
+                                            Ok(WsResponse::Pong) => debug!("Received pong"),
+
+                                            // Either an invalid response, or an error related to subscription
+                                            Err(e) => error!("Failed to parse websocket response: {e:?} - response: {payload}"),
+                                        }
+                                    },
+                                    Ok(msg) => warn!("Unhandled msg: {msg:?}"),
+                                    Err(e) => {
+                                        error!("Received stream error: {e:?}");
+                                        let _ = connection.ws.close().await;
+                                        break;
+                                    }
+                                },
+                                None => {
+                                    warn!("Received nothing from the stream");
+                                    let _ = connection.ws.close().await;
+                                    tokio::time::sleep(reconnect_delay).await;
+                                    break;
+                                },
                             }
                         }
                     }
-                    Err(e) => {
-                        error!("Error connecting to websocket: {:?}", e);
-                        tokio::time::sleep(reconnect_delay).await;
-                    }
+                }
+                Err(e) => {
+                    error!("Error connecting to websocket: {:?}", e);
+                    tokio::time::sleep(reconnect_delay).await;
                 }
             }
-        });
+        }
     }
 }
 
