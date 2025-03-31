@@ -77,7 +77,7 @@ impl BoltzWsApi {
             let (shutdown_sender, mut shutdown_receiver) = oneshot::channel();
             let _ = self.shutdown_sender.lock().await.replace(shutdown_sender);
 
-            loop {
+            'outer: loop {
                 match BoltzWsConnection::new(self.ws_url.as_str()).await {
                     Ok(mut connection) => {
                         {
@@ -97,7 +97,7 @@ impl BoltzWsApi {
                             tokio::select! {
                                 _ = &mut shutdown_receiver => {
                                     info!("Received shutdown signal, exiting socket loop");
-                                    break;
+                                    break 'outer;
                                 },
 
                                 _ = interval.tick() => {
