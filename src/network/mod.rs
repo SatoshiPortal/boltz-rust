@@ -15,6 +15,19 @@ pub enum Chain {
     Liquid(LiquidChain),
 }
 
+impl From<BitcoinChain> for Chain {
+    fn from(value: BitcoinChain) -> Self {
+        Chain::Bitcoin(value)
+    }
+}
+
+impl From<LiquidChain> for Chain {
+    fn from(value: LiquidChain) -> Self {
+        Chain::Liquid(value)
+    }
+}
+
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BitcoinChain {
     Bitcoin,

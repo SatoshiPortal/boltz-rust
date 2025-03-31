@@ -25,6 +25,7 @@ use super::boltz::{
     BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateReverseResponse,
     CreateSubmarineResponse, Side, SwapTxKind, SwapType, ToSign,
 };
+use super::wrappers::SwapScriptCommon;
 
 use crate::network::{BitcoinChain, BitcoinClient};
 use crate::util::fees::{create_tx_with_fee, Fee};
@@ -380,7 +381,7 @@ impl BtcSwapScript {
     }
 
     /// Get the balance of the script
-    pub async fn get_balance<BC: BitcoinClient>(
+    pub async fn get_balance<BC: BitcoinClient + ?Sized>(
         &self,
         bitcoin_client: &BC,
     ) -> Result<(u64, i64), Error> {
@@ -390,7 +391,7 @@ impl BtcSwapScript {
     }
 
     /// Fetch (utxo,amount) pairs for all utxos of the script_pubkey of this swap.
-    pub async fn fetch_utxos<BC: BitcoinClient>(
+    pub async fn fetch_utxos<BC: BitcoinClient + ?Sized>(
         &self,
         bitcoin_client: &BC,
     ) -> Result<Vec<(OutPoint, TxOut)>, Error> {
@@ -449,6 +450,7 @@ impl BtcSwapScript {
         }
         Ok(None)
     }
+
 }
 
 pub fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
@@ -475,7 +477,7 @@ pub struct BtcSwapTx {
 impl BtcSwapTx {
     /// Craft a new ClaimTx. Only works for Reverse and Chain Swaps.
     /// Returns None, if the HTLC utxo doesn't exist for the swap.
-    pub async fn new_claim<BC: BitcoinClient>(
+    pub async fn new_claim<BC: BitcoinClient + ?Sized>(
         swap_script: BtcSwapScript,
         claim_address: String,
         bitcoin_client: &BC,
@@ -521,7 +523,7 @@ impl BtcSwapTx {
 
     /// Construct a RefundTX corresponding to the swap_script. Only works for Submarine and Chain Swaps.
     /// Returns None, if the HTLC UTXO for the swap doesn't exist in blockhcian.
-    pub async fn new_refund<BC: BitcoinClient>(
+    pub async fn new_refund<BC: BitcoinClient + ?Sized>(
         swap_script: BtcSwapScript,
         refund_address: &str,
         bitcoin_client: &BC,
@@ -579,40 +581,8 @@ impl BtcSwapTx {
         pub_nonce: &str,
         transaction_hash: &str,
     ) -> Result<(MusigPartialSignature, MusigPubNonce), Error> {
-        // Step 1: Start with a Musig KeyAgg Cache
-        let secp = Secp256k1::new();
-
-        let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
-
-        let tweak = SecretKey::from_slice(
-            self.swap_script
-                .taproot_spendinfo()?
-                .tap_tweak()
-                .as_byte_array(),
-        )?;
-
-        let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
-
-        let session_id = MusigSessionId::new(&mut thread_rng());
-
-        let msg = Message::from_digest_slice(&Vec::from_hex(transaction_hash)?)?;
-
-        // Step 4: Start the Musig2 Signing session
-        let mut extra_rand = [0u8; 32];
-        OsRng.fill_bytes(&mut extra_rand);
-
-        let (gen_sec_nonce, gen_pub_nonce) =
-            key_agg_cache.nonce_gen(&secp, session_id, keys.public_key(), msg, Some(extra_rand))?;
-
-        let boltz_nonce = MusigPubNonce::from_slice(&Vec::from_hex(pub_nonce)?)?;
-
-        let agg_nonce = MusigAggNonce::new(&secp, &[boltz_nonce, gen_pub_nonce]);
-
-        let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
-
-        let partial_sig = musig_session.partial_sign(&secp, gen_sec_nonce, keys, &key_agg_cache)?;
-
-        Ok((partial_sig, gen_pub_nonce))
+        self.swap_script
+            .partial_sign(keys, pub_nonce, transaction_hash)
     }
 
     /// Sign a claim transaction.
@@ -1162,11 +1132,56 @@ impl BtcSwapTx {
     }
 
     /// Broadcast transaction to the network.
-    pub async fn broadcast<BC: BitcoinClient>(
+    pub async fn broadcast<BC: BitcoinClient + ?Sized>(
         &self,
         signed_tx: &Transaction,
         bitcoin_client: &BC,
     ) -> Result<Txid, Error> {
         bitcoin_client.broadcast_tx(signed_tx).await
+    }
+}
+
+impl SwapScriptCommon for BtcSwapScript {
+    fn swap_type(&self) -> SwapType {
+        self.swap_type
+    }
+
+    /// Compute the Musig partial signature.
+    /// This is used to cooperatively settle a Submarine or Chain Swap.
+    fn partial_sign(
+        &self,
+        keys: &Keypair,
+        pub_nonce: &str,
+        transaction_hash: &str,
+    ) -> Result<(MusigPartialSignature, MusigPubNonce), Error> {
+        // Step 1: Start with a Musig KeyAgg Cache
+        let secp = Secp256k1::new();
+
+        let mut key_agg_cache = self.musig_keyagg_cache();
+
+        let tweak = SecretKey::from_slice(self.taproot_spendinfo()?.tap_tweak().as_byte_array())?;
+
+        let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+
+        let session_id = MusigSessionId::new(&mut thread_rng());
+
+        let msg = Message::from_digest_slice(&Vec::from_hex(transaction_hash)?)?;
+
+        // Step 4: Start the Musig2 Signing session
+        let mut extra_rand = [0u8; 32];
+        OsRng.fill_bytes(&mut extra_rand);
+
+        let (gen_sec_nonce, gen_pub_nonce) =
+            key_agg_cache.nonce_gen(&secp, session_id, keys.public_key(), msg, Some(extra_rand))?;
+
+        let boltz_nonce = MusigPubNonce::from_slice(&Vec::from_hex(pub_nonce)?)?;
+
+        let agg_nonce = MusigAggNonce::new(&secp, &[boltz_nonce, gen_pub_nonce]);
+
+        let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+
+        let partial_sig = musig_session.partial_sign(&secp, gen_sec_nonce, keys, &key_agg_cache)?;
+
+        Ok((partial_sig, gen_pub_nonce))
     }
 }

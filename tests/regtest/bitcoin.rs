@@ -1,61 +1,57 @@
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 #[cfg(feature = "electrum")]
-use boltz_client::network::electrum::ElectrumBitcoinClient;
+use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClient};
 #[cfg(feature = "esplora")]
-use boltz_client::network::esplora::EsploraBitcoinClient;
+use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
 use boltz_client::{
     network::Chain,
     swaps::{
         boltz::{BoltzApiClientV2, Cooperative, CreateReverseRequest, CreateSubmarineRequest},
         magic_routing::{check_for_mrh, sign_address},
+        wrappers::{SwapScript, SwapTx},
     },
     util::{secrets::Preimage, setup_logger},
-    Bolt11Invoice, BtcSwapScript, BtcSwapTx, Secp256k1,
+    BtcSwapScript, BtcSwapTx, Secp256k1,
 };
-use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::regtest::WAIT_TIME_MS;
 use crate::utils;
-use bitcoin::{
-    hashes::{sha256, Hash},
-    hex::FromHex,
-    key::rand::thread_rng,
-    secp256k1::Keypair,
-    PublicKey,
-};
+use bitcoin::{key::rand::thread_rng, secp256k1::Keypair, PublicKey};
 use boltz_client::boltz::{BoltzWsConfig, BOLTZ_REGTEST};
 use boltz_client::fees::Fee;
 use boltz_client::network::esplora::async_sleep;
-use boltz_client::network::{BitcoinChain, BitcoinClient};
+use boltz_client::network::{BitcoinChain, BitcoinClient, LiquidChain};
 use serial_test::serial;
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 const CHAIN: BitcoinChain = BitcoinChain::BitcoinRegtest;
+const LIQUID_CHAIN: LiquidChain = LiquidChain::LiquidRegtest;
 
 #[macros::async_test]
 #[serial]
 #[cfg(feature = "electrum")]
 async fn bitcoin_v2_submarine_electrum() {
     setup_logger();
-    let bitcoin_client = ElectrumBitcoinClient::default(CHAIN, None).unwrap();
-    bitcoin_v2_submarine(&bitcoin_client, false).await;
-    bitcoin_v2_submarine(&bitcoin_client, true).await;
+    let client = Client::new().with_bitcoin(ElectrumBitcoinClient::default(CHAIN, None).unwrap());
+    bitcoin_v2_submarine(&client, false, Chain::Bitcoin(CHAIN)).await;
+    bitcoin_v2_submarine(&client, true, Chain::Bitcoin(CHAIN)).await;
 }
+use boltz_client::swaps::wrappers::Client;
 
 #[macros::async_test_all]
 #[serial]
 #[cfg(feature = "esplora")]
 async fn bitcoin_v2_submarine_esplora() {
     setup_logger();
-    let bitcoin_client = EsploraBitcoinClient::default(CHAIN, None);
-    bitcoin_v2_submarine(&bitcoin_client, false).await;
-    bitcoin_v2_submarine(&bitcoin_client, true).await;
+    let client = Client::new().with_bitcoin(EsploraBitcoinClient::default(CHAIN, None));
+    bitcoin_v2_submarine(&client, false, Chain::Bitcoin(CHAIN)).await;
+    bitcoin_v2_submarine(&client, true, Chain::Bitcoin(CHAIN)).await;
 }
 
-async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: bool) {
+async fn bitcoin_v2_submarine(client: &Client, underpay: bool, chain: Chain) {
     let secp = bitcoin::secp256k1::Secp256k1::new();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
 
@@ -66,7 +62,10 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
 
     // Set a new invoice string and refund address for each test.
     let invoice = utils::generate_invoice_lnd(50_000).await.unwrap();
-    let refund_address = utils::generate_address_bitcoind().await.unwrap();
+    let refund_address = match chain {
+        Chain::Bitcoin(_) => utils::generate_address_bitcoind().await.unwrap(),
+        Chain::Liquid(_) => utils::generate_address_elementsd().await.unwrap(),
+    };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
@@ -74,14 +73,17 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
 
     // If there is MRH send directly to that address
     //    let (bip21_addrs, amount) =
-    //         check_for_mrh(&boltz_api_v2, &invoice, CHAIN).unwrap();
+    //         check_for_mrh(&boltz_api_v2, &invoice, chain).unwrap();
     //         log::info!("Found MRH in invoice");
     //         log::info!("Send {} to {}", amount, bip21_addrs);
     //         return;
 
     // Initiate the swap with Boltz
     let create_swap_req = CreateSubmarineRequest {
-        from: "BTC".to_string(),
+        from: match chain {
+            Chain::Bitcoin(_) => "BTC".to_string(),
+            Chain::Liquid(_) => "L-BTC".to_string(),
+        },
         to: "BTC".to_string(),
         invoice: invoice.to_string(),
         refund_public_key,
@@ -97,7 +99,8 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
     log::debug!("Swap Response: {:?}", create_swap_response);
 
     let swap_script =
-        BtcSwapScript::submarine_from_swap_resp(&create_swap_response, refund_public_key).unwrap();
+        SwapScript::submarine_from_swap_resp(chain, &create_swap_response, refund_public_key)
+            .unwrap();
     let swap_id = create_swap_response.id.clone();
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
@@ -109,8 +112,12 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
         match update.status.as_str() {
             "invoice.set" => {
                 log::info!(
-                    "Send {} sats to BTC address {}",
+                    "Send {} sats to {} address {}",
                     create_swap_response.expected_amount,
+                    match chain {
+                        Chain::Bitcoin(_) => "BTC",
+                        Chain::Liquid(_) => "L-BTC",
+                    },
                     create_swap_response.address
                 );
 
@@ -118,55 +125,33 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
                     true => create_swap_response.expected_amount - 1,
                     false => create_swap_response.expected_amount,
                 };
-                utils::send_to_address_bitcoind(&create_swap_response.address, amount)
-                    .await
-                    .unwrap();
+                match chain {
+                    Chain::Bitcoin(_) => {
+                        utils::send_to_address_bitcoind(&create_swap_response.address, amount)
+                            .await
+                            .unwrap();
+                    }
+                    Chain::Liquid(_) => {
+                        utils::send_to_address_elementsd(&create_swap_response.address, amount)
+                            .await
+                            .unwrap();
+                    }
+                }
             }
             "transaction.mempool" => {
                 utils::mine_blocks(1).await.unwrap();
             }
             "transaction.claim.pending" => {
-                // Create the refund transaction at this stage
-                // This will fail if the funding transaction isn't confirmed yet. Which should not happen.
-                let swap_tx = BtcSwapTx::new_refund(
-                    swap_script.clone(),
-                    &refund_address,
-                    bitcoin_client,
-                    BOLTZ_REGTEST.to_owned(),
-                    swap_id.to_owned(),
-                )
-                .await
-                .expect("Funding UTXO not found");
-
-                let claim_tx_response = boltz_api_v2
-                    .get_submarine_claim_tx_details(&swap_id)
-                    .await
-                    .unwrap();
-
-                log::debug!("Received claim tx details : {:?}", claim_tx_response);
-
-                // Check that boltz have the correct preimage.
-                // At this stage the client should verify that LN invoice has been paid.
-                let preimage = Vec::from_hex(&claim_tx_response.preimage).unwrap();
-                let preimage_hash = sha256::Hash::hash(&preimage);
-                let invoice = Bolt11Invoice::from_str(&create_swap_req.invoice).unwrap();
-                let invoice_payment_hash = invoice.payment_hash();
-                assert_eq!(invoice_payment_hash.to_string(), preimage_hash.to_string());
-                log::info!("Correct Hash preimage received from Boltz.");
-
-                // Compute and send Musig2 partial sig
-                let (partial_sig, pub_nonce) = swap_tx
-                    .partial_sign(
+                let response = swap_script
+                    .submarine_cooperative_claim(
+                        &swap_id,
                         &our_keys,
-                        &claim_tx_response.pub_nonce,
-                        &claim_tx_response.transaction_hash,
+                        &create_swap_req.invoice,
+                        &boltz_api_v2,
                     )
-                    .unwrap();
-                boltz_api_v2
-                    .post_submarine_claim_tx_details(&swap_id, pub_nonce, partial_sig)
                     .await
                     .unwrap();
-                log::info!("Successfully Sent partial signature");
+                log::debug!("Received claim tx details : {:?}", response);
             }
 
             "transaction.claimed" => {
@@ -178,10 +163,10 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
             // the funds back via refund.
             "transaction.lockupFailed" | "invoice.failedToPay" => {
                 async_sleep(WAIT_TIME_MS).await;
-                let swap_tx = BtcSwapTx::new_refund(
+                let swap_tx = SwapTx::new_refund(
                     swap_script.clone(),
                     &refund_address,
-                    bitcoin_client,
+                    client,
                     BOLTZ_REGTEST.to_owned(),
                     swap_id.to_owned(),
                 )
@@ -198,11 +183,12 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
                             pub_nonce: None,
                             partial_sig: None,
                         }),
+                        false,
                     )
                     .await
                     .unwrap();
 
-                let txid = swap_tx.broadcast(&tx, bitcoin_client).await.unwrap();
+                let txid = swap_tx.broadcast(&tx, client).await.unwrap();
                 log::info!("Cooperative Refund Successfully broadcasted: {}", txid);
 
                 // Non cooperative refund requires expired swap
@@ -470,4 +456,24 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
             }
         }
     }
+}
+
+#[macros::async_test]
+#[serial]
+#[cfg(feature = "electrum")]
+async fn liquid_v2_submarine_electrum() {
+    setup_logger();
+    let client = Client::new().with_liquid(ElectrumLiquidClient::default(LIQUID_CHAIN, None).unwrap());
+    bitcoin_v2_submarine(&client, false, Chain::Liquid(LIQUID_CHAIN)).await;
+    bitcoin_v2_submarine(&client, true, Chain::Liquid(LIQUID_CHAIN)).await;
+}
+
+#[macros::async_test_all]
+#[serial]
+#[cfg(feature = "esplora")]
+async fn liquid_v2_submarine_esplora() {
+    setup_logger();
+    let client = Client::new().with_liquid(EsploraLiquidClient::default(LIQUID_CHAIN, None));
+    bitcoin_v2_submarine(&client, false, Chain::Liquid(LIQUID_CHAIN)).await;
+    bitcoin_v2_submarine(&client, true, Chain::Liquid(LIQUID_CHAIN)).await;
 }

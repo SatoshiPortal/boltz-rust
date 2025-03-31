@@ -3,3 +3,4 @@ pub mod boltz;
 pub mod liquid;
 pub mod magic_routing;
 mod status_stream;
+pub mod wrappers;
