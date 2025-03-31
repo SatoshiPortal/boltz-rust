@@ -9,6 +9,7 @@ pub mod electrum;
 #[cfg(feature = "esplora")]
 pub mod esplora;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Chain {
     Bitcoin(BitcoinChain),
     Liquid(LiquidChain),
