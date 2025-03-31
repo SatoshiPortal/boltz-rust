@@ -2,8 +2,8 @@ use crate::regtest::WAIT_TIME_MS;
 use crate::utils;
 use bitcoin::{key::rand::thread_rng, PublicKey};
 use boltz_client::boltz::{
-    BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateChainRequest, Side, SubscriptionChannel,
-    WsRequest, WsResponse, BOLTZ_REGTEST, BOLTZ_TESTNET_URL_V2,
+    BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateChainRequest, Side, BOLTZ_REGTEST,
+    BOLTZ_TESTNET_URL_V2,
 };
 use boltz_client::fees::Fee;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -18,10 +18,9 @@ use boltz_client::{
     BtcSwapScript, BtcSwapTx, Keypair, LBtcSwapScript, LBtcSwapTx, Secp256k1,
 };
 use elements::Address as EAddress;
-use futures_util::{SinkExt, StreamExt};
 use serial_test::serial;
 use std::str::FromStr;
-use tokio_tungstenite_wasm::Message;
+use std::sync::Arc;
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -129,154 +128,122 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
     // assert_eq!(claim_address.to_string(), claim_details.claim_address.unwrap());
     let liquid_genesis_hash = liquid_client.get_genesis_hash().await.unwrap();
     log::debug!("{:#?}", liquid_genesis_hash);
-    let (mut sender, mut receiver) = boltz_api_v2.connect_ws().await.unwrap().split();
 
-    sender
-        .send(Message::text(
-            serde_json::to_string(&WsRequest::subscribe_swap_request(&swap_id)).unwrap(),
-        ))
-        .await
-        .unwrap();
+    let ws_api = Arc::new(boltz_api_v2.ws());
+    ws_api.clone().start();
+    ws_api.subscribe(&swap_id).unwrap();
+    let mut rx = ws_api.updates();
+
     loop {
-        let response = receiver.next().await.unwrap().unwrap().into_text().unwrap();
+        let update = rx.recv().await.unwrap();
+        match update.status.as_str() {
+            "swap.created" => {
+                let amount = match underpay {
+                    true => create_chain_response.lockup_details.amount / 2,
+                    false => create_chain_response.lockup_details.amount,
+                };
+                let address = create_chain_response.lockup_details.clone().lockup_address;
 
-        match serde_json::from_str(&response) {
-            Ok(WsResponse::Subscribe(subscribe)) => {
-                assert_eq!(subscribe.channel, SubscriptionChannel::SwapUpdate);
-                assert_eq!(subscribe.args.first().expect("expected"), &swap_id);
-                log::info!(
-                    "Successfully subscribed for Swap updates. Swap ID : {}",
-                    swap_id
-                );
+                log::info!("Sending {} sats to BTC address {}", amount, address);
+
+                utils::send_to_address_bitcoind(&address, amount)
+                    .await
+                    .unwrap();
             }
 
-            Ok(WsResponse::Update(update)) => {
-                assert_eq!(update.channel, SubscriptionChannel::SwapUpdate);
-                let update = update.args.first().expect("expected");
-                assert_eq!(update.id, *swap_id);
+            "transaction.mempool" | "transaction.server.mempool" => {
+                utils::mine_blocks(1).await.unwrap();
+            }
+
+            "transaction.server.confirmed" => {
+                log::info!("Server lockup tx is confirmed!");
+
+                async_sleep(WAIT_TIME_MS).await;
+                log::info!("Claiming!");
+
+                let claim_tx = LBtcSwapTx::new_claim(
+                    claim_script.clone(),
+                    claim_address.clone(),
+                    liquid_client,
+                    BOLTZ_TESTNET_URL_V2.to_string(),
+                    swap_id.clone(),
+                )
+                .await
+                .unwrap();
+                let refund_tx = BtcSwapTx::new_refund(
+                    lockup_script.clone(),
+                    &refund_address,
+                    bitcoin_client,
+                    BOLTZ_TESTNET_URL_V2.to_owned(),
+                    swap_id.clone(),
+                )
+                .await
+                .unwrap();
+                let claim_tx_response = boltz_api_v2
+                    .get_chain_claim_tx_details(&swap_id)
+                    .await
+                    .unwrap();
+                let (partial_sig, pub_nonce) = refund_tx
+                    .partial_sign(
+                        &our_refund_keys,
+                        &claim_tx_response.pub_nonce,
+                        &claim_tx_response.transaction_hash,
+                    )
+                    .unwrap();
+                let tx = claim_tx
+                    .sign_claim(
+                        &our_claim_keys,
+                        &preimage,
+                        Fee::Absolute(1000),
+                        Some(Cooperative {
+                            boltz_api: &boltz_api_v2,
+                            swap_id: swap_id.clone(),
+                            pub_nonce: Some(pub_nonce),
+                            partial_sig: Some(partial_sig),
+                        }),
+                        false,
+                    )
+                    .await
+                    .unwrap();
+
+                claim_tx.broadcast(&tx, liquid_client, None).await.unwrap();
+
+                log::info!("Succesfully broadcasted claim tx!");
+            }
+
+            "transaction.claimed" => {
+                log::info!("Successfully completed chain swap");
+                break;
+            }
+
+            "transaction.lockupFailed" => {
+                async_sleep(WAIT_TIME_MS).await;
+                log::info!("REFUNDING!");
+                refund_bitcoin_liquid_v2_chain(
+                    lockup_script.clone(),
+                    refund_address.clone(),
+                    swap_id.clone(),
+                    our_refund_keys,
+                    boltz_api_v2.clone(),
+                    100,
+                    bitcoin_client,
+                )
+                .await;
+                log::info!("REFUNDING with higher fee");
+                refund_bitcoin_liquid_v2_chain(
+                    lockup_script.clone(),
+                    refund_address.clone(),
+                    swap_id.clone(),
+                    our_refund_keys,
+                    boltz_api_v2.clone(),
+                    1000,
+                    bitcoin_client,
+                )
+                .await;
+                break;
+            }
+            _ => {
                 log::info!("Got Update from server: {}", update.status);
-
-                if update.status == "swap.created" {
-                    let amount = match underpay {
-                        true => create_chain_response.lockup_details.amount / 2,
-                        false => create_chain_response.lockup_details.amount,
-                    };
-                    let address = create_chain_response.lockup_details.clone().lockup_address;
-
-                    log::info!("Sending {} sats to BTC address {}", amount, address);
-
-                    utils::send_to_address_bitcoind(&address, amount)
-                        .await
-                        .unwrap();
-                }
-
-                if update.status == "transaction.mempool"
-                    || update.status == "transaction.server.mempool"
-                {
-                    utils::mine_blocks(1).await.unwrap();
-                }
-
-                if update.status == "transaction.server.confirmed" {
-                    log::info!("Server lockup tx is confirmed!");
-
-                    async_sleep(WAIT_TIME_MS).await;
-                    log::info!("Claiming!");
-
-                    let claim_tx = LBtcSwapTx::new_claim(
-                        claim_script.clone(),
-                        claim_address.clone(),
-                        liquid_client,
-                        BOLTZ_TESTNET_URL_V2.to_string(),
-                        swap_id.clone(),
-                    )
-                    .await
-                    .unwrap();
-                    let refund_tx = BtcSwapTx::new_refund(
-                        lockup_script.clone(),
-                        &refund_address,
-                        bitcoin_client,
-                        BOLTZ_TESTNET_URL_V2.to_owned(),
-                        swap_id.clone(),
-                    )
-                    .await
-                    .unwrap();
-                    let claim_tx_response = boltz_api_v2
-                        .get_chain_claim_tx_details(&swap_id)
-                        .await
-                        .unwrap();
-                    let (partial_sig, pub_nonce) = refund_tx
-                        .partial_sign(
-                            &our_refund_keys,
-                            &claim_tx_response.pub_nonce,
-                            &claim_tx_response.transaction_hash,
-                        )
-                        .unwrap();
-                    let tx = claim_tx
-                        .sign_claim(
-                            &our_claim_keys,
-                            &preimage,
-                            Fee::Absolute(1000),
-                            Some(Cooperative {
-                                boltz_api: &boltz_api_v2,
-                                swap_id: swap_id.clone(),
-                                pub_nonce: Some(pub_nonce),
-                                partial_sig: Some(partial_sig),
-                            }),
-                            false,
-                        )
-                        .await
-                        .unwrap();
-
-                    claim_tx.broadcast(&tx, liquid_client, None).await.unwrap();
-
-                    log::info!("Succesfully broadcasted claim tx!");
-                }
-
-                if update.status == "transaction.claimed" {
-                    log::info!("Successfully completed chain swap");
-                    break;
-                }
-
-                // This means the funding transaction was rejected by Boltz for whatever reason, and we need to get
-                // fund back via refund.
-                if update.status == "transaction.lockupFailed" {
-                    async_sleep(WAIT_TIME_MS).await;
-                    log::info!("REFUNDING!");
-                    refund_bitcoin_liquid_v2_chain(
-                        lockup_script.clone(),
-                        refund_address.clone(),
-                        swap_id.clone(),
-                        our_refund_keys,
-                        boltz_api_v2.clone(),
-                        100,
-                        bitcoin_client,
-                    )
-                    .await;
-                    log::info!("REFUNDING with higher fee");
-                    refund_bitcoin_liquid_v2_chain(
-                        lockup_script.clone(),
-                        refund_address.clone(),
-                        swap_id.clone(),
-                        our_refund_keys,
-                        boltz_api_v2.clone(),
-                        1000,
-                        bitcoin_client,
-                    )
-                    .await;
-                    break;
-                }
-            }
-            Ok(WsResponse::Unsubscribe(unsubscribe)) => {
-                log::error!(
-                    "Got unexpected boltz unsubscribe response : {:?}",
-                    unsubscribe
-                );
-            }
-            Ok(WsResponse::Pong) => {
-                log::error!("Got unexpected boltz pong response");
-            }
-            Err(e) => {
-                log::error!("Failed to parse boltz response: {e} - response: {response}");
             }
         }
     }
@@ -419,160 +386,127 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
 
     let claim_address = utils::generate_address_bitcoind().await.unwrap();
 
-    let (mut sender, mut receiver) = boltz_api_v2.connect_ws().await.unwrap().split();
+    let ws_api = Arc::new(boltz_api_v2.ws());
+    ws_api.clone().start();
+    ws_api.subscribe(&swap_id).unwrap();
+    let mut rx = ws_api.updates();
 
-    sender
-        .send(Message::text(
-            serde_json::to_string(&WsRequest::subscribe_swap_request(&swap_id)).unwrap(),
-        ))
-        .await
-        .unwrap();
     loop {
-        let response = receiver.next().await.unwrap().unwrap().into_text().unwrap();
+        let update = rx.recv().await.unwrap();
+        match update.status.as_str() {
+            "swap.created" => {
+                let amount = match underpay {
+                    true => create_chain_response.lockup_details.amount / 2,
+                    false => create_chain_response.lockup_details.amount,
+                };
+                let address = create_chain_response.lockup_details.clone().lockup_address;
 
-        match serde_json::from_str(&response) {
-            Ok(WsResponse::Subscribe(subscribe)) => {
-                assert_eq!(subscribe.channel, SubscriptionChannel::SwapUpdate);
-                assert_eq!(subscribe.args.first().expect("expected"), &swap_id);
-                log::info!(
-                    "Successfully subscribed for Swap updates. Swap ID : {}",
-                    swap_id
-                );
+                log::info!("Sending {} sats to L-BTC address {}", amount, address);
+
+                utils::send_to_address_elementsd(&address, amount)
+                    .await
+                    .unwrap();
             }
 
-            Ok(WsResponse::Update(update)) => {
-                assert_eq!(update.channel, SubscriptionChannel::SwapUpdate);
-                let update = update.args.first().expect("expected");
-                assert_eq!(update.id, *swap_id);
+            "transaction.mempool" | "transaction.server.mempool" => {
+                utils::mine_blocks(1).await.unwrap();
+            }
+
+            "transaction.server.confirmed" => {
+                log::info!("Server lockup tx is confirmed!");
+
+                async_sleep(WAIT_TIME_MS).await;
+                log::info!("Claiming!");
+
+                let claim_tx = BtcSwapTx::new_claim(
+                    claim_script.clone(),
+                    claim_address.clone(),
+                    bitcoin_client,
+                    BOLTZ_TESTNET_URL_V2.to_owned(),
+                    swap_id.clone(),
+                )
+                .await
+                .unwrap();
+                let refund_tx = LBtcSwapTx::new_refund(
+                    lockup_script.clone(),
+                    &refund_address,
+                    liquid_client,
+                    BOLTZ_TESTNET_URL_V2.to_string(),
+                    swap_id.clone(),
+                )
+                .await
+                .unwrap();
+                let claim_tx_response = boltz_api_v2
+                    .get_chain_claim_tx_details(&swap_id)
+                    .await
+                    .unwrap();
+                let (partial_sig, pub_nonce) = refund_tx
+                    .partial_sign(
+                        &our_refund_keys,
+                        &claim_tx_response.pub_nonce,
+                        &claim_tx_response.transaction_hash,
+                    )
+                    .unwrap();
+                let tx = claim_tx
+                    .sign_claim(
+                        &our_claim_keys,
+                        &preimage,
+                        Fee::Absolute(1000),
+                        Some(Cooperative {
+                            boltz_api: &boltz_api_v2,
+                            swap_id: swap_id.clone(),
+                            pub_nonce: Some(pub_nonce),
+                            partial_sig: Some(partial_sig),
+                        }),
+                    )
+                    .await
+                    .unwrap();
+
+                claim_tx.broadcast(&tx, bitcoin_client).await.unwrap();
+
+                log::info!("Successfully broadcasted claim tx!");
+            }
+
+            "transaction.claimed" => {
+                log::info!("Successfully completed chain swap");
+                break;
+            }
+
+            "transaction.lockupFailed" => {
+                async_sleep(WAIT_TIME_MS).await;
+                log::info!("REFUNDING!");
+                let refund_tx = LBtcSwapTx::new_refund(
+                    lockup_script.clone(),
+                    &refund_address,
+                    liquid_client,
+                    BOLTZ_TESTNET_URL_V2.to_string(),
+                    swap_id.clone(),
+                )
+                .await
+                .unwrap();
+                let tx = refund_tx
+                    .sign_refund(
+                        &our_refund_keys,
+                        Fee::Absolute(1000),
+                        Some(Cooperative {
+                            boltz_api: &boltz_api_v2,
+                            swap_id: swap_id.clone(),
+                            pub_nonce: None,
+                            partial_sig: None,
+                        }),
+                        false,
+                    )
+                    .await
+                    .unwrap();
+
+                refund_tx.broadcast(&tx, liquid_client, None).await.unwrap();
+
+                log::info!("Successfully broadcasted claim tx!");
+                log::debug!("Claim Tx {:?}", tx);
+                break;
+            }
+            _ => {
                 log::info!("Got Update from server: {}", update.status);
-
-                if update.status == "swap.created" {
-                    let amount = match underpay {
-                        true => create_chain_response.lockup_details.amount / 2,
-                        false => create_chain_response.lockup_details.amount,
-                    };
-                    let address = create_chain_response.lockup_details.clone().lockup_address;
-
-                    log::info!("Sending {} sats to L-BTC address {}", amount, address);
-
-                    utils::send_to_address_elementsd(&address, amount)
-                        .await
-                        .unwrap();
-                }
-
-                if update.status == "transaction.mempool"
-                    || update.status == "transaction.server.mempool"
-                {
-                    utils::mine_blocks(1).await.unwrap();
-                }
-
-                if update.status == "transaction.server.confirmed" {
-                    log::info!("Server lockup tx is confirmed!");
-
-                    async_sleep(WAIT_TIME_MS).await;
-                    log::info!("Claiming!");
-
-                    let claim_tx = BtcSwapTx::new_claim(
-                        claim_script.clone(),
-                        claim_address.clone(),
-                        bitcoin_client,
-                        BOLTZ_TESTNET_URL_V2.to_owned(),
-                        swap_id.clone(),
-                    )
-                    .await
-                    .unwrap();
-                    let refund_tx = LBtcSwapTx::new_refund(
-                        lockup_script.clone(),
-                        &refund_address,
-                        liquid_client,
-                        BOLTZ_TESTNET_URL_V2.to_string(),
-                        swap_id.clone(),
-                    )
-                    .await
-                    .unwrap();
-                    let claim_tx_response = boltz_api_v2
-                        .get_chain_claim_tx_details(&swap_id)
-                        .await
-                        .unwrap();
-                    let (partial_sig, pub_nonce) = refund_tx
-                        .partial_sign(
-                            &our_refund_keys,
-                            &claim_tx_response.pub_nonce,
-                            &claim_tx_response.transaction_hash,
-                        )
-                        .unwrap();
-                    let tx = claim_tx
-                        .sign_claim(
-                            &our_claim_keys,
-                            &preimage,
-                            Fee::Absolute(1000),
-                            Some(Cooperative {
-                                boltz_api: &boltz_api_v2,
-                                swap_id: swap_id.clone(),
-                                pub_nonce: Some(pub_nonce),
-                                partial_sig: Some(partial_sig),
-                            }),
-                        )
-                        .await
-                        .unwrap();
-
-                    claim_tx.broadcast(&tx, bitcoin_client).await.unwrap();
-
-                    log::info!("Successfully broadcasted claim tx!");
-                }
-
-                if update.status == "transaction.claimed" {
-                    log::info!("Successfully completed chain swap");
-                    break;
-                }
-
-                // This means the funding transaction was rejected by Boltz for whatever reason, and we need to get
-                // fund back via refund.
-                if update.status == "transaction.lockupFailed" {
-                    async_sleep(WAIT_TIME_MS).await;
-                    log::info!("REFUNDING!");
-                    let refund_tx = LBtcSwapTx::new_refund(
-                        lockup_script.clone(),
-                        &refund_address,
-                        liquid_client,
-                        BOLTZ_TESTNET_URL_V2.to_string(),
-                        swap_id.clone(),
-                    )
-                    .await
-                    .unwrap();
-                    let tx = refund_tx
-                        .sign_refund(
-                            &our_refund_keys,
-                            Fee::Absolute(1000),
-                            Some(Cooperative {
-                                boltz_api: &boltz_api_v2,
-                                swap_id: swap_id.clone(),
-                                pub_nonce: None,
-                                partial_sig: None,
-                            }),
-                            false,
-                        )
-                        .await
-                        .unwrap();
-
-                    refund_tx.broadcast(&tx, liquid_client, None).await.unwrap();
-
-                    log::info!("Successfully broadcasted claim tx!");
-                    log::debug!("Claim Tx {:?}", tx);
-                    break;
-                }
-            }
-            Ok(WsResponse::Unsubscribe(unsubscribe)) => {
-                log::error!(
-                    "Got unexpected boltz unsubscribe response : {:?}",
-                    unsubscribe
-                );
-            }
-            Ok(WsResponse::Pong) => {
-                log::error!("Got unexpected boltz pong response");
-            }
-            Err(e) => {
-                log::error!("Failed to parse boltz response: {e} - response: {response}");
             }
         }
     }

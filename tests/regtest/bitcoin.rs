@@ -24,13 +24,11 @@ use bitcoin::{
     secp256k1::Keypair,
     PublicKey,
 };
-use boltz_client::boltz::{SubscriptionChannel, WsRequest, WsResponse, BOLTZ_REGTEST};
+use boltz_client::boltz::BOLTZ_REGTEST;
 use boltz_client::fees::Fee;
 use boltz_client::network::esplora::async_sleep;
 use boltz_client::network::{BitcoinChain, BitcoinClient};
-use futures_util::{SinkExt, StreamExt};
 use serial_test::serial;
-use tokio_tungstenite_wasm::Message;
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -292,97 +290,66 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
     let swap_script =
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
     let swap_id = reverse_resp.id.clone();
-    // Subscribe to wss status updates
-    let (mut sender, mut receiver) = boltz_api_v2.connect_ws().await.unwrap().split();
 
-    sender
-        .send(Message::text(
-            serde_json::to_string(&WsRequest::subscribe_swap_request(&swap_id)).unwrap(),
-        ))
-        .await
-        .unwrap();
+    let ws_api = Arc::new(boltz_api_v2.ws());
+    ws_api.clone().start();
+    ws_api.subscribe(&swap_id).unwrap();
+    let mut rx = ws_api.updates();
 
-    // Event handlers for various swap status.
     loop {
-        let response = receiver.next().await.unwrap().unwrap().into_text().unwrap();
+        let update = rx.recv().await.unwrap();
+        match update.status.as_str() {
+            "swap.created" => {
+                log::info!("Waiting for Invoice to be paid: {}", &reverse_resp.invoice);
 
-        match serde_json::from_str(&response) {
-            Ok(WsResponse::Subscribe(subscribe)) => {
-                assert_eq!(subscribe.channel, SubscriptionChannel::SwapUpdate);
-                assert_eq!(subscribe.args.first().expect("expected"), &swap_id);
-                log::info!(
-                    "Successfully subscribed for Swap updates. Swap ID : {}",
-                    swap_id
-                );
+                let invoice = reverse_resp.invoice.clone();
+                utils::start_pay_invoice_lnd(invoice);
+
+                continue;
             }
 
-            Ok(WsResponse::Update(update)) => {
-                assert_eq!(update.channel, SubscriptionChannel::SwapUpdate);
-                let update = update.args.first().expect("expected");
-                assert_eq!(update.id, *swap_id);
-                log::info!("Got Update from server: {}", update.status);
+            "transaction.mempool" => {
+                log::info!("Boltz broadcasted funding tx");
 
-                if update.status == "swap.created" {
-                    log::info!("Waiting for Invoice to be paid: {}", &reverse_resp.invoice);
+                async_sleep(WAIT_TIME_MS).await;
 
-                    let invoice = reverse_resp.invoice.clone();
-                    utils::start_pay_invoice_lnd(invoice);
+                let claim_tx = BtcSwapTx::new_claim(
+                    swap_script.clone(),
+                    claim_address.clone(),
+                    &bitcoin_client,
+                    BOLTZ_REGTEST.to_owned(),
+                    swap_id.clone(),
+                )
+                .await
+                .expect("Funding tx expected");
 
-                    continue;
-                }
-
-                if update.status == "transaction.mempool" {
-                    log::info!("Boltz broadcasted funding tx");
-
-                    async_sleep(WAIT_TIME_MS).await;
-
-                    let claim_tx = BtcSwapTx::new_claim(
-                        swap_script.clone(),
-                        claim_address.clone(),
-                        &bitcoin_client,
-                        BOLTZ_REGTEST.to_owned(),
-                        swap_id.clone(),
+                let tx = claim_tx
+                    .sign_claim(
+                        &our_keys,
+                        &preimage,
+                        Fee::Absolute(1000),
+                        Some(Cooperative {
+                            boltz_api: &boltz_api_v2,
+                            swap_id: swap_id.clone(),
+                            pub_nonce: None,
+                            partial_sig: None,
+                        }),
                     )
                     .await
-                    .expect("Funding tx expected");
+                    .unwrap();
 
-                    let tx = claim_tx
-                        .sign_claim(
-                            &our_keys,
-                            &preimage,
-                            Fee::Absolute(1000),
-                            Some(Cooperative {
-                                boltz_api: &boltz_api_v2,
-                                swap_id: swap_id.clone(),
-                                pub_nonce: None,
-                                partial_sig: None,
-                            }),
-                        )
-                        .await
-                        .unwrap();
+                claim_tx.broadcast(&tx, &bitcoin_client).await.unwrap();
 
-                    claim_tx.broadcast(&tx, &bitcoin_client).await.unwrap();
-
-                    log::info!("Successfully broadcasted claim tx!");
-                    log::debug!("Claim Tx {:?}", tx);
-                }
-
-                if update.status == "invoice.settled" {
-                    log::info!("Reverse Swap Successful!");
-                    break;
-                }
+                log::info!("Successfully broadcasted claim tx!");
+                log::debug!("Claim Tx {:?}", tx);
             }
-            Ok(WsResponse::Unsubscribe(unsubscribe)) => {
-                log::error!(
-                    "Got unexpected boltz unsubscribe response : {:?}",
-                    unsubscribe
-                );
+
+            "invoice.settled" => {
+                log::info!("Reverse Swap Successful!");
+                break;
             }
-            Ok(WsResponse::Pong) => {
-                log::error!("Got unexpected boltz pong response");
-            }
-            Err(e) => {
-                log::error!("Failed to parse boltz response: {e} - response: {response}");
+            _ => {
+                log::info!("Got Update from server: {}", update.status);
             }
         }
     }
@@ -451,87 +418,55 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
     let swap_script =
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
 
-    // Subscribe to wss status updates
-    let (mut sender, mut receiver) = boltz_api_v2.connect_ws().await.unwrap().split();
+    let ws_api = Arc::new(boltz_api_v2.ws());
+    ws_api.clone().start();
+    ws_api.subscribe(&swap_id).unwrap();
+    let mut rx = ws_api.updates();
 
-    sender
-        .send(Message::text(
-            serde_json::to_string(&WsRequest::subscribe_swap_request(&swap_id)).unwrap(),
-        ))
-        .await
-        .unwrap();
-
-    // Event handlers for various swap status.
     loop {
-        let response = receiver.next().await.unwrap().unwrap().into_text().unwrap();
+        let update = rx.recv().await.unwrap();
+        match update.status.as_str() {
+            "swap.created" => {
+                log::info!("Waiting for Invoice to be paid: {}", &reverse_resp.invoice);
 
-        match serde_json::from_str(&response) {
-            Ok(WsResponse::Subscribe(subscribe)) => {
-                assert_eq!(subscribe.channel, SubscriptionChannel::SwapUpdate);
-                assert_eq!(subscribe.args.first().expect("expected"), &swap_id);
-                log::info!(
-                    "Successfully subscribed for Swap updates. Swap ID : {}",
-                    swap_id
-                );
+                let invoice = reverse_resp.invoice.clone();
+                utils::start_pay_invoice_lnd(invoice);
+
+                continue;
             }
 
-            Ok(WsResponse::Update(update)) => {
-                assert_eq!(update.channel, SubscriptionChannel::SwapUpdate);
-                let update = update.args.first().expect("expected");
-                assert_eq!(update.id, *swap_id);
-                log::info!("Got Update from server: {}", update.status);
+            "transaction.mempool" => {
+                log::info!("Boltz broadcasted funding tx");
 
-                if update.status == "swap.created" {
-                    log::info!("Waiting for Invoice to be paid: {}", &reverse_resp.invoice);
+                async_sleep(WAIT_TIME_MS).await;
 
-                    let invoice = reverse_resp.invoice.clone();
-                    utils::start_pay_invoice_lnd(invoice);
+                let claim_tx = BtcSwapTx::new_claim(
+                    swap_script.clone(),
+                    claim_address.clone(),
+                    &bitcoin_client,
+                    BOLTZ_REGTEST.to_owned(),
+                    swap_id.clone(),
+                )
+                .await
+                .expect("Funding tx expected");
 
-                    continue;
-                }
-
-                if update.status == "transaction.mempool" {
-                    log::info!("Boltz broadcasted funding tx");
-
-                    async_sleep(WAIT_TIME_MS).await;
-
-                    let claim_tx = BtcSwapTx::new_claim(
-                        swap_script.clone(),
-                        claim_address.clone(),
-                        &bitcoin_client,
-                        BOLTZ_REGTEST.to_owned(),
-                        swap_id.clone(),
-                    )
+                let tx = claim_tx
+                    .sign_claim(&our_keys, &preimage, Fee::Absolute(1000), None)
                     .await
-                    .expect("Funding tx expected");
+                    .unwrap();
 
-                    let tx = claim_tx
-                        .sign_claim(&our_keys, &preimage, Fee::Absolute(1000), None)
-                        .await
-                        .unwrap();
+                claim_tx.broadcast(&tx, &bitcoin_client).await.unwrap();
 
-                    claim_tx.broadcast(&tx, &bitcoin_client).await.unwrap();
-
-                    log::info!("Successfully broadcasted claim tx!");
-                    log::debug!("Claim Tx {:?}", tx);
-                }
-
-                if update.status == "invoice.settled" {
-                    log::info!("Reverse Swap Successful!");
-                    break;
-                }
+                log::info!("Successfully broadcasted claim tx!");
+                log::debug!("Claim Tx {:?}", tx);
             }
-            Ok(WsResponse::Unsubscribe(unsubscribe)) => {
-                log::error!(
-                    "Got unexpected boltz unsubscribe response : {:?}",
-                    unsubscribe
-                );
+
+            "invoice.settled" => {
+                log::info!("Reverse Swap Successful!");
+                break;
             }
-            Ok(WsResponse::Pong) => {
-                log::error!("Got unexpected boltz pong response");
-            }
-            Err(e) => {
-                log::error!("Failed to parse boltz response: {e} - response: {response}");
+            _ => {
+                log::info!("Got Update from server: {}", update.status);
             }
         }
     }
