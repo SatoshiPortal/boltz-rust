@@ -82,7 +82,7 @@ impl BoltzWsApi {
         #[cfg(all(target_family = "wasm", target_os = "unknown"))]
         {
             // In WASM, we can use spawn_local since we don't need Send
-            tokio::task::spawn_local(future);
+            wasm_bindgen_futures::spawn_local(future);
         }
     }
 
