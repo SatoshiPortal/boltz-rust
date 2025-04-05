@@ -855,9 +855,6 @@ pub struct SwapStatus {
     pub failure_reason: Option<String>,
     #[serde(rename = "failureDetails", skip_serializing_if = "Option::is_none")]
     pub failure_details: Option<FailureReasonIncorrectAmounts>,
-
-    #[serde(rename = "channel", skip_serializing_if = "Option::is_none")]
-    pub channel_info: Option<ChannelInfo>,
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq)]

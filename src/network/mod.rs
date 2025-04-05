@@ -71,7 +71,7 @@ impl From<LiquidChain> for &'static AddressParams {
 }
 
 #[macros::async_trait]
-pub trait BitcoinClient {
+pub trait BitcoinClient: Send + Sync {
     async fn get_address_balance(&self, address: &bitcoin::Address) -> Result<(u64, i64), Error>;
 
     async fn get_address_utxos(
@@ -85,7 +85,7 @@ pub trait BitcoinClient {
 }
 
 #[macros::async_trait]
-pub trait LiquidClient {
+pub trait LiquidClient: Send + Sync {
     async fn get_address_utxo(
         &self,
         address: &elements::Address,
