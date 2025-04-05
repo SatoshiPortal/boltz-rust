@@ -31,7 +31,7 @@ pub const BOLTZ_TESTNET_URL_V2: &str = "https://api.testnet.boltz.exchange/v2";
 pub const BOLTZ_MAINNET_URL_V2: &str = "https://api.boltz.exchange/v2";
 pub const BOLTZ_REGTEST: &str = "http://localhost:9001/v2";
 
-use crate::swaps::status_stream::BoltzWsApi;
+pub use crate::swaps::status_stream::{BoltzWsApi, BoltzWsConfig};
 use elements::secp256k1_zkp::{MusigPartialSignature, MusigPubNonce};
 pub use tokio_tungstenite_wasm;
 use tokio_tungstenite_wasm::{connect, WebSocketStream};
@@ -323,9 +323,9 @@ impl BoltzApiClientV2 {
         Ok(connect(ws_string).await?)
     }
 
-    pub fn ws(&self) -> BoltzWsApi {
+    pub fn ws(&self, config: BoltzWsConfig) -> BoltzWsApi {
         let ws_string = self.base_url.clone().replace("http", "ws") + "/ws";
-        BoltzWsApi::new(ws_string)
+        BoltzWsApi::new(ws_string, config)
     }
 
     /// Make a get request. returns the Response

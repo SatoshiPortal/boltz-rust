@@ -2,8 +2,8 @@ use crate::regtest::WAIT_TIME_MS;
 use crate::utils;
 use bitcoin::{key::rand::thread_rng, PublicKey};
 use boltz_client::boltz::{
-    BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateChainRequest, Side, BOLTZ_REGTEST,
-    BOLTZ_TESTNET_URL_V2,
+    BoltzApiClientV2, BoltzWsConfig, ChainSwapDetails, Cooperative, CreateChainRequest, Side,
+    BOLTZ_REGTEST, BOLTZ_TESTNET_URL_V2,
 };
 use boltz_client::fees::Fee;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -129,9 +129,9 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
     let liquid_genesis_hash = liquid_client.get_genesis_hash().await.unwrap();
     log::debug!("{:#?}", liquid_genesis_hash);
 
-    let ws_api = Arc::new(boltz_api_v2.ws());
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).unwrap();
+    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
 
     loop {
@@ -386,9 +386,9 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
 
     let claim_address = utils::generate_address_bitcoind().await.unwrap();
 
-    let ws_api = Arc::new(boltz_api_v2.ws());
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).unwrap();
+    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
 
     loop {

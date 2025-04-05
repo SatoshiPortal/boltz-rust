@@ -22,7 +22,7 @@ use bitcoin::{
     secp256k1::Keypair,
     PublicKey,
 };
-use boltz_client::boltz::BOLTZ_REGTEST;
+use boltz_client::boltz::{BoltzWsConfig, BOLTZ_REGTEST};
 use boltz_client::fees::Fee;
 use boltz_client::network::esplora::async_sleep;
 use boltz_client::network::{Chain, LiquidChain, LiquidClient};
@@ -106,9 +106,9 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
 
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
-    let ws_api = Arc::new(boltz_api_v2.ws());
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).unwrap();
+    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
 
     loop {
@@ -299,9 +299,9 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
         LBtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
     swap_script.to_address(CHAIN).unwrap();
 
-    let ws_api = Arc::new(boltz_api_v2.ws());
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).unwrap();
+    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
 
     loop {
@@ -449,9 +449,9 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
         LBtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
     swap_script.to_address(CHAIN).unwrap();
 
-    let ws_api = Arc::new(boltz_api_v2.ws());
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).unwrap();
+    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
 
     loop {
