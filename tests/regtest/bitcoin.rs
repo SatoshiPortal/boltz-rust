@@ -24,7 +24,7 @@ use bitcoin::{
     secp256k1::Keypair,
     PublicKey,
 };
-use boltz_client::boltz::BOLTZ_REGTEST;
+use boltz_client::boltz::{BoltzWsConfig, BOLTZ_REGTEST};
 use boltz_client::fees::Fee;
 use boltz_client::network::esplora::async_sleep;
 use boltz_client::network::{BitcoinChain, BitcoinClient};
@@ -69,6 +69,8 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
     let refund_address = utils::generate_address_bitcoind().await.unwrap();
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
+    ws_api.clone().start();
 
     // If there is MRH send directly to that address
     //    let (bip21_addrs, amount) =
@@ -99,9 +101,7 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
     let swap_id = create_swap_response.id.clone();
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
-    let ws_api = Arc::new(boltz_api_v2.ws());
-    ws_api.clone().start();
-    ws_api.subscribe(&swap_id).unwrap();
+    ws_api.subscribe(&swap_id).await.unwrap();
     // Event handlers for various swap status.
     let mut rx = ws_api.updates();
     loop {
@@ -274,6 +274,8 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
+    ws_api.clone().start();
 
     let reverse_resp = boltz_api_v2
         .post_reverse_req(create_reverse_req)
@@ -291,9 +293,7 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
     let swap_id = reverse_resp.id.clone();
 
-    let ws_api = Arc::new(boltz_api_v2.ws());
-    ws_api.clone().start();
-    ws_api.subscribe(&swap_id).unwrap();
+    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
 
     loop {
@@ -402,6 +402,8 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
     };
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
+    ws_api.clone().start();
 
     let reverse_resp = boltz_api_v2
         .post_reverse_req(create_reverse_req)
@@ -418,9 +420,7 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
     let swap_script =
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
 
-    let ws_api = Arc::new(boltz_api_v2.ws());
-    ws_api.clone().start();
-    ws_api.subscribe(&swap_id).unwrap();
+    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
 
     loop {
