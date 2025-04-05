@@ -59,10 +59,14 @@ pub struct BoltzWsApi {
     pub ws_url: String,
     pub config: BoltzWsConfig,
 
-    swap_ids: Mutex<HashSet<String>>,
+    // broadcasts the swap ids after we got a successful subscription response from boltz
+    subscription_notifier: broadcast::Sender<String>,
+    subscribed_swaps: Mutex<HashSet<String>>,
+
+    // communication channel for the subscription requests to the websocket task.
     subscription_sender: mpsc::Sender<SubscriptionRequest>,
     subscription_receiver: Mutex<mpsc::Receiver<SubscriptionRequest>>,
-    subscription_notifier: broadcast::Sender<String>,
+
     update_notifier: broadcast::Sender<SwapStatus>,
     shutdown_sender: Mutex<Option<oneshot::Sender<()>>>,
     restart_sender: Mutex<Option<oneshot::Sender<()>>>,
@@ -76,7 +80,7 @@ impl BoltzWsApi {
         Self {
             ws_url,
             config,
-            swap_ids: Mutex::new(HashSet::new()),
+            subscribed_swaps: Mutex::new(HashSet::new()),
             subscription_sender,
             subscription_receiver: Mutex::new(subscription_receiver),
             subscription_notifier,
@@ -91,7 +95,7 @@ impl BoltzWsApi {
     }
 
     pub async fn is_tracking(&self, swap_id: &str) -> bool {
-        self.swap_ids.lock().await.contains(swap_id)
+        self.subscribed_swaps.lock().await.contains(swap_id)
     }
 
     pub async fn reconnect(&self) -> Result<(), Error> {
@@ -108,7 +112,7 @@ impl BoltzWsApi {
     }
 
     pub async fn swap_ids(&self) -> HashSet<String> {
-        self.swap_ids.lock().await.clone()
+        self.subscribed_swaps.lock().await.clone()
     }
 
     async fn wait_for_subscription(
@@ -117,9 +121,9 @@ impl BoltzWsApi {
         swap_id: &str,
     ) -> Result<(), Error> {
         // First, wait for the result from the subscribe call
-        response_receiver.await.map_err(|_| {
-            Error::Generic("Failed to receive subscription response".to_string())
-        })??;
+        response_receiver
+            .await
+            .map_err(|_| Error::Generic("Failed to receive subscription response".to_string()))??;
 
         // Then, wait for the successful subscription response from boltz
         let mut successful_subscriptions = self.subscription_notifier.subscribe();
@@ -158,7 +162,12 @@ impl BoltzWsApi {
                 response_sender,
             })
             .await
-            .map_err(|e| Error::Generic(format!("Failed to send subscription request to channel: {:?}", e)))?;
+            .map_err(|e| {
+                Error::Generic(format!(
+                    "Failed to send subscription request to channel: {:?}",
+                    e
+                ))
+            })?;
 
         // Wait for the response with a timeout
         tokio::time::timeout(self.config.subscription_timeout, wait)
@@ -195,7 +204,7 @@ impl BoltzWsApi {
             match BoltzWsConnection::new(self.ws_url.as_str()).await {
                 Ok(mut connection) => {
                     {
-                        let ids = self.swap_ids.lock().await;
+                        let ids = self.subscribed_swaps.lock().await;
                         match connection.subscribe(ids.iter().cloned().collect()).await {
                             Ok(_) => {}
                             Err(e) => {
@@ -252,7 +261,7 @@ impl BoltzWsApi {
                                         match serde_json::from_str::<WsResponse>(payload) {
                                             // Subscribing/unsubscribing confirmation
                                             Ok(WsResponse::Subscribe(subscribe)) => {
-                                                let mut swap_ids = self.swap_ids.lock().await;
+                                                let mut swap_ids = self.subscribed_swaps.lock().await;
                                                 for swap_id in subscribe.args {
                                                     self.subscription_notifier.send(swap_id.clone()).unwrap();
                                                     swap_ids.insert(swap_id);

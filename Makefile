@@ -32,7 +32,7 @@ cargo-test:
 	cargo test --features "esplora, electrum, lnurl"  -- --nocapture
 
 cargo-regtest-test:
-	$(REGTEST_PREFIX) cargo test regtest --features "electrum, regtest" -- --nocapture
+	$(REGTEST_PREFIX) cargo test --features "electrum, regtest" -- --nocapture
 
 wasm-clippy:
 	$(CLANG_PREFIX) cargo clippy --target=wasm32-unknown-unknown --all-features -- -D warnings
