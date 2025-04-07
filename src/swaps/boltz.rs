@@ -81,6 +81,27 @@ impl PairLimits {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct SubmarinePairLimits {
+    /// Maximum swap amount
+    pub maximal: u64,
+    /// Minimum swap amount
+    pub minimal: u64,
+    /// Maximum amount allowed for zero-conf
+    pub maximal_zero_conf: u64,
+    /// Minimum batch swap amount
+    pub minimal_batched: Option<u64>,
+}
+
+impl SubmarinePairLimits {
+    /// Check whether the output amount intended is within the Limits
+    pub fn within(&self, output_amount: u64) -> Result<(), Error> {
+        let minimal = self.minimal_batched.unwrap_or(self.minimal);
+        check_limits_within(self.maximal, minimal, output_amount)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ReverseLimits {
     /// Maximum swap amount
     pub maximal: u64,
@@ -220,7 +241,7 @@ pub struct SubmarinePair {
     /// The exchange rate of the pair
     pub rate: f64,
     /// The swap limits
-    pub limits: PairLimits,
+    pub limits: SubmarinePairLimits,
     /// Total fees required for the swap
     pub fees: SubmarineFees,
 }
