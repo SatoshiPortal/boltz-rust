@@ -108,8 +108,8 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
+    ws_api.subscribe(&swap_id).await.unwrap();
 
     loop {
         let update = rx.recv().await.unwrap();
@@ -301,8 +301,8 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
+    ws_api.subscribe(&swap_id).await.unwrap();
 
     loop {
         let update = rx.recv().await.unwrap();
@@ -451,8 +451,8 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
+    ws_api.subscribe(&swap_id).await.unwrap();
 
     loop {
         let update = rx.recv().await.unwrap();

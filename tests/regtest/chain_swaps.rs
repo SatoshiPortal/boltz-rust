@@ -131,8 +131,8 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
+    ws_api.subscribe(&swap_id).await.unwrap();
 
     loop {
         let update = rx.recv().await.unwrap();
@@ -388,8 +388,8 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     ws_api.clone().start();
-    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
+    ws_api.subscribe(&swap_id).await.unwrap();
 
     loop {
         let update = rx.recv().await.unwrap();

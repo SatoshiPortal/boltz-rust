@@ -101,9 +101,9 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
     let swap_id = create_swap_response.id.clone();
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
+    let mut rx = ws_api.updates();
     ws_api.subscribe(&swap_id).await.unwrap();
     // Event handlers for various swap status.
-    let mut rx = ws_api.updates();
     loop {
         let update = rx.recv().await.unwrap();
         match update.status.as_str() {
@@ -293,8 +293,9 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
     let swap_id = reverse_resp.id.clone();
 
-    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
+
+    ws_api.subscribe(&swap_id).await.unwrap();
 
     loop {
         let update = rx.recv().await.unwrap();
@@ -420,8 +421,8 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
     let swap_script =
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
 
-    ws_api.subscribe(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
+    ws_api.subscribe(&swap_id).await.unwrap();
 
     loop {
         let update = rx.recv().await.unwrap();
