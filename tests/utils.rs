@@ -2,6 +2,7 @@ use bitcoin::base64;
 use bitcoin::base64::Engine;
 #[cfg(feature = "ws")]
 use boltz_client::boltz::BoltzWsApi;
+use boltz_client::network::{BitcoinChain, Chain, LiquidChain};
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use futures::FutureExt;
 use reqwest::Client;
@@ -19,11 +20,15 @@ const ELEMENTSD_COOKIE: &str = "regtest:regtest";
 const LND_MACAROON_HEX: Option<&str> = option_env!("LND_MACAROON_HEX");
 
 async fn json_rpc_request(
-    url: &str,
-    cookie: &str,
+    chain: Chain,
     method: &str,
     params: Value,
 ) -> Result<Value, Box<dyn Error>> {
+    let (url, cookie) = match chain {
+        Chain::Bitcoin(_) => (BITCOIND_URL, BITCOIND_COOKIE.unwrap()),
+        Chain::Liquid(_) => (ELEMENTSD_URL, ELEMENTSD_COOKIE),
+    };
+
     let client = Client::new();
 
     let req_body = json!({
@@ -71,63 +76,26 @@ async fn lnd_request(method: &str, params: Value) -> Result<Value, Box<dyn Error
     Ok(res)
 }
 
-pub async fn generate_address_bitcoind() -> Result<String, Box<dyn Error>> {
-    let response = json_rpc_request(
-        BITCOIND_URL,
-        BITCOIND_COOKIE.unwrap(),
-        "getnewaddress",
-        json!([]),
-    )
-    .await?;
-
-    println!("Bitcoind response: {response:?}"); // Debug output
-
-    response
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "Invalid response".into())
-}
-
-pub async fn send_to_address_bitcoind(
-    address: &str,
-    sat_amount: u64,
-) -> Result<String, Box<dyn Error>> {
-    let btc_amount = (sat_amount as f64) / 100_000_000.0;
-    json_rpc_request(
-        BITCOIND_URL,
-        BITCOIND_COOKIE.unwrap(),
-        "sendtoaddress",
-        json!([address, format!("{:.8}", btc_amount)]),
-    )
-    .await?
-    .as_str()
-    .map(|s| s.to_string())
-    .ok_or_else(|| "Invalid response".into())
-}
-
-pub async fn generate_address_elementsd() -> Result<String, Box<dyn Error>> {
-    json_rpc_request(ELEMENTSD_URL, ELEMENTSD_COOKIE, "getnewaddress", json!([]))
+pub async fn generate_address(chain: Chain) -> Result<String, Box<dyn Error>> {
+    json_rpc_request(chain, "getnewaddress", json!([]))
         .await?
         .as_str()
         .map(|s| s.to_string())
         .ok_or_else(|| "Invalid response".into())
 }
 
-pub async fn send_to_address_elementsd(
+pub async fn send_to_address(
+    chain: Chain,
     address: &str,
     sat_amount: u64,
 ) -> Result<String, Box<dyn Error>> {
     let btc_amount = (sat_amount as f64) / 100_000_000.0;
-    json_rpc_request(
-        ELEMENTSD_URL,
-        ELEMENTSD_COOKIE,
-        "sendtoaddress",
-        json!([address, format!("{:.8}", btc_amount)]),
-    )
-    .await?
-    .as_str()
-    .map(|s| s.to_string())
-    .ok_or_else(|| "Invalid response".into())
+    let params = json!([address, format!("{:.8}", btc_amount)]);
+    json_rpc_request(chain, "sendtoaddress", params)
+        .await?
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Invalid response".into())
 }
 
 pub async fn generate_invoice_lnd(amount_sat: u64) -> Result<String, Box<dyn Error>> {
@@ -186,24 +154,12 @@ pub fn start_pay_invoice_lnd(invoice: String) {
 }
 
 pub async fn mine_blocks(n_blocks: u64) -> Result<(), Box<dyn Error>> {
-    let address_btc = generate_address_bitcoind().await?;
-    let address_lqd = generate_address_elementsd().await?;
-
-    json_rpc_request(
-        BITCOIND_URL,
-        BITCOIND_COOKIE.unwrap(),
-        "generatetoaddress",
-        json!([n_blocks, address_btc]),
-    )
-    .await?;
-
-    json_rpc_request(
-        ELEMENTSD_URL,
-        ELEMENTSD_COOKIE,
-        "generatetoaddress",
-        json!([n_blocks, address_lqd]),
-    )
-    .await?;
-
+    for chain in [
+        BitcoinChain::BitcoinRegtest.into(),
+        LiquidChain::LiquidRegtest.into(),
+    ] {
+        let address = generate_address(chain).await?;
+        json_rpc_request(chain, "generatetoaddress", json!([n_blocks, address])).await?;
+    }
     Ok(())
 }

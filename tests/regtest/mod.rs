@@ -2,9 +2,9 @@
 
 use std::time::Duration;
 
-mod bitcoin;
 mod chain_swaps;
-mod liquid;
+mod reverse;
+mod submarine;
 
 const WAIT_TIME: Duration = Duration::from_millis(5_000);
 
