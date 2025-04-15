@@ -1,12 +1,15 @@
 use crate::boltz::{SwapStatus, WsRequest, WsResponse};
 use crate::error::Error;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{future::select, SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 use tokio_tungstenite_wasm::{connect, Message, WebSocketStream};
+
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+use gloo_timers::future::TimeoutFuture;
 
 struct BoltzWsConnection {
     ws: WebSocketStream,
@@ -151,10 +154,22 @@ impl BoltzWsApi {
         }
     }
 
+    async fn sleep(&self, duration: Duration) {
+        #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+        {
+            tokio::time::sleep(duration).await;
+        }
+        #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+        {
+            let timeout_ms = duration.as_millis() as u32;
+            TimeoutFuture::new(timeout_ms).await;
+        }
+    }
+
     async fn try_subscribe(&self, swap_id: &str) -> Result<(), Error> {
         let (response_sender, response_receiver) = oneshot::channel();
         let subscriptions = self.subscription_notifier.subscribe();
-        let wait = self.wait_for_subscription(response_receiver, subscriptions, swap_id);
+        let wait = Box::pin(self.wait_for_subscription(response_receiver, subscriptions, swap_id));
 
         self.subscription_sender
             .send(SubscriptionRequest {
@@ -169,12 +184,16 @@ impl BoltzWsApi {
                 ))
             })?;
 
-        // Wait for the response with a timeout
-        tokio::time::timeout(self.config.subscription_timeout, wait)
-            .await
-            .map_err(|_| {
-                Error::Generic("Subscription timeout, attempting to reconnect".to_string())
-            })?
+        // Create the timeout future based on the environment
+        let timeout_future = Box::pin(self.sleep(self.config.subscription_timeout));
+
+        // Use futures_util::select to race between wait and timeout
+        match select(wait, timeout_future).await {
+            futures_util::future::Either::Left((result, _)) => result,
+            futures_util::future::Either::Right((_, _)) => Err(Error::Generic(
+                "Subscription timeout, attempting to reconnect".to_string(),
+            )),
+        }
     }
 
     pub fn start(self: Arc<Self>) {
@@ -201,6 +220,11 @@ impl BoltzWsApi {
             let (restart_sender, mut restart_receiver) = oneshot::channel();
             let _ = self.restart_sender.lock().await.replace(restart_sender);
 
+            let mut interval = Box::pin(futures_util::stream::unfold((), async |_| {
+                self.sleep(self.config.keep_alive_interval).await;
+                Some(((), ()))
+            }));
+
             match BoltzWsConnection::new(self.ws_url.as_str()).await {
                 Ok(mut connection) => {
                     {
@@ -209,12 +233,11 @@ impl BoltzWsApi {
                             Ok(_) => {}
                             Err(e) => {
                                 error!("Error subscribing to swaps: {:?}", e);
-                                tokio::time::sleep(self.config.reconnect_delay).await;
+                                self.sleep(self.config.reconnect_delay).await;
                                 continue;
                             }
                         }
                     }
-                    let mut interval = tokio::time::interval(self.config.keep_alive_interval);
 
                     loop {
                         let mut sub_receiver = self.subscription_receiver.lock().await;
@@ -229,7 +252,7 @@ impl BoltzWsApi {
                                 break;
                             },
 
-                            _ = interval.tick() => {
+                            _ = interval.next() => {
                                 match connection.send_json(&WsRequest::Ping).await {
                                     Ok(_) => debug!("Sent keep-alive ping"),
                                     Err(e) => warn!("Failed to send keep-alive ping: {e:?}"),
@@ -252,7 +275,7 @@ impl BoltzWsApi {
                                 Some(msg) => match msg {
                                     Ok(Message::Close(_)) => {
                                         warn!("Received close msg, exiting socket loop");
-                                        tokio::time::sleep(self.config.reconnect_delay).await;
+                                        self.sleep(self.config.reconnect_delay).await;
                                         break;
                                     },
                                     Ok(Message::Text(payload)) => {
@@ -293,7 +316,7 @@ impl BoltzWsApi {
                                 None => {
                                     warn!("Received nothing from the stream");
                                     let _ = connection.ws.close().await;
-                                    tokio::time::sleep(self.config.reconnect_delay).await;
+                                    self.sleep(self.config.reconnect_delay).await;
                                     break;
                                 },
                             }
@@ -302,7 +325,7 @@ impl BoltzWsApi {
                 }
                 Err(e) => {
                     error!("Error connecting to websocket: {:?}", e);
-                    tokio::time::sleep(self.config.reconnect_delay).await;
+                    self.sleep(self.config.reconnect_delay).await;
                 }
             }
         }

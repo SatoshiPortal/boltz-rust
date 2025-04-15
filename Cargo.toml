@@ -52,6 +52,7 @@ getrandom = { version = "0.2", features = ["js"] }
 js-sys = "0.3.77"
 web-sys = "0.3.77"
 wasm-bindgen-futures = "0.4.50"
+gloo-timers = { version = "0.3.0", features = ["futures"] }
 
 [patch.crates-io]
 secp256k1-zkp = { git = "https://github.com/danielgranhao/rust-secp256k1-zkp.git", rev = "eac2e479255a6e32b5588bc25ee53c642fdd8395" }
@@ -66,7 +67,6 @@ elementsd = { version = "0.11.0", features = ["22_1_1"] }
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dev-dependencies]
 wasm-bindgen-test = "0.3.50"
 wasm-bindgen = "0.2.100"
-gloo-timers = { version = "0.3.0", features = ["futures"] }
 futures = "0.3.31"
 
 [features]
