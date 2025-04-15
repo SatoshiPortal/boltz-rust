@@ -12,7 +12,7 @@ use bitcoin::key::rand::{rngs::OsRng, RngCore};
 use bitcoin::secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
 use bitcoin::secp256k1::{Keypair, Secp256k1};
 use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
-use lightning_invoice::Bolt11Invoice;
+use lightning::bolt11_invoice::Bolt11Invoice;
 use serde::{Deserialize, Serialize};
 use serde_json;
 

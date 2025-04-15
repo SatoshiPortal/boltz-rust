@@ -5,6 +5,7 @@ pub mod fees;
 #[cfg(feature = "lnurl")]
 pub mod lnurl;
 pub mod secrets;
+pub mod bolt12;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use gloo_timers::future::TimeoutFuture;

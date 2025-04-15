@@ -16,7 +16,8 @@ pub enum Error {
     HTTP(String),
     JSON(serde_json::Error),
     IO(std::io::Error),
-    Bolt11(lightning_invoice::ParseOrSemanticError),
+    Bolt11(lightning::bolt11_invoice::ParseOrSemanticError),
+    Bolt12(String),
     LiquidEncode(elements::encode::Error),
     BitcoinEncode(bitcoin::consensus::encode::Error),
     Blind(String),
@@ -113,8 +114,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<lightning_invoice::ParseOrSemanticError> for Error {
-    fn from(value: lightning_invoice::ParseOrSemanticError) -> Self {
+impl From<lightning::bolt11_invoice::ParseOrSemanticError> for Error {
+    fn from(value: lightning::bolt11_invoice::ParseOrSemanticError) -> Self {
         Self::Bolt11(value)
     }
 }
@@ -266,6 +267,7 @@ impl Error {
             Error::JSON(_) => "JSON",
             Error::IO(_) => "IO",
             Error::Bolt11(_) => "Bolt11",
+            Error::Bolt12(_) => "Bolt12",
             Error::LiquidEncode(_) => "LiquidEncode",
             Error::BitcoinEncode(_) => "BitcoinEncode",
             Error::Blind(_) => "Blind",
@@ -303,6 +305,7 @@ impl Error {
             Error::JSON(e) => e.to_string(),
             Error::IO(e) => e.to_string(),
             Error::Bolt11(e) => e.to_string(),
+            Error::Bolt12(e) => e.clone(),
             Error::LiquidEncode(e) => e.to_string(),
             Error::BitcoinEncode(e) => e.to_string(),
             Error::Blind(e) => e.clone(),

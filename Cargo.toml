@@ -30,7 +30,7 @@ serde_json = "1.0.0"
 bip39 = "2.0.0"
 bitcoin = { version = "0.32.2", features = ["rand", "base64", "rand-std"] }
 elements = { version = "0.25.0", features = ["serde"] }
-lightning-invoice = "0.32.0"
+lightning = "0.1.2"
 url = "2.5.0"
 log = "^0.4"
 env_logger = "0.7"
