@@ -1559,7 +1559,7 @@ pub struct GetBolt12InvoiceResponse {
 #[serde(rename_all = "camelCase")]
 pub struct MagicRoutingHint {
     /// Channel ID to use for magic routing hints
-    pub channel_id: u64,
+    pub channel_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
