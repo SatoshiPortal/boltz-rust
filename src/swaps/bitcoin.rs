@@ -403,11 +403,10 @@ impl BtcSwapScript {
     pub async fn fetch_lockup_utxo_boltz(
         &self,
         network: BitcoinChain,
-        boltz_url: &str,
+        boltz_client: &BoltzApiClientV2,
         swap_id: &str,
         tx_kind: SwapTxKind,
     ) -> Result<Option<(OutPoint, TxOut)>, Error> {
-        let boltz_client: BoltzApiClientV2 = BoltzApiClientV2::new(boltz_url);
         let hex = match self.swap_type {
             SwapType::Chain => match tx_kind {
                 SwapTxKind::Claim => {
@@ -479,7 +478,7 @@ impl BtcSwapTx {
         swap_script: BtcSwapScript,
         claim_address: String,
         bitcoin_client: &BC,
-        boltz_url: String,
+        boltz_client: &BoltzApiClientV2,
         swap_id: String,
     ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::Submarine {
@@ -498,7 +497,7 @@ impl BtcSwapTx {
                 swap_script
                     .fetch_lockup_utxo_boltz(
                         bitcoin_client.network(),
-                        &boltz_url,
+                        boltz_client,
                         &swap_id,
                         SwapTxKind::Claim,
                     )
@@ -525,7 +524,7 @@ impl BtcSwapTx {
         swap_script: BtcSwapScript,
         refund_address: &str,
         bitcoin_client: &BC,
-        boltz_url: String,
+        boltz_client: &BoltzApiClientV2,
         swap_id: String,
     ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
@@ -545,7 +544,7 @@ impl BtcSwapTx {
                 let lockup_utxo_info = swap_script
                     .fetch_lockup_utxo_boltz(
                         bitcoin_client.network(),
-                        &boltz_url,
+                        boltz_client,
                         &swap_id,
                         SwapTxKind::Refund,
                     )

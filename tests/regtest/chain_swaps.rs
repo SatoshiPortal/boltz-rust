@@ -3,7 +3,7 @@ use crate::utils;
 use bitcoin::{key::rand::thread_rng, PublicKey};
 use boltz_client::boltz::{
     BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateChainRequest, Side, SubscriptionChannel,
-    WsRequest, WsResponse, BOLTZ_REGTEST, BOLTZ_TESTNET_URL_V2,
+    WsRequest, WsResponse, BOLTZ_REGTEST,
 };
 use boltz_client::fees::Fee;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -87,7 +87,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
         webhook: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), super::BOLTZ_TIMEOUT);
 
     let create_chain_response = boltz_api_v2.post_chain_req(create_chain_req).await.unwrap();
     let swap_id = create_chain_response.clone().id;
@@ -186,7 +186,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
                         claim_script.clone(),
                         claim_address.clone(),
                         liquid_client,
-                        BOLTZ_TESTNET_URL_V2.to_string(),
+                        &boltz_api_v2,
                         swap_id.clone(),
                     )
                     .await
@@ -195,7 +195,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
                         lockup_script.clone(),
                         &refund_address,
                         bitcoin_client,
-                        BOLTZ_TESTNET_URL_V2.to_owned(),
+                        &boltz_api_v2,
                         swap_id.clone(),
                     )
                     .await
@@ -295,7 +295,7 @@ async fn refund_bitcoin_liquid_v2_chain<BC: BitcoinClient>(
         lockup_script.clone(),
         &refund_address,
         bitcoin_client,
-        BOLTZ_TESTNET_URL_V2.to_owned(),
+        &boltz_api_v2,
         swap_id.clone(),
     )
     .await
@@ -378,7 +378,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
         webhook: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), super::BOLTZ_TIMEOUT);
 
     let create_chain_response = boltz_api_v2.post_chain_req(create_chain_req).await.unwrap();
     let swap_id = create_chain_response.clone().id;
@@ -476,7 +476,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
                         claim_script.clone(),
                         claim_address.clone(),
                         bitcoin_client,
-                        BOLTZ_TESTNET_URL_V2.to_owned(),
+                        &boltz_api_v2,
                         swap_id.clone(),
                     )
                     .await
@@ -485,7 +485,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
                         lockup_script.clone(),
                         &refund_address,
                         liquid_client,
-                        BOLTZ_TESTNET_URL_V2.to_string(),
+                        &boltz_api_v2,
                         swap_id.clone(),
                     )
                     .await
@@ -535,7 +535,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
                         lockup_script.clone(),
                         &refund_address,
                         liquid_client,
-                        BOLTZ_TESTNET_URL_V2.to_string(),
+                        &boltz_api_v2,
                         swap_id.clone(),
                     )
                     .await

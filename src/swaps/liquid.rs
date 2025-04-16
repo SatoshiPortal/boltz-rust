@@ -400,11 +400,10 @@ impl LBtcSwapScript {
     pub async fn fetch_lockup_utxo_boltz(
         &self,
         network: LiquidChain,
-        boltz_url: &str,
+        boltz_client: &BoltzApiClientV2,
         swap_id: &str,
         tx_kind: SwapTxKind,
     ) -> Result<(OutPoint, TxOut), Error> {
-        let boltz_client = BoltzApiClientV2::new(boltz_url);
         let hex = match self.swap_type {
             SwapType::Chain => match tx_kind {
                 SwapTxKind::Claim => {
@@ -486,7 +485,7 @@ impl LBtcSwapTx {
         swap_script: LBtcSwapScript,
         output_address: String,
         liquid_client: &LC,
-        boltz_url: String,
+        boltz_client: &BoltzApiClientV2,
         swap_id: String,
     ) -> Result<LBtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::Submarine {
@@ -501,7 +500,7 @@ impl LBtcSwapTx {
                 swap_script
                     .fetch_lockup_utxo_boltz(
                         liquid_client.network(),
-                        &boltz_url,
+                        boltz_client,
                         &swap_id,
                         SwapTxKind::Claim,
                     )
@@ -526,7 +525,7 @@ impl LBtcSwapTx {
         swap_script: LBtcSwapScript,
         output_address: &str,
         liquid_client: &LC,
-        boltz_url: String,
+        boltz_client: &BoltzApiClientV2,
         swap_id: String,
     ) -> Result<LBtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::ReverseSubmarine {
@@ -542,7 +541,7 @@ impl LBtcSwapTx {
                 swap_script
                     .fetch_lockup_utxo_boltz(
                         liquid_client.network(),
-                        &boltz_url,
+                        boltz_client,
                         &swap_id,
                         SwapTxKind::Refund,
                     )

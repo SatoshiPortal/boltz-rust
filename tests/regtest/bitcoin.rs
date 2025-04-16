@@ -70,7 +70,7 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
     let invoice = utils::generate_invoice_lnd(50_000).await.unwrap();
     let refund_address = utils::generate_address_bitcoind().await.unwrap();
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), super::BOLTZ_TIMEOUT);
 
     // If there is MRH send directly to that address
     //    let (bip21_addrs, amount) =
@@ -160,7 +160,7 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
                         swap_script.clone(),
                         &refund_address,
                         bitcoin_client,
-                        BOLTZ_REGTEST.to_owned(),
+                        &boltz_api_v2,
                         swap_id.to_owned(),
                     )
                     .await
@@ -212,7 +212,7 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
                         swap_script.clone(),
                         &refund_address,
                         bitcoin_client,
-                        BOLTZ_REGTEST.to_owned(),
+                        &boltz_api_v2,
                         swap_id.to_owned(),
                     )
                     .await
@@ -313,7 +313,7 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
         webhook: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), super::BOLTZ_TIMEOUT);
 
     let reverse_resp = boltz_api_v2
         .post_reverse_req(create_reverse_req)
@@ -378,7 +378,7 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
                         swap_script.clone(),
                         claim_address.clone(),
                         &bitcoin_client,
-                        BOLTZ_REGTEST.to_owned(),
+                        &boltz_api_v2,
                         swap_id.clone(),
                     )
                     .await
@@ -472,7 +472,7 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
         webhook: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), super::BOLTZ_TIMEOUT);
 
     let reverse_resp = boltz_api_v2
         .post_reverse_req(create_reverse_req)
@@ -537,7 +537,7 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
                         swap_script.clone(),
                         claim_address.clone(),
                         &bitcoin_client,
-                        BOLTZ_REGTEST.to_owned(),
+                        &boltz_api_v2,
                         swap_id.clone(),
                     )
                     .await
