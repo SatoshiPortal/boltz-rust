@@ -130,7 +130,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
     log::debug!("{:#?}", liquid_genesis_hash);
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
-    ws_api.clone().start();
+    utils::start_ws(ws_api.clone());
     let mut rx = ws_api.updates();
     ws_api.subscribe(&swap_id).await.unwrap();
 
@@ -387,7 +387,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
     let claim_address = utils::generate_address_bitcoind().await.unwrap();
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
-    ws_api.clone().start();
+    utils::start_ws(ws_api.clone());
     let mut rx = ws_api.updates();
     ws_api.subscribe(&swap_id).await.unwrap();
 

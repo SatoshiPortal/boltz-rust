@@ -196,22 +196,12 @@ impl BoltzWsApi {
         }
     }
 
+    #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
     pub fn start(self: Arc<Self>) {
-        let future = self.run_ws_loop();
-
-        #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
-        {
-            tokio::spawn(future);
-        }
-
-        #[cfg(all(target_family = "wasm", target_os = "unknown"))]
-        {
-            // In WASM, we can use spawn_local since we don't need Send
-            wasm_bindgen_futures::spawn_local(future);
-        }
+        tokio::spawn(self.run_ws_loop());
     }
 
-    async fn run_ws_loop(self: Arc<Self>) {
+    pub async fn run_ws_loop(self: Arc<Self>) {
         let (shutdown_sender, mut shutdown_receiver) = oneshot::channel();
         let _ = self.shutdown_sender.lock().await.replace(shutdown_sender);
 
@@ -342,6 +332,7 @@ impl Drop for BoltzWsApi {
 
 #[cfg(test)]
 #[cfg(feature = "regtest")]
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 mod tests {
     use std::sync::Arc;
 
@@ -358,7 +349,7 @@ mod tests {
         let ws = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
 
         assert!(!ws.is_connected().await);
-        ws.clone().start();
+        tokio::spawn(ws.clone().run_ws_loop());
 
         let swap_id = "swap_id";
         ws.subscribe(swap_id).await.unwrap();

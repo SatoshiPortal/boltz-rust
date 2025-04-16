@@ -70,7 +70,7 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
-    ws_api.clone().start();
+    utils::start_ws(ws_api.clone());
 
     // If there is MRH send directly to that address
     //    let (bip21_addrs, amount) =
@@ -275,7 +275,7 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
-    ws_api.clone().start();
+    utils::start_ws(ws_api.clone());
 
     let reverse_resp = boltz_api_v2
         .post_reverse_req(create_reverse_req)
@@ -404,7 +404,7 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
 
     let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
-    ws_api.clone().start();
+    utils::start_ws(ws_api.clone());
 
     let reverse_resp = boltz_api_v2
         .post_reverse_req(create_reverse_req)

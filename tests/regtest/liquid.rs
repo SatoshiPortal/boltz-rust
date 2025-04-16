@@ -107,7 +107,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
     log::debug!("Created Swap Script. : {:?}", swap_script);
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
-    ws_api.clone().start();
+    utils::start_ws(ws_api.clone());
     let mut rx = ws_api.updates();
     ws_api.subscribe(&swap_id).await.unwrap();
 
@@ -300,7 +300,7 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
     swap_script.to_address(CHAIN).unwrap();
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
-    ws_api.clone().start();
+    utils::start_ws(ws_api.clone());
     let mut rx = ws_api.updates();
     ws_api.subscribe(&swap_id).await.unwrap();
 
@@ -450,7 +450,7 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
     swap_script.to_address(CHAIN).unwrap();
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
-    ws_api.clone().start();
+    utils::start_ws(ws_api.clone());
     let mut rx = ws_api.updates();
     ws_api.subscribe(&swap_id).await.unwrap();
 

@@ -1,10 +1,11 @@
 use bitcoin::base64;
 use bitcoin::base64::Engine;
+use boltz_client::boltz::BoltzWsApi;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use futures::FutureExt;
 use reqwest::Client;
 use serde_json::{json, Value};
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
 const BITCOIND_URL: &str = "http://localhost:18443/wallet/client";
 const ELEMENTSD_URL: &str = "http://localhost:18884/wallet/client";
@@ -143,6 +144,21 @@ pub async fn pay_invoice_lnd_inner(invoice: &str) -> Result<(), Box<dyn Error>> 
     )
     .await?;
     Ok(())
+}
+
+pub fn start_ws(ws: Arc<BoltzWsApi>) {
+    let future = ws.run_ws_loop();
+
+    #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+    {
+        tokio::spawn(future);
+    }
+
+    #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+    {
+        // In WASM, we can use spawn_local since we don't need Send
+        wasm_bindgen_futures::spawn_local(future);
+    }
 }
 
 pub fn start_pay_invoice_lnd(invoice: String) {
