@@ -33,6 +33,7 @@ pub const BOLTZ_MAINNET_URL_V2: &str = "https://api.boltz.exchange/v2";
 pub const BOLTZ_REGTEST: &str = "http://localhost:9001/v2";
 
 use elements::secp256k1_zkp::{MusigPartialSignature, MusigPubNonce};
+use reqwest::RequestBuilder;
 pub use tokio_tungstenite_wasm;
 use tokio_tungstenite_wasm::{connect, WebSocketStream};
 
@@ -327,11 +328,11 @@ impl GetChainPairsResponse {
 pub struct BoltzApiClientV2 {
     base_url: String,
     http_client: reqwest::Client,
-    timeout: Duration,
+    timeout: Option<Duration>,
 }
 
 impl BoltzApiClientV2 {
-    pub fn new(base_url: String, timeout: Duration) -> Self {
+    pub fn new(base_url: String, timeout: Option<Duration>) -> Self {
         let http_client = reqwest::Client::new();
         Self {
             base_url,
@@ -349,28 +350,18 @@ impl BoltzApiClientV2 {
     /// Make a get request. returns the Response
     async fn get(&self, end_point: &str) -> Result<String, Error> {
         let url = format!("{}/{}", self.base_url, end_point);
-        Ok(self
-            .http_client
-            .get(url)
-            .timeout(self.timeout)
-            .send()
-            .await?
-            .text()
-            .await?)
+        let req_builder = self.http_client.get(url);
+        let req_builder = self.maybe_add_timeout(req_builder);
+        Ok(req_builder.send().await?.text().await?)
     }
 
     /// Make a Post request. Returns the Response
     async fn post(&self, end_point: &str, data: impl Serialize) -> Result<String, Error> {
         let url = format!("{}/{}", self.base_url, end_point);
 
-        match self
-            .http_client
-            .post(url)
-            .json(&data)
-            .timeout(self.timeout)
-            .send()
-            .await
-        {
+        let req_builder = self.http_client.post(url).json(&data);
+        let req_builder = self.maybe_add_timeout(req_builder);
+        match req_builder.send().await {
             Ok(r) => {
                 if r.status().is_success() {
                     log::debug!("POST response: {:#?}", r);
@@ -387,6 +378,14 @@ impl BoltzApiClientV2 {
                 log::error!("POST error: {:#?}", e);
                 Err(e.into())
             }
+        }
+    }
+
+    fn maybe_add_timeout(&self, req_builder: RequestBuilder) -> RequestBuilder {
+        if let Some(timeout) = self.timeout {
+            req_builder.timeout(timeout)
+        } else {
+            req_builder
         }
     }
 
@@ -1469,42 +1468,40 @@ pub struct GetSwapResponse {
 mod tests {
     use super::*;
 
-    const TIMEOUT: Duration = Duration::from_secs(5);
-
     #[cfg(all(target_family = "wasm", target_os = "unknown"))]
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[macros::async_test_all]
     async fn test_get_fee_estimation() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_fee_estimation().await;
         assert!(result.is_ok(), "Failed to get fee estimation");
     }
 
     #[macros::async_test_all]
     async fn test_get_height() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_height().await;
         assert!(result.is_ok(), "Failed to get height");
     }
 
     #[macros::async_test_all]
     async fn test_get_submarine_pairs() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_submarine_pairs().await;
         assert!(result.is_ok(), "Failed to get submarine pairs");
     }
 
     #[macros::async_test_all]
     async fn test_get_reverse_pairs() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_reverse_pairs().await;
         assert!(result.is_ok(), "Failed to get reverse pairs");
     }
 
     #[macros::async_test_all]
     async fn test_get_chain_pairs() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_chain_pairs().await;
         assert!(result.is_ok(), "Failed to get chain pairs");
     }
@@ -1512,7 +1509,7 @@ mod tests {
     #[macros::async_test_all]
     #[ignore]
     async fn test_get_submarine_claim_tx_details() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let id = "G6c6GJJY8eXz".to_string();
         let result = client.get_submarine_claim_tx_details(&id).await;
         assert!(
@@ -1524,7 +1521,7 @@ mod tests {
     #[macros::async_test_all]
     #[ignore]
     async fn test_get_chain_claim_tx_details() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let id = "3BIJf8UqGaSC".to_string();
         let result = client.get_chain_claim_tx_details(&id).await;
         assert!(
@@ -1536,7 +1533,7 @@ mod tests {
     #[macros::async_test_all]
     #[ignore]
     async fn test_get_reverse_tx() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let id = "G6c6GJJY8eXz";
         let result = client.get_reverse_tx(id).await;
         assert!(result.is_ok(), "Failed to get reverse transaction");
@@ -1545,7 +1542,7 @@ mod tests {
     #[macros::async_test_all]
     #[ignore]
     async fn test_get_submarine_tx() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let id = "G6c6GJJY8eXz";
         let result = client.get_submarine_tx(id).await;
         assert!(result.is_ok(), "Failed to get submarine transaction");
@@ -1553,7 +1550,7 @@ mod tests {
 
     #[macros::async_test_all]
     async fn test_get_chain_txs() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let id = "G6c6GJJY8eXz";
         let result = client.get_chain_txs(id).await;
         assert!(result.is_ok(), "Failed to get chain transactions");
@@ -1561,7 +1558,7 @@ mod tests {
 
     #[macros::async_test_all]
     async fn test_get_swap() {
-        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), TIMEOUT);
+        let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let id = "G6c6GJJY8eXz";
         let result = client.get_swap(id).await;
         assert!(result.is_ok(), "Failed to get swap status");

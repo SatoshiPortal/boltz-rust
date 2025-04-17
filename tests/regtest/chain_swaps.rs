@@ -87,7 +87,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
         webhook: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), super::BOLTZ_TIMEOUT);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), Some(super::BOLTZ_TIMEOUT));
 
     let create_chain_response = boltz_api_v2.post_chain_req(create_chain_req).await.unwrap();
     let swap_id = create_chain_response.clone().id;
@@ -378,7 +378,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
         webhook: None,
     };
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), super::BOLTZ_TIMEOUT);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), Some(super::BOLTZ_TIMEOUT));
 
     let create_chain_response = boltz_api_v2.post_chain_req(create_chain_req).await.unwrap();
     let swap_id = create_chain_response.clone().id;

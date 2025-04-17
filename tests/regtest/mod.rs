@@ -20,7 +20,7 @@ const BOLTZ_TIMEOUT: Duration = Duration::from_secs(30);
 async fn ws_ping_pong() {
     setup_logger();
 
-    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), BOLTZ_TIMEOUT);
+    let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), None);
 
     let (mut sender, mut receiver) = boltz_api_v2.connect_ws().await.unwrap().split();
 

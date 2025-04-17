@@ -68,7 +68,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
     let refund_address = utils::generate_address_elementsd().await.unwrap();
     let boltz_url = BOLTZ_REGTEST;
     let chain = CHAIN;
-    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), super::BOLTZ_TIMEOUT);
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), Some(super::BOLTZ_TIMEOUT));
 
     // If there is MRH send directly to that address
     // if let Some((bip21_addrs, amount)) =
@@ -313,7 +313,7 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
     let claim_address = utils::generate_address_elementsd().await.unwrap();
     let boltz_url = BOLTZ_REGTEST;
     let chain = CHAIN;
-    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), super::BOLTZ_TIMEOUT);
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), Some(super::BOLTZ_TIMEOUT));
 
     let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
 
@@ -495,7 +495,7 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
     let claim_address = utils::generate_address_elementsd().await.unwrap();
     let boltz_url = BOLTZ_REGTEST;
     let chain = CHAIN;
-    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), super::BOLTZ_TIMEOUT);
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), Some(super::BOLTZ_TIMEOUT));
 
     let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
 
