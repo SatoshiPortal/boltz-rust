@@ -1,7 +1,7 @@
 use crate::boltz::{SwapStatus, WsRequest, WsResponse};
 use crate::error::Error;
 use futures_util::{future::select, SinkExt, StreamExt};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
@@ -119,7 +119,6 @@ impl BoltzWsApi {
     }
 
     async fn wait_for_subscription(
-        &self,
         response_receiver: oneshot::Receiver<Result<(), Error>>,
         mut subscriptions: broadcast::Receiver<String>,
         swap_id: &str,
@@ -154,7 +153,7 @@ impl BoltzWsApi {
         }
     }
 
-    async fn sleep(&self, duration: Duration) {
+    async fn sleep(duration: Duration) {
         #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
         {
             tokio::time::sleep(duration).await;
@@ -169,7 +168,7 @@ impl BoltzWsApi {
     async fn try_subscribe(&self, swap_id: &str) -> Result<(), Error> {
         let (response_sender, response_receiver) = oneshot::channel();
         let subscriptions = self.subscription_notifier.subscribe();
-        let wait = Box::pin(self.wait_for_subscription(response_receiver, subscriptions, swap_id));
+        let wait = Box::pin(BoltzWsApi::wait_for_subscription(response_receiver, subscriptions, swap_id));
 
         self.subscription_sender
             .send(SubscriptionRequest {
@@ -190,9 +189,9 @@ impl BoltzWsApi {
         // Use futures_util::select to race between wait and timeout
         match select(wait, timeout_future).await {
             futures_util::future::Either::Left((result, _)) => result,
-            futures_util::future::Either::Right((_, _)) => Err(Error::Generic(
-                "Subscription timeout, attempting to reconnect".to_string(),
-            )),
+            futures_util::future::Either::Right((_, _)) => {
+                Err(Error::Generic("Subscription timeout".to_string()))
+            }
         }
     }
 
@@ -244,7 +243,7 @@ impl BoltzWsApi {
 
                             _ = interval.next() => {
                                 match connection.send_json(&WsRequest::Ping).await {
-                                    Ok(_) => debug!("Sent keep-alive ping"),
+                                    Ok(_) => trace!("Sent keep-alive ping"),
                                     Err(e) => warn!("Failed to send keep-alive ping: {e:?}"),
                                 }
                             },
