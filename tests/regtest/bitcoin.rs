@@ -15,7 +15,7 @@ use boltz_client::{
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::regtest::WAIT_TIME_MS;
+use crate::regtest::WAIT_TIME;
 use crate::utils;
 use bitcoin::{
     hashes::{sha256, Hash},
@@ -26,8 +26,8 @@ use bitcoin::{
 };
 use boltz_client::boltz::{BoltzWsConfig, BOLTZ_REGTEST};
 use boltz_client::fees::Fee;
-use boltz_client::network::esplora::async_sleep;
 use boltz_client::network::{BitcoinChain, BitcoinClient};
+use boltz_client::util::sleep;
 use serial_test::serial;
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
@@ -177,7 +177,7 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
             // This means the funding transaction was rejected by Boltz for whatever reason, and we need to get
             // the funds back via refund.
             "transaction.lockupFailed" | "invoice.failedToPay" => {
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
                 let swap_tx = BtcSwapTx::new_refund(
                     swap_script.clone(),
                     &refund_address,
@@ -312,7 +312,7 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
             "transaction.mempool" => {
                 log::info!("Boltz broadcasted funding tx");
 
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
 
                 let claim_tx = BtcSwapTx::new_claim(
                     swap_script.clone(),
@@ -439,7 +439,7 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
             "transaction.mempool" => {
                 log::info!("Boltz broadcasted funding tx");
 
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
 
                 let claim_tx = BtcSwapTx::new_claim(
                     swap_script.clone(),

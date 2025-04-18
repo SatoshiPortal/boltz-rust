@@ -1,4 +1,4 @@
-use crate::regtest::WAIT_TIME_MS;
+use crate::regtest::WAIT_TIME;
 use crate::utils;
 use bitcoin::{key::rand::thread_rng, PublicKey};
 use boltz_client::boltz::{
@@ -9,10 +9,10 @@ use boltz_client::fees::Fee;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 #[cfg(feature = "electrum")]
 use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClient};
-use boltz_client::network::esplora::async_sleep;
 #[cfg(feature = "esplora")]
 use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
 use boltz_client::network::{BitcoinChain, BitcoinClient, LiquidChain, LiquidClient};
+use boltz_client::util::sleep;
 use boltz_client::{
     util::{secrets::Preimage, setup_logger},
     BtcSwapScript, BtcSwapTx, Keypair, LBtcSwapScript, LBtcSwapTx, Secp256k1,
@@ -158,7 +158,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
             "transaction.server.confirmed" => {
                 log::info!("Server lockup tx is confirmed!");
 
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
                 log::info!("Claiming!");
 
                 let claim_tx = LBtcSwapTx::new_claim(
@@ -217,7 +217,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
             }
 
             "transaction.lockupFailed" => {
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
                 log::info!("REFUNDING!");
                 refund_bitcoin_liquid_v2_chain(
                     lockup_script.clone(),
@@ -415,7 +415,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
             "transaction.server.confirmed" => {
                 log::info!("Server lockup tx is confirmed!");
 
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
                 log::info!("Claiming!");
 
                 let claim_tx = BtcSwapTx::new_claim(
@@ -473,7 +473,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
             }
 
             "transaction.lockupFailed" => {
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
                 log::info!("REFUNDING!");
                 let refund_tx = LBtcSwapTx::new_refund(
                     lockup_script.clone(),

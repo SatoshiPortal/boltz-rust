@@ -3,6 +3,7 @@
 use boltz_client::network::electrum::ElectrumLiquidClient;
 #[cfg(feature = "esplora")]
 use boltz_client::network::esplora::EsploraLiquidClient;
+use boltz_client::util::sleep;
 use boltz_client::{
     swaps::{
         boltz::{BoltzApiClientV2, Cooperative, CreateReverseRequest, CreateSubmarineRequest},
@@ -13,7 +14,7 @@ use boltz_client::{
 };
 use std::str::FromStr;
 
-use crate::regtest::WAIT_TIME_MS;
+use crate::regtest::WAIT_TIME;
 use crate::utils;
 use bitcoin::{
     hashes::{sha256, Hash},
@@ -24,7 +25,6 @@ use bitcoin::{
 };
 use boltz_client::boltz::{BoltzWsConfig, BOLTZ_REGTEST};
 use boltz_client::fees::Fee;
-use boltz_client::network::esplora::async_sleep;
 use boltz_client::network::{Chain, LiquidChain, LiquidClient};
 use serial_test::serial;
 use std::sync::Arc;
@@ -182,7 +182,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
             }
 
             "transaction.lockupFailed" | "invoice.failedToPay" => {
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
                 let swap_tx = LBtcSwapTx::new_refund(
                     swap_script.clone(),
                     &refund_address,
@@ -319,7 +319,7 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
             "transaction.mempool" => {
                 log::info!("Boltz broadcasted funding tx");
 
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
 
                 let claim_tx = LBtcSwapTx::new_claim(
                     swap_script.clone(),
@@ -469,7 +469,7 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
             "transaction.mempool" => {
                 log::info!("Boltz broadcasted funding tx");
 
-                async_sleep(WAIT_TIME_MS).await;
+                sleep(WAIT_TIME).await;
 
                 let claim_tx = LBtcSwapTx::new_claim(
                     swap_script.clone(),

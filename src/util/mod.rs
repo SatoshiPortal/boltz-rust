@@ -1,8 +1,13 @@
+use std::time::Duration;
+
 pub mod ec;
 pub mod fees;
 #[cfg(feature = "lnurl")]
 pub mod lnurl;
 pub mod secrets;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use gloo_timers::future::TimeoutFuture;
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 static INIT: std::sync::Once = std::sync::Once::new();
@@ -20,4 +25,16 @@ pub fn setup_logger() {
         // .is_test(true)
         .init();
     });
+}
+
+pub async fn sleep(duration: Duration) {
+    #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+    {
+        tokio::time::sleep(duration).await;
+    }
+    #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+    {
+        let timeout_ms = duration.as_millis() as u32;
+        TimeoutFuture::new(timeout_ms).await;
+    }
 }
