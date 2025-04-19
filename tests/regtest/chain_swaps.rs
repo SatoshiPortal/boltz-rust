@@ -160,7 +160,7 @@ async fn v2_chain(client: &Client, underpay: bool, from: Chain, to: Chain) {
                 .await
                 .unwrap();
                 let coop = lockup_script
-                    .sign_cooperative_chain_claim(&our_refund_keys, &swap_id, &boltz_api_v2)
+                    .cooperative_chain_claim(&our_refund_keys, &swap_id, &boltz_api_v2)
                     .await
                     .unwrap();
                 let tx = claim_tx

@@ -130,10 +130,8 @@ impl Client {
 
 /// Trait for common functionality between Bitcoin and Liquid swap transactions
 pub trait SwapScriptCommon {
-    /// Get the swap script
     fn swap_type(&self) -> SwapType;
 
-    /// Partial sign the transaction
     fn partial_sign(
         &self,
         keys: &Keypair,
@@ -268,7 +266,12 @@ impl SwapScript {
             .await
     }
 
-    pub async fn sign_cooperative_chain_claim<'a>(
+    // Initiates a cooperative claim for a chain swap with Boltz.
+    //
+    // This function should be called when the swap status is `transaction.server.confirmed`,
+    // It creates a partial signature for boltz's side of the transaction, and returns a Cooperative struct which
+    // can be passed to `sign_claim` where it is used in exchange for the signature for our own claim transaction.
+    pub async fn cooperative_chain_claim<'a>(
         &self,
         our_refund_keys: &Keypair,
         swap_id: &String,
