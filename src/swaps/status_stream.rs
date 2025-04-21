@@ -334,7 +334,7 @@ mod tests {
     async fn test_subscribe() {
         setup_logger();
 
-        let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST);
+        let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), None);
         let ws = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
 
         assert!(!ws.is_connected().await);

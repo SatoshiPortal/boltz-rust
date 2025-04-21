@@ -17,6 +17,7 @@ pub use elements;
 pub use lightning_invoice;
 #[cfg(feature = "lnurl")]
 pub use lnurl;
+pub use reqwest;
 
 // Re-export relevant structs under boltz_client::StructName for simplicity
 pub use bitcoin::{

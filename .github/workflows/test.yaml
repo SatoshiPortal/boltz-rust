@@ -50,6 +50,8 @@ jobs:
         run: cargo install wasm-pack
       - name: Start regtest environment
         working-directory: regtest
+        env:
+          COMPOSE_PROFILES: ci, esplora
         run: sh start.sh
       - name: Run cargo regtest tests
         run: make cargo-regtest-test

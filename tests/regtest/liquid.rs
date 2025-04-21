@@ -67,7 +67,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
     let refund_address = utils::generate_address_elementsd().await.unwrap();
     let boltz_url = BOLTZ_REGTEST;
     let chain = CHAIN;
-    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), Some(super::BOLTZ_TIMEOUT));
 
     // If there is MRH send directly to that address
     // if let Some((bip21_addrs, amount)) =
@@ -140,7 +140,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
                     swap_script.clone(),
                     &refund_address,
                     liquid_client,
-                    boltz_url.to_string(),
+                    &boltz_api_v2,
                     create_swap_response.clone().id,
                 )
                 .await
@@ -187,7 +187,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
                     swap_script.clone(),
                     &refund_address,
                     liquid_client,
-                    boltz_url.to_string(),
+                    &boltz_api_v2,
                     create_swap_response.clone().id,
                 )
                 .await
@@ -259,7 +259,7 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
     let claim_address = utils::generate_address_elementsd().await.unwrap();
     let boltz_url = BOLTZ_REGTEST;
     let chain = CHAIN;
-    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), Some(super::BOLTZ_TIMEOUT));
 
     let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
 
@@ -325,7 +325,7 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
                     swap_script.clone(),
                     claim_address.clone(),
                     liquid_client,
-                    BOLTZ_REGTEST.to_string(),
+                    &boltz_api_v2,
                     swap_id.clone(),
                 )
                 .await
@@ -409,7 +409,7 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
     let claim_address = utils::generate_address_elementsd().await.unwrap();
     let boltz_url = BOLTZ_REGTEST;
     let chain = CHAIN;
-    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url);
+    let boltz_api_v2 = BoltzApiClientV2::new(boltz_url.to_string(), Some(super::BOLTZ_TIMEOUT));
 
     let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
 
@@ -475,7 +475,7 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
                     swap_script.clone(),
                     claim_address.clone(),
                     liquid_client,
-                    BOLTZ_REGTEST.to_string(),
+                    &boltz_api_v2,
                     swap_id.clone(),
                 )
                 .await

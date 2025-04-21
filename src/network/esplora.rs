@@ -26,8 +26,15 @@ pub struct EsploraBitcoinClient {
 
 impl EsploraBitcoinClient {
     pub fn new(network: BitcoinChain, url: &str, timeout: u64) -> Self {
-        let client = reqwest::Client::new();
+        Self::with_client(reqwest::Client::new(), network, url, timeout)
+    }
 
+    pub fn with_client(
+        client: reqwest::Client,
+        network: BitcoinChain,
+        url: &str,
+        timeout: u64,
+    ) -> Self {
         Self {
             client,
             base_url: url.to_string(),
@@ -171,8 +178,15 @@ pub struct EsploraLiquidClient {
 
 impl EsploraLiquidClient {
     pub fn new(network: LiquidChain, url: &str, timeout: u64) -> Self {
-        let client = reqwest::Client::new();
+        Self::with_client(reqwest::Client::new(), network, url, timeout)
+    }
 
+    pub fn with_client(
+        client: reqwest::Client,
+        network: LiquidChain,
+        url: &str,
+        timeout: u64,
+    ) -> Self {
         Self {
             client,
             base_url: url.to_string(),
