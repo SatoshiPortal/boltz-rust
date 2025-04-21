@@ -26,6 +26,7 @@ pub enum Error {
     Hash(bitcoin::hashes::FromSliceError),
     Locktime(String),
     Url(url::ParseError),
+    #[cfg(feature = "ws")]
     WebSocket(Box<tokio_tungstenite_wasm::Error>),
     Taproot(String),
     Musig2(String),
@@ -184,6 +185,7 @@ impl From<url::ParseError> for Error {
     }
 }
 
+#[cfg(feature = "ws")]
 impl From<tokio_tungstenite_wasm::Error> for Error {
     fn from(value: tokio_tungstenite_wasm::Error) -> Self {
         Self::WebSocket(value.into())
@@ -273,6 +275,7 @@ impl Error {
             Error::Hash(_) => "Hash",
             Error::Locktime(_) => "Locktime",
             Error::Url(_) => "Url",
+            #[cfg(feature = "ws")]
             Error::WebSocket(_) => "WebSocket",
             Error::Taproot(_) => "Taproot",
             Error::Musig2(_) => "Musig2",
@@ -309,6 +312,7 @@ impl Error {
             Error::Hash(e) => e.to_string(),
             Error::Locktime(e) => e.clone(),
             Error::Url(e) => e.to_string(),
+            #[cfg(feature = "ws")]
             Error::WebSocket(e) => e.to_string(),
             Error::Taproot(e) => e.clone(),
             Error::Musig2(e) => e.clone(),

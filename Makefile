@@ -29,10 +29,10 @@ cargo-clippy:
 	cargo clippy --all-targets --all-features -- -D warnings
 
 cargo-test:
-	cargo test --features "esplora, electrum, lnurl"  -- --nocapture
+	cargo test --features "esplora, electrum, lnurl, ws"  -- --nocapture
 
 cargo-regtest-test:
-	$(REGTEST_PREFIX) cargo test --features "electrum, regtest" -- --nocapture
+	$(REGTEST_PREFIX) cargo test --features "electrum, regtest, ws" -- --nocapture
 
 wasm-clippy:
 	$(CLANG_PREFIX) cargo clippy --target=wasm32-unknown-unknown --all-features -- -D warnings
@@ -49,7 +49,7 @@ wasm-test-safari:
 	BROWSER=safari $(MAKE) wasm-test
 
 wasm-regtest-test:
-	$(CLANG_PREFIX) $(REGTEST_PREFIX) WASM_BINDGEN_TEST_TIMEOUT=500 wasm-pack test --headless --$(BROWSER) --features regtest -- regtest
+	$(CLANG_PREFIX) $(REGTEST_PREFIX) WASM_BINDGEN_TEST_TIMEOUT=500 wasm-pack test --headless --$(BROWSER) --features regtest,ws -- regtest
 
 wasm-regtest-test-chrome:
 	BROWSER=chrome $(MAKE) wasm-regtest-test

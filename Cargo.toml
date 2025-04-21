@@ -38,8 +38,8 @@ hex = "0.4"
 lnurl-rs = { version = "0.9.0", default-features = false, features = ["async", "async-https"], optional = true }
 # Pin to commit until https://github.com/seanmonstar/reqwest/pull/1760 gets released
 reqwest = { git = "https://github.com/seanmonstar/reqwest", rev = "00b15b9a893d350388af513179e1a973dfa26f85", features = ["json"] }
-tokio = { version = "1.43.0", features = ["macros", "time", "sync", "rt"] }
-tokio-tungstenite-wasm = { version = "0.5.0", features = ["native-tls-vendored"] }
+tokio = { version = "1.43.0", features = ["time"] }
+tokio-tungstenite-wasm = { version = "0.5.0", features = ["native-tls-vendored"], optional = true }
 async-trait = "0.1.86"
 macros = { path = "macros" }
 futures-util = "0.3.31"
@@ -59,6 +59,7 @@ secp256k1-zkp = { git = "https://github.com/danielgranhao/rust-secp256k1-zkp.git
 
 [dev-dependencies]
 serial_test = "3.2.0"
+tokio = { version = "1.43.0", features = ["rt"] }
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dev-dependencies]
 bitcoind = { version = "0.36.0", features = ["25_0"] }
@@ -76,3 +77,4 @@ esplora = []
 electrum = ["dep:electrum-client"]
 # Feature to enable tests that require previous initialization of a regtest environment
 regtest = []
+ws = ["tokio/sync", "tokio/rt", "tokio/macros", "dep:tokio-tungstenite-wasm"]

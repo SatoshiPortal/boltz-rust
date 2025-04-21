@@ -1,5 +1,6 @@
 use bitcoin::base64;
 use bitcoin::base64::Engine;
+#[cfg(feature = "ws")]
 use boltz_client::boltz::BoltzWsApi;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use futures::FutureExt;
@@ -146,6 +147,7 @@ pub async fn pay_invoice_lnd_inner(invoice: &str) -> Result<(), Box<dyn Error>> 
     Ok(())
 }
 
+#[cfg(feature = "ws")]
 pub fn start_ws(ws: Arc<BoltzWsApi>) {
     let future = ws.run_ws_loop();
 
