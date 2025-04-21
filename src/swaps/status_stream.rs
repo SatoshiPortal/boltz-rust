@@ -101,8 +101,9 @@ impl BoltzWsApi {
 
     pub async fn reconnect(&self) -> Result<(), Error> {
         if let Some(sender) = self.restart_sender.lock().await.take() {
-            let _ = sender.send(());
-            Ok(())
+            sender
+                .send(())
+                .map_err(|_| Error::Generic("Failed to send restart signal".to_string()))
         } else {
             Err(Error::Generic("Not connected".to_string()))
         }
@@ -145,7 +146,7 @@ impl BoltzWsApi {
                     "Failed to subscribe to swap {}, forcing reconnect and trying again: {:?}",
                     swap_id, e
                 );
-                let _ = self.reconnect().await;
+                self.reconnect().await?;
                 self.try_subscribe(swap_id).await
             }
         }
@@ -248,7 +249,7 @@ impl BoltzWsApi {
                                     },
                                     Ok(Message::Text(payload)) => {
                                         let payload = payload.as_str();
-                                        info!("Received text msg: {payload:?}");
+                                        debug!("Received text msg: {payload:?}");
                                         match serde_json::from_str::<WsResponse>(payload) {
                                             // Subscribing/unsubscribing confirmation
                                             Ok(WsResponse::Subscribe(subscribe)) => {
@@ -263,7 +264,9 @@ impl BoltzWsApi {
                                             // Status update(s)
                                             Ok(WsResponse::Update(update)) => {
                                                 for update in update.args {
-                                                    let _ = self.update_notifier.send(update);
+                                                    if let Err(e) = self.update_notifier.send(update) {
+                                                        warn!("Failed to broadcast update: {}", e);
+                                                    }
                                                 }
                                             }
 
