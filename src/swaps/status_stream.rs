@@ -1,7 +1,7 @@
 use crate::boltz::{SwapStatus, WsRequest, WsResponse};
 use crate::error::Error;
 use crate::util::sleep;
-use futures_util::{future::select, SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, trace, warn};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -154,11 +154,6 @@ impl BoltzWsApi {
     async fn try_subscribe(&self, swap_id: &str) -> Result<(), Error> {
         let (response_sender, response_receiver) = oneshot::channel();
         let subscriptions = self.subscription_notifier.subscribe();
-        let wait = Box::pin(BoltzWsApi::wait_for_subscription(
-            response_receiver,
-            subscriptions,
-            swap_id,
-        ));
 
         self.subscription_sender
             .send(SubscriptionRequest {
@@ -173,15 +168,9 @@ impl BoltzWsApi {
                 ))
             })?;
 
-        // Create the timeout future based on the environment
-        let timeout_future = Box::pin(sleep(self.config.subscription_timeout));
-
-        // Use futures_util::select to race between wait and timeout
-        match select(wait, timeout_future).await {
-            futures_util::future::Either::Left((result, _)) => result,
-            futures_util::future::Either::Right((_, _)) => {
-                Err(Error::Generic("Subscription timeout".to_string()))
-            }
+        tokio::select! {
+            _ = BoltzWsApi::wait_for_subscription(response_receiver, subscriptions, swap_id) => Ok(()),
+            _ = sleep(self.config.subscription_timeout) => Err(Error::Generic("Subscription timeout".to_string())),
         }
     }
 
