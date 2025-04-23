@@ -175,11 +175,6 @@ impl BoltzWsApi {
         }
     }
 
-    #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
-    pub fn start(self: Arc<Self>) {
-        tokio::spawn(self.run_ws_loop());
-    }
-
     pub async fn run_ws_loop(self: Arc<Self>) {
         let (shutdown_sender, mut shutdown_receiver) = oneshot::channel();
         let _ = self.shutdown_sender.lock().await.replace(shutdown_sender);
