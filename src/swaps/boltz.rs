@@ -636,23 +636,12 @@ impl BoltzApiClientV2 {
     /// Updates the webhook URL for a BOLT12 offer
     ///
     /// # Arguments
-    ///    * `offer` - The BOLT12 offer
-    ///    * `url` - The updated webhook URL
-    ///    * `signature` - This schnorr signature of the SHA256 hash of the webhook URL
-    pub async fn patch_bolt12_offer(
-        &self,
-        offer: &str,
-        url: &str,
-        signature: &str,
-    ) -> Result<(), Error> {
-        let data = json!(
-            {
-                "offer": offer,
-                "url": url,
-                "signature": signature,
-            }
-        );
-
+    ///   * `req` - The request object containing the offer and the new webhook URL
+    ///     * `offer` - The BOLT12 offer
+    ///     * `url` - The updated webhook URL
+    ///     * `signature` - This schnorr signature of the SHA256 hash of the webhook URL or "UPDATE"
+    pub async fn patch_bolt12_offer(&self, req: UpdateBolt12OfferRequest) -> Result<(), Error> {
+        let data = serde_json::to_value(req)?;
         let end_point = "lightning/BTC/bolt12".to_string();
         self.patch(&end_point, data).await?;
         Ok(())
@@ -1590,6 +1579,15 @@ pub struct CreateBolt12OfferRequest {
     pub offer: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateBolt12OfferRequest {
+    pub offer: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    pub signature: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
