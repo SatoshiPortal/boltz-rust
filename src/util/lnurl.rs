@@ -1,5 +1,5 @@
 use crate::error::Error;
-use lightning_invoice::Bolt11Invoice;
+use lightning::bolt11_invoice::Bolt11Invoice;
 use lnurl::lightning_address::LightningAddress;
 use lnurl::withdraw::WithdrawalResponse;
 use lnurl::{lnurl::LnUrl, Builder, LnUrlResponse};

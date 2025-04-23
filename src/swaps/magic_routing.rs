@@ -261,7 +261,7 @@ mod tests {
         let msg = Message::from_digest_slice(mrh_address_hash.as_byte_array()).unwrap();
 
         let receiver_sig =
-            Signature::from_slice(&Vec::from_hex(&mrh_address_signature).unwrap()).unwrap();
+            Signature::from_slice(&Vec::from_hex(mrh_address_signature).unwrap()).unwrap();
         let receiver_pubkey = PublicKey::from_str(&public_key).unwrap().inner;
 
         let secp = Secp256k1::new();
