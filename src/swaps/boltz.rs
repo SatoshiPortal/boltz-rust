@@ -626,18 +626,8 @@ impl BoltzApiClientV2 {
     }
 
     /// Creates a BOLT12 offer
-    ///
-    /// # Arguments
-    ///    * `offer` - The BOLT12 offer
-    ///    * `url` - The webhook URL
-    pub async fn post_bolt12_offer(&self, offer: &str, url: &str) -> Result<(), Error> {
-        let data = json!(
-            {
-                "offer": offer,
-                "url": url,
-            }
-        );
-
+    pub async fn post_bolt12_offer(&self, req: CreateBolt12OfferRequest) -> Result<(), Error> {
+        let data = serde_json::to_value(req)?;
         let end_point = "lightning/BTC/bolt12".to_string();
         self.post(&end_point, data).await?;
         Ok(())
@@ -852,31 +842,50 @@ pub struct Leaf {
     pub version: u8,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum SubscriptionChannel {
     #[serde(rename = "swap.update")]
     SwapUpdate,
+    #[serde(rename = "invoice.request")]
+    InvoiceRequest,
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq)]
-pub struct SubscribeRequest {
-    pub channel: SubscriptionChannel,
-    pub args: Vec<String>,
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct InvoiceRequestParams {
+    pub offer: String,
+    pub signature: String,
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "channel")]
+pub enum SubscribeRequest {
+    #[serde(rename = "swap.update")]
+    SwapUpdate { args: Vec<String> },
+    #[serde(rename = "invoice.request")]
+    InvoiceRequest { args: Vec<InvoiceRequestParams> },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct UnsubscribeRequest {
     pub channel: SubscriptionChannel,
     pub args: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct InvoiceCreated {
+    pub id: String,
+    pub invoice: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op")]
 pub enum WsRequest {
     #[serde(rename = "subscribe")]
     Subscribe(SubscribeRequest),
     #[serde(rename = "unsubscribe")]
     Unsubscribe(UnsubscribeRequest),
+    #[serde(rename = "invoice")]
+    Invoice(InvoiceCreated),
     #[serde(rename = "ping")]
     Ping,
 }
@@ -887,9 +896,18 @@ impl WsRequest {
     }
 
     pub fn subscribe_swaps_request(swap_ids: Vec<String>) -> Self {
-        Self::Subscribe(SubscribeRequest {
-            channel: SubscriptionChannel::SwapUpdate,
+        Self::Subscribe(SubscribeRequest::SwapUpdate {
             args: swap_ids,
+        })
+    }
+
+    pub fn subscribe_invoice_request(params: InvoiceRequestParams) -> Self {
+        Self::subscribe_invoice_requests(vec![params])
+    }
+
+    pub fn subscribe_invoice_requests(params: Vec<InvoiceRequestParams>) -> Self {
+        Self::Subscribe(SubscribeRequest::InvoiceRequest {
+            args: params,
         })
     }
 }
@@ -952,10 +970,24 @@ pub struct SwapStatus {
     pub channel_info: Option<ChannelInfo>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+pub struct InvoiceRequest {
+    pub id: String,
+
+    pub offer: String,
+    #[serde(rename = "invoiceRequest")]
+    pub invoice_request: String,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct ErrorResponse {
+    pub error: String,
+}
+
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
-pub struct UpdateResponse {
+pub struct UpdateResponse<T> {
     pub channel: SubscriptionChannel,
-    pub args: Vec<SwapStatus>,
+    pub args: Vec<T>,
 
     pub timestamp: String,
 }
@@ -968,7 +1000,11 @@ pub enum WsResponse {
     #[serde(rename = "unsubscribe")]
     Unsubscribe(UnsubscribeResponse),
     #[serde(rename = "update")]
-    Update(UpdateResponse),
+    Update(UpdateResponse<SwapStatus>),
+    #[serde(rename = "request")]
+    InvoiceRequest(UpdateResponse<InvoiceRequest>),
+    #[serde(rename = "error")]
+    Error(ErrorResponse),
     #[serde(rename = "pong")]
     Pong,
 }
@@ -1546,6 +1582,14 @@ pub struct GetFeeEstimationResponse {
     pub btc: f64,
     #[serde(rename = "L-BTC")]
     pub lbtc: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateBolt12OfferRequest {
+    pub offer: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
