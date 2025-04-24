@@ -143,8 +143,7 @@ impl BoltzWsApi {
             Ok(_) => Ok(()),
             Err(e) => {
                 info!(
-                    "Failed to subscribe to swap {}, forcing reconnect and trying again: {:?}",
-                    swap_id, e
+                    "Failed to subscribe to swap {swap_id}, forcing reconnect and trying again: {e:?}"
                 );
                 self.reconnect().await?;
                 self.try_subscribe(swap_id).await
@@ -164,8 +163,7 @@ impl BoltzWsApi {
             .await
             .map_err(|e| {
                 Error::Generic(format!(
-                    "Failed to send subscription request to channel: {:?}",
-                    e
+                    "Failed to send subscription request to channel: {e:?}"
                 ))
             })?;
 
@@ -196,7 +194,7 @@ impl BoltzWsApi {
                         match connection.subscribe(ids.iter().cloned().collect()).await {
                             Ok(_) => {}
                             Err(e) => {
-                                error!("Error subscribing to swaps: {:?}", e);
+                                error!("Error subscribing to swaps: {e:?}");
                                 sleep(self.config.reconnect_delay).await;
                                 continue;
                             }
@@ -259,7 +257,7 @@ impl BoltzWsApi {
                                             Ok(WsResponse::Update(update)) => {
                                                 for update in update.args {
                                                     if let Err(e) = self.update_notifier.send(update) {
-                                                        warn!("Failed to broadcast update: {}", e);
+                                                        warn!("Failed to broadcast update: {e}");
                                                     }
                                                 }
                                             }
@@ -289,7 +287,7 @@ impl BoltzWsApi {
                     }
                 }
                 Err(e) => {
-                    error!("Error connecting to websocket: {:?}", e);
+                    error!("Error connecting to websocket: {e:?}");
                     sleep(self.config.reconnect_delay).await;
                 }
             }

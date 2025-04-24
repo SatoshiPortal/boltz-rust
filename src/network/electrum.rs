@@ -28,9 +28,9 @@ impl ElectrumUrl {
         let builder = builder.timeout(Some(timeout));
         let (url, builder) = match self {
             ElectrumUrl::Tls(url, validate) => {
-                (format!("ssl://{}", url), builder.validate_domain(*validate))
+                (format!("ssl://{url}"), builder.validate_domain(*validate))
             }
-            ElectrumUrl::Plaintext(url) => (format!("tcp://{}", url), builder),
+            ElectrumUrl::Plaintext(url) => (format!("tcp://{url}"), builder),
         };
         Ok(electrum_client::Client::from_config(&url, builder.build())?)
     }
@@ -291,7 +291,7 @@ mod tests {
         let electrum_client = ElectrumLiquidClient::default(LiquidChain::Liquid, None).unwrap();
         let numblocks = "blockchain.numblocks.subscribe";
         let blockheight = electrum_client.inner.raw_call(numblocks, []).unwrap();
-        println!("blockheight: {}", blockheight);
+        println!("blockheight: {blockheight}");
     }
 
     #[test]

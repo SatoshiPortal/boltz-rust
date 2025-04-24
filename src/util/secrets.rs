@@ -56,10 +56,8 @@ impl SwapKey {
             Chain::Liquid(LiquidChain::Liquid) => LIQUID_NETWORK_PATH,
             _ => TESTNET_NETWORK_PATH,
         };
-        let derivation_path = format!(
-            "m/{}h/{}h/{}h/0/{}",
-            purpose, network_path, SUBMARINE_SWAP_ACCOUNT, index
-        );
+        let derivation_path =
+            format!("m/{purpose}h/{network_path}h/{SUBMARINE_SWAP_ACCOUNT}h/0/{index}");
         let path = DerivationPath::from_str(&derivation_path)?;
         let child_xprv = root.derive_priv(&secp, &path)?;
 
@@ -92,10 +90,8 @@ impl SwapKey {
             _ => TESTNET_NETWORK_PATH,
         };
         // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
-        let derivation_path = format!(
-            "m/{}h/{}h/{}h/0/{}",
-            purpose, network_path, REVERSE_SWAP_ACCOUNT, index
-        );
+        let derivation_path =
+            format!("m/{purpose}h/{network_path}h/{REVERSE_SWAP_ACCOUNT}h/0/{index}");
         let path = DerivationPath::from_str(&derivation_path)?;
         let child_xprv = root.derive_priv(&secp, &path)?;
 
@@ -127,10 +123,8 @@ impl SwapKey {
             _ => TESTNET_NETWORK_PATH,
         };
         // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
-        let derivation_path = format!(
-            "m/{}h/{}h/{}h/0/{}",
-            purpose, network_path, CHAIN_SWAP_ACCOUNT, index
-        );
+        let derivation_path =
+            format!("m/{purpose}h/{network_path}h/{CHAIN_SWAP_ACCOUNT}h/0/{index}");
         let path = DerivationPath::from_str(&derivation_path)?;
         let child_xprv = root.derive_priv(&secp, &path)?;
 
@@ -295,7 +289,7 @@ impl RefundSwapFile {
         full_path.push(self.file_name());
         let mut file = File::create(&full_path)?;
         let json = serde_json::to_string_pretty(self)?;
-        writeln!(file, "{}", json)?;
+        writeln!(file, "{json}")?;
         Ok(())
     }
     pub fn read_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
@@ -326,7 +320,7 @@ mod tests {
             Ok(t) => t,
             Err(e) => {
                 // Conversion failed, handle the error
-                return println!("Error converting to LiquidSwapKey: {:?}", e);
+                return println!("Error converting to LiquidSwapKey: {e:?}");
             }
         };
         assert_eq!(sk.fingerprint, lsk.fingerprint);

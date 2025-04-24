@@ -56,7 +56,7 @@ async fn json_rpc_request(
 
 async fn lnd_request(method: &str, params: Value) -> Result<Value, Box<dyn Error>> {
     let client = Client::new();
-    let url = format!("{}/{}", LND_URL, method);
+    let url = format!("{LND_URL}/{method}");
 
     let res = client
         .post(PROXY_URL)
@@ -80,7 +80,7 @@ pub async fn generate_address_bitcoind() -> Result<String, Box<dyn Error>> {
     )
     .await?;
 
-    println!("Bitcoind response: {:?}", response); // Debug output
+    println!("Bitcoind response: {response:?}"); // Debug output
 
     response
         .as_str()

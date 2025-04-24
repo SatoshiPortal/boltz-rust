@@ -94,12 +94,12 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
 
     log::info!("Got Swap Response from Boltz server");
 
-    log::debug!("Swap Response: {:?}", create_swap_response);
+    log::debug!("Swap Response: {create_swap_response:?}");
 
     let swap_script =
         BtcSwapScript::submarine_from_swap_resp(&create_swap_response, refund_public_key).unwrap();
     let swap_id = create_swap_response.id.clone();
-    log::debug!("Created Swap Script. : {:?}", swap_script);
+    log::debug!("Created Swap Script. : {swap_script:#?}");
 
     let mut rx = ws_api.updates();
     ws_api.subscribe(&swap_id).await.unwrap();
@@ -143,7 +143,7 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
                     .await
                     .unwrap();
 
-                log::debug!("Received claim tx details : {:?}", claim_tx_response);
+                log::debug!("Received claim tx details : {claim_tx_response:#?}");
 
                 // Check that boltz have the correct preimage.
                 // At this stage the client should verify that LN invoice has been paid.
@@ -203,7 +203,7 @@ async fn bitcoin_v2_submarine<BC: BitcoinClient>(bitcoin_client: &BC, underpay: 
                     .unwrap();
 
                 let txid = swap_tx.broadcast(&tx, bitcoin_client).await.unwrap();
-                log::info!("Cooperative Refund Successfully broadcasted: {}", txid);
+                log::info!("Cooperative Refund Successfully broadcasted: {txid}");
 
                 // Non cooperative refund requires expired swap
                 /*log::info!("Cooperative refund failed. {:?}", e);
@@ -287,7 +287,7 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
         .unwrap()
         .unwrap();
 
-    log::debug!("Got Reverse swap response: {:?}", reverse_resp);
+    log::debug!("Got Reverse swap response: {reverse_resp:#?}");
 
     let swap_script =
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
@@ -342,7 +342,7 @@ async fn bitcoin_v2_reverse<BC: BitcoinClient>(bitcoin_client: BC) {
                 claim_tx.broadcast(&tx, &bitcoin_client).await.unwrap();
 
                 log::info!("Successfully broadcasted claim tx!");
-                log::debug!("Claim Tx {:?}", tx);
+                log::debug!("Claim Tx {tx:?}");
             }
 
             "invoice.settled" => {
@@ -416,7 +416,7 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
         .unwrap()
         .unwrap();
 
-    log::debug!("Got Reverse swap response: {:?}", reverse_resp);
+    log::debug!("Got Reverse swap response: {reverse_resp:#?}");
 
     let swap_script =
         BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
@@ -459,7 +459,7 @@ async fn bitcoin_v2_reverse_script_path<BC: BitcoinClient>(bitcoin_client: BC) {
                 claim_tx.broadcast(&tx, &bitcoin_client).await.unwrap();
 
                 log::info!("Successfully broadcasted claim tx!");
-                log::debug!("Claim Tx {:?}", tx);
+                log::debug!("Claim Tx {tx:?}");
             }
 
             "invoice.settled" => {

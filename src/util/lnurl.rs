@@ -94,7 +94,7 @@ mod tests {
                     invoice.starts_with("lnbc"),
                     "Invoice should start with 'lnbc'"
                 );
-                println!("Successfully fetched invoice, format : {}", format)
+                println!("Successfully fetched invoice, format : {format}")
             }
             Err(e) => {
                 println!("Error occured with {} format: {}", format, e.message());
@@ -125,7 +125,7 @@ mod tests {
         let withdraw_response = match create_withdraw_response(voucher).await {
             Ok(response) => response,
             Err(e) => {
-                println!("Failed to create withdraw response: {:?}", e);
+                println!("Failed to create withdraw response: {e:?}");
                 return;
             }
         };
@@ -133,7 +133,7 @@ mod tests {
         let invoice_amount = match Bolt11Invoice::from_str(invoice) {
             Ok(invoice) => invoice.amount_milli_satoshis(),
             Err(e) => {
-                println!("Failed to parse invoice: {:?}", e);
+                println!("Failed to parse invoice: {e:?}");
                 return;
             }
         };
@@ -145,10 +145,7 @@ mod tests {
             invoice_amount,
             withdraw_response.max_withdrawable
         );
-        println!(
-            "Successfully created withdraw response{:?}",
-            withdraw_response
-        );
+        println!("Successfully created withdraw response{withdraw_response:?}");
         let result = process_withdrawal(&withdraw_response, invoice).await;
 
         assert!(result.is_ok(), "Withdrawal failed: {:?}", result.err());

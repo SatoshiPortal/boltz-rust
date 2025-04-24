@@ -60,11 +60,11 @@ fn prepare_btc_claim() -> (
         .to_address(BitcoinChain::BitcoinRegtest)
         .unwrap();
     let spk = swap_addrs.script_pubkey();
-    println!("spk: {}", spk);
+    println!("spk: {spk}");
     test_framework.send_coins(&swap_addrs, Amount::from_sat(FUNDING_AMOUNT));
     test_framework.generate_blocks(1);
 
-    let scan_request = ScanTxOutRequest::Single(format!("addr({})", swap_addrs));
+    let scan_request = ScanTxOutRequest::Single(format!("addr({swap_addrs})"));
 
     let scan_result = test_framework
         .as_ref()
@@ -239,7 +239,7 @@ fn prepare_btc_refund() -> (
     test_framework.send_coins(&swap_addrs, Amount::from_sat(10000));
     test_framework.generate_blocks(1);
 
-    let scan_request = ScanTxOutRequest::Single(format!("addr({})", swap_addrs));
+    let scan_request = ScanTxOutRequest::Single(format!("addr({swap_addrs})"));
 
     let scan_result = test_framework
         .as_ref()

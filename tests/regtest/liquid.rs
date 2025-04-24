@@ -96,7 +96,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
         .unwrap();
     log::info!("VALIDATED RESPONSE!");
 
-    log::debug!("Swap Response: {:?}", create_swap_response);
+    log::debug!("Swap Response: {create_swap_response:#?}");
 
     let swap_id = create_swap_response.id.clone();
 
@@ -104,7 +104,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
         LBtcSwapScript::submarine_from_swap_resp(&create_swap_response, refund_public_key).unwrap();
     swap_script.to_address(chain).unwrap();
 
-    log::debug!("Created Swap Script. : {:?}", swap_script);
+    log::debug!("Created Swap Script. : {swap_script:#?}");
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     utils::start_ws(ws_api.clone());
@@ -151,7 +151,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
                     .await
                     .unwrap();
 
-                log::debug!("Received claim tx details : {:?}", claim_tx_response);
+                log::debug!("Received claim tx details : {claim_tx_response:#?}");
 
                 // Check that boltz have the correct preimage.
                 // At this stage the client should verify that LN invoice has been paid.
@@ -210,7 +210,7 @@ async fn liquid_v2_submarine<LC: LiquidClient>(liquid_client: &LC, underpay: boo
                     .unwrap();
 
                 let txid = swap_tx.broadcast(&tx, liquid_client, None).await.unwrap();
-                log::info!("Cooperative Refund Successfully broadcasted: {}", txid);
+                log::info!("Cooperative Refund Successfully broadcasted: {txid}");
                 break;
             }
 
@@ -293,7 +293,7 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
         .unwrap()
         .unwrap();
 
-    log::debug!("Got Reverse swap response: {:?}", reverse_resp);
+    log::debug!("Got Reverse swap response: {reverse_resp:#?}");
 
     let swap_script =
         LBtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
@@ -361,7 +361,7 @@ async fn liquid_v2_reverse<LC: LiquidClient>(liquid_client: &LC, lowball: bool) 
                         log::info!("Successfully broadcasted claim tx!");
                     }
                 }
-                log::debug!("Claim Tx {:?}", tx);
+                log::debug!("Claim Tx {tx:#?}");
             }
 
             "invoice.settled" => {
@@ -443,7 +443,7 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
         .unwrap()
         .unwrap();
 
-    log::debug!("Got Reverse swap response: {:?}", reverse_resp);
+    log::debug!("Got Reverse swap response: {reverse_resp:#?}");
 
     let swap_script =
         LBtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
@@ -499,7 +499,7 @@ async fn liquid_v2_reverse_script_path<LC: LiquidClient>(liquid_client: &LC, low
                         log::info!("Successfully broadcasted claim tx!");
                     }
                 }
-                log::debug!("Claim Tx {:?}", tx);
+                log::debug!("Claim Tx {tx:#?}");
             }
 
             "invoice.settled" => {

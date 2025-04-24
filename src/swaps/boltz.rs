@@ -52,14 +52,12 @@ pub struct HeightResponse {
 fn check_limits_within(maximal: u64, minimal: u64, output_amount: u64) -> Result<(), Error> {
     if output_amount < minimal {
         return Err(Error::Protocol(format!(
-            "Output amount is below minimum {}",
-            minimal
+            "Output amount is below minimum {minimal}"
         )));
     }
     if output_amount > maximal {
         return Err(Error::Protocol(format!(
-            "Output amount is above maximum {}",
-            maximal
+            "Output amount is above maximum {maximal}"
         )));
     }
     Ok(())
@@ -375,7 +373,7 @@ impl BoltzApiClientV2 {
         match req_builder.send().await {
             Ok(r) => {
                 if r.status().is_success() {
-                    log::debug!("POST response: {:#?}", r);
+                    log::debug!("POST response: {r:#?}");
                     Ok(r.text().await?)
                 } else {
                     log::error!("POST error: HTTP {}", r.status());
@@ -386,7 +384,7 @@ impl BoltzApiClientV2 {
                 }
             }
             Err(e) => {
-                log::error!("POST error: {:#?}", e);
+                log::error!("POST error: {e:#?}");
                 Err(e.into())
             }
         }
@@ -450,7 +448,7 @@ impl BoltzApiClientV2 {
         &self,
         id: &String,
     ) -> Result<SubmarineClaimTxResponse, Error> {
-        let endpoint = format!("swap/submarine/{}/claim", id);
+        let endpoint = format!("swap/submarine/{id}/claim");
         Ok(serde_json::from_str(&self.get(&endpoint).await?)?)
     }
 
@@ -458,7 +456,7 @@ impl BoltzApiClientV2 {
         &self,
         id: &String,
     ) -> Result<ChainClaimTxResponse, Error> {
-        let endpoint = format!("swap/chain/{}/claim", id);
+        let endpoint = format!("swap/chain/{id}/claim");
         Ok(serde_json::from_str(&self.get(&endpoint).await?)?)
     }
 
@@ -474,7 +472,7 @@ impl BoltzApiClientV2 {
                 "partialSignature": partial_sig.serialize().to_lower_hex_string()
             }
         );
-        let endpoint = format!("swap/submarine/{}/claim", id);
+        let endpoint = format!("swap/submarine/{id}/claim");
         Ok(serde_json::from_str(&self.post(&endpoint, data).await?)?)
     }
 
@@ -496,22 +494,20 @@ impl BoltzApiClientV2 {
                 "toSign": to_sign,
             }
         );
-        let endpoint = format!("swap/chain/{}/claim", id);
+        let endpoint = format!("swap/chain/{id}/claim");
         Ok(serde_json::from_str(&self.post(&endpoint, data).await?)?)
     }
 
     pub async fn get_reverse_tx(&self, id: &str) -> Result<ReverseSwapTxResp, Error> {
         Ok(serde_json::from_str(
-            &self
-                .get(&format!("swap/reverse/{}/transaction", id))
-                .await?,
+            &self.get(&format!("swap/reverse/{id}/transaction")).await?,
         )?)
     }
 
     pub async fn get_submarine_tx(&self, id: &str) -> Result<SubmarineSwapTxResp, Error> {
         Ok(serde_json::from_str(
             &self
-                .get(&format!("swap/submarine/{}/transaction", id))
+                .get(&format!("swap/submarine/{id}/transaction"))
                 .await?,
         )?)
     }
@@ -521,13 +517,13 @@ impl BoltzApiClientV2 {
         id: &str,
     ) -> Result<SubmarineSwapPreimageResp, Error> {
         Ok(serde_json::from_str(
-            &self.get(&format!("swap/submarine/{}/preimage", id)).await?,
+            &self.get(&format!("swap/submarine/{id}/preimage")).await?,
         )?)
     }
 
     pub async fn get_chain_txs(&self, id: &str) -> Result<ChainSwapTxResp, Error> {
         Ok(serde_json::from_str(
-            &self.get(&format!("swap/chain/{}/transactions", id)).await?,
+            &self.get(&format!("swap/chain/{id}/transactions")).await?,
         )?)
     }
 
@@ -547,7 +543,7 @@ impl BoltzApiClientV2 {
             }
         );
 
-        let endpoint = format!("swap/reverse/{}/claim", id);
+        let endpoint = format!("swap/reverse/{id}/claim");
         Ok(serde_json::from_str(&self.post(&endpoint, data).await?)?)
     }
 
@@ -566,7 +562,7 @@ impl BoltzApiClientV2 {
             }
         );
 
-        let endpoint = format!("swap/submarine/{}/refund", id);
+        let endpoint = format!("swap/submarine/{id}/refund");
         Ok(serde_json::from_str(&self.post(&endpoint, data).await?)?)
     }
 
@@ -585,12 +581,12 @@ impl BoltzApiClientV2 {
             }
         );
 
-        let endpoint = format!("swap/chain/{}/refund", id);
+        let endpoint = format!("swap/chain/{id}/refund");
         Ok(serde_json::from_str(&self.post(&endpoint, data).await?)?)
     }
 
     pub async fn get_mrh_bip21(&self, invoice: &str) -> Result<MrhResponse, Error> {
-        let request = format!("swap/reverse/{}/bip21", invoice);
+        let request = format!("swap/reverse/{invoice}/bip21");
         Ok(serde_json::from_str(&self.get(&request).await?)?)
     }
 
@@ -606,7 +602,7 @@ impl BoltzApiClientV2 {
             Chain::Liquid(_) => "L-BTC",
         };
 
-        let end_point = format!("chain/{}/transaction", chain);
+        let end_point = format!("chain/{chain}/transaction");
         Ok(serde_json::from_str(&self.post(&end_point, data).await?)?)
     }
 
@@ -1211,7 +1207,7 @@ impl Display for SubSwapStates {
             SubSwapStates::TransactionLockupFailed => "transaction.lockupFailed".to_string(),
             SubSwapStates::SwapExpired => "swap.expired".to_string(),
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
 
@@ -1296,7 +1292,7 @@ impl Display for RevSwapStates {
             RevSwapStates::TransactionFailed => "transaction.failed".to_string(),
             RevSwapStates::TransactionRefunded => "transaction.refunded".to_string(),
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
 
@@ -1380,7 +1376,7 @@ impl Display for ChainSwapStates {
             ChainSwapStates::TransactionFailed => "transaction.failed".to_string(),
             ChainSwapStates::TransactionRefunded => "transaction.refunded".to_string(),
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
 

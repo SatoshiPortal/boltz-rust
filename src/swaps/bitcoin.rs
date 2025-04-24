@@ -345,8 +345,7 @@ impl BtcSwapScript {
 
             if lockup_xonly_pubkey != claim_key.to_inner() {
                 return Err(Error::Protocol(format!(
-                    "Taproot construction Failed. Lockup Pubkey: {}, Claim Pubkey {}",
-                    lockup_xonly_pubkey, claim_key
+                    "Taproot construction Failed. Lockup Pubkey: {lockup_xonly_pubkey}, Claim Pubkey {claim_key}"
                 )));
             }
 

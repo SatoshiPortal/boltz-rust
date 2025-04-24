@@ -58,7 +58,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
     let network = BITCOIN_CHAIN;
     let secp = Secp256k1::new();
     let preimage = Preimage::new();
-    log::info!("{:#?}", preimage);
+    log::info!("{preimage:#?}");
     let our_claim_keys = Keypair::new(&secp, &mut thread_rng());
     let claim_public_key = PublicKey {
         compressed: true,
@@ -98,7 +98,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
         refund_public_key,
     )
     .unwrap();
-    log::debug!("Lockup Script: {:#?}", lockup_script);
+    log::debug!("Lockup Script: {lockup_script:#?}");
     log::debug!(
         "Lockup Sender Pubkey: {:#?}",
         lockup_script.sender_pubkey.to_string()
@@ -123,11 +123,11 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
 
     let claim_address = utils::generate_address_elementsd().await.unwrap();
     let lq_address = EAddress::from_str(&claim_address).unwrap();
-    log::debug!("{:#?}", lq_address);
+    log::debug!("{lq_address:#?}");
     // let claim_address = claim_script.to_address(network).unwrap();
     // assert_eq!(claim_address.to_string(), claim_details.claim_address.unwrap());
     let liquid_genesis_hash = liquid_client.get_genesis_hash().await.unwrap();
-    log::debug!("{:#?}", liquid_genesis_hash);
+    log::debug!("{liquid_genesis_hash:#?}");
 
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     utils::start_ws(ws_api.clone());
@@ -144,7 +144,7 @@ async fn bitcoin_liquid_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
                 };
                 let address = create_chain_response.lockup_details.clone().lockup_address;
 
-                log::info!("Sending {} sats to BTC address {}", amount, address);
+                log::info!("Sending {amount} sats to BTC address {address}");
 
                 utils::send_to_address_bitcoind(&address, amount)
                     .await
@@ -284,7 +284,7 @@ async fn refund_bitcoin_liquid_v2_chain<BC: BitcoinClient>(
     refund_tx.broadcast(&tx, bitcoin_client).await.unwrap();
 
     log::info!("Successfully broadcasted refund tx!");
-    log::debug!("Refund Tx {:?}", tx);
+    log::debug!("Refund Tx {tx:#?}");
 }
 
 #[macros::async_test]
@@ -317,7 +317,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
     let network = LIQUID_CHAIN;
     let secp = Secp256k1::new();
     let preimage = Preimage::new();
-    log::info!("{:#?}", preimage);
+    log::info!("{preimage:#?}");
     let our_claim_keys = Keypair::new(&secp, &mut thread_rng());
     let claim_public_key = PublicKey {
         compressed: true,
@@ -357,7 +357,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
         refund_public_key,
     )
     .unwrap();
-    log::debug!("Lockup Script: {:#?}", lockup_script);
+    log::debug!("Lockup Script: {lockup_script:#?}");
     log::debug!(
         "Lockup Sender Pubkey: {:#?}",
         lockup_script.sender_pubkey.to_string()
@@ -401,7 +401,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
                 };
                 let address = create_chain_response.lockup_details.clone().lockup_address;
 
-                log::info!("Sending {} sats to L-BTC address {}", amount, address);
+                log::info!("Sending {amount} sats to L-BTC address {address}");
 
                 utils::send_to_address_elementsd(&address, amount)
                     .await
@@ -502,7 +502,7 @@ async fn liquid_bitcoin_v2_chain<BC: BitcoinClient, LC: LiquidClient>(
                 refund_tx.broadcast(&tx, liquid_client, None).await.unwrap();
 
                 log::info!("Successfully broadcasted claim tx!");
-                log::debug!("Claim Tx {:?}", tx);
+                log::debug!("Claim Tx {tx:#?}");
                 break;
             }
             _ => {

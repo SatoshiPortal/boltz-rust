@@ -180,7 +180,7 @@ impl LbtcTestFramework {
     }
 
     pub fn fetch_utxo(&self, addrs: &EAddress) -> Option<(elements::OutPoint, elements::TxOut)> {
-        let scan_request = ScanTxOutRequest::Single(format!("addr({})", addrs));
+        let scan_request = ScanTxOutRequest::Single(format!("addr({addrs})"));
 
         let scan_reqs = [scan_request];
 
