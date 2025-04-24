@@ -1055,7 +1055,7 @@ impl CreateReverseResponse {
             let invoice = Bolt11Invoice::from_str(invoice)?;
             if invoice.payment_hash().to_string() != preimage.sha256.to_string() {
                 return Err(Error::Protocol(format!(
-                    "Preimage missmatch : {},{}",
+                    "Preimage hash mismatch : {},{}",
                     &invoice.payment_hash().to_string(),
                     preimage.sha256
                 )));
