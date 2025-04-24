@@ -7,7 +7,7 @@ use boltz_client::{
     network::Chain,
     swaps::{
         boltz::{BoltzApiClientV2, Cooperative, CreateSubmarineRequest},
-        wrappers::{SwapScript, SwapTx},
+        {Client, SwapScript, SwapTx},
     },
     util::{setup_logger, sleep},
 };
@@ -19,7 +19,6 @@ use bitcoin::{key::rand::thread_rng, secp256k1::Keypair, PublicKey};
 use boltz_client::boltz::{BoltzWsConfig, BOLTZ_REGTEST};
 use boltz_client::fees::Fee;
 use boltz_client::network::{BitcoinChain, LiquidChain};
-use boltz_client::swaps::wrappers::Client;
 use serial_test::serial;
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]

@@ -12,7 +12,7 @@ use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClien
 #[cfg(feature = "esplora")]
 use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
 use boltz_client::network::{BitcoinChain, Chain, LiquidChain};
-use boltz_client::swaps::wrappers::{Client, SwapScript, SwapTx};
+use boltz_client::swaps::{Client, SwapScript, SwapTx};
 use boltz_client::util::sleep;
 use boltz_client::{
     util::{secrets::Preimage, setup_logger},

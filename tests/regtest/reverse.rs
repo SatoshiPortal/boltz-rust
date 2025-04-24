@@ -3,14 +3,13 @@
 use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClient};
 #[cfg(feature = "esplora")]
 use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
-use boltz_client::swaps::wrappers::Client;
 use boltz_client::util::sleep;
 use boltz_client::{
     network::Chain,
     swaps::{
         boltz::{BoltzApiClientV2, Cooperative, CreateReverseRequest},
         magic_routing::{check_for_mrh, sign_address},
-        wrappers::{SwapScript, SwapTx},
+        {Client, SwapScript, SwapTx},
     },
     util::{secrets::Preimage, setup_logger},
     Secp256k1,
