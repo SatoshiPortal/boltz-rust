@@ -239,7 +239,6 @@ impl BoltzWsApi {
                                 Some(msg) => match msg {
                                     Ok(Message::Close(_)) => {
                                         warn!("Received close msg, exiting socket loop");
-                                        sleep(self.config.reconnect_delay).await;
                                         break;
                                     },
                                     Ok(Message::Text(payload)) => {
