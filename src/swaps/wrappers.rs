@@ -23,12 +23,12 @@ use crate::util::secrets::Preimage;
 
 /// Options for signing swap transactions
 #[derive(Clone, Debug, Default)]
-pub struct SigningOptions {
+pub struct TransactionOptions {
     /// Whether to use discount confidential transactions for Liquid swaps
     pub is_discount_ct: bool,
 }
 
-impl SigningOptions {
+impl TransactionOptions {
     pub fn with_discount_ct(mut self) -> Self {
         self.is_discount_ct = true;
         self
@@ -316,7 +316,7 @@ impl SwapTx {
         keys: &Keypair,
         fee: Fee,
         is_cooperative: Option<Cooperative<'_>>,
-        options: Option<SigningOptions>,
+        options: Option<TransactionOptions>,
     ) -> Result<BtcLikeTransaction, Error> {
         match self {
             Self::Bitcoin(tx) => {
@@ -339,7 +339,7 @@ impl SwapTx {
         preimage: &Preimage,
         fee: Fee,
         is_cooperative: Option<Cooperative<'_>>,
-        options: Option<SigningOptions>,
+        options: Option<TransactionOptions>,
     ) -> Result<BtcLikeTransaction, Error> {
         match self {
             Self::Bitcoin(tx) => {
