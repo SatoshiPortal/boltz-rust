@@ -46,10 +46,11 @@ async fn v2_reverse(chain_client: &ChainClient, chain: Chain, cooperative: bool)
 
     let addrs_sig = sign_address(&claim_address, &our_keys).unwrap();
     let create_reverse_req = CreateReverseRequest {
-        invoice_amount,
         from: "BTC".to_string(),
         to: chain.to_string(),
-        preimage_hash: preimage.sha256,
+        invoice: None,
+        invoice_amount: Some(invoice_amount),
+        preimage_hash: Some(preimage.sha256),
         description: None,
         description_hash: None,
         address_signature: Some(addrs_sig.to_string()),
@@ -67,8 +68,9 @@ async fn v2_reverse(chain_client: &ChainClient, chain: Chain, cooperative: bool)
         .post_reverse_req(create_reverse_req)
         .await
         .unwrap();
+    let invoice = reverse_resp.invoice.clone().unwrap();
 
-    let _ = check_for_mrh(&boltz_api_v2, &reverse_resp.invoice, chain)
+    let _ = check_for_mrh(&boltz_api_v2, &invoice, chain)
         .await
         .unwrap()
         .unwrap();
@@ -79,17 +81,16 @@ async fn v2_reverse(chain_client: &ChainClient, chain: Chain, cooperative: bool)
         SwapScript::reverse_from_swap_resp(chain, &reverse_resp, claim_public_key).unwrap();
     let swap_id = reverse_resp.id.clone();
 
-    ws_api.subscribe(&swap_id).await.unwrap();
+    ws_api.subscribe_swap(&swap_id).await.unwrap();
     let mut rx = ws_api.updates();
 
     loop {
         let update = rx.recv().await.unwrap();
         match update.status.as_str() {
             "swap.created" => {
-                log::info!("Waiting for Invoice to be paid: {}", &reverse_resp.invoice);
+                log::info!("Waiting for Invoice to be paid: {}", &invoice);
 
-                let invoice = reverse_resp.invoice.clone();
-                utils::start_pay_invoice_lnd(invoice);
+                utils::start_pay_invoice_lnd(invoice.clone());
 
                 continue;
             }

@@ -80,7 +80,7 @@ async fn v2_submarine(chain_client: &ChainClient, underpay: bool, chain: Chain) 
     log::debug!("Created Swap Script. : {swap_script:?}");
 
     let mut rx = ws_api.updates();
-    ws_api.subscribe(&swap_id).await.unwrap();
+    ws_api.subscribe_swap(&swap_id).await.unwrap();
     // Event handlers for various swap status.
     loop {
         let update = rx.recv().await.unwrap();

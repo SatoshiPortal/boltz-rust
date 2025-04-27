@@ -392,7 +392,7 @@ impl BoltzApiClientV2 {
         match req_builder.send().await {
             Ok(r) => {
                 if r.status().is_success() {
-                    log::debug!("{} response: {:#?}", method_str, r);
+                    log::debug!("{method_str} response: {r:#?}");
                     Ok(r.text().await?)
                 } else {
                     log::error!("{} error: HTTP {}", method_str, r.status());
@@ -403,7 +403,7 @@ impl BoltzApiClientV2 {
                 }
             }
             Err(e) => {
-                log::error!("{} error: {:#?}", method_str, e);
+                log::error!("{method_str} error: {e:#?}");
                 Err(e.into())
             }
         }
@@ -885,9 +885,7 @@ impl WsRequest {
     }
 
     pub fn subscribe_swaps_request(swap_ids: Vec<String>) -> Self {
-        Self::Subscribe(SubscribeRequest::SwapUpdate {
-            args: swap_ids,
-        })
+        Self::Subscribe(SubscribeRequest::SwapUpdate { args: swap_ids })
     }
 
     pub fn subscribe_invoice_request(params: InvoiceRequestParams) -> Self {
@@ -895,9 +893,7 @@ impl WsRequest {
     }
 
     pub fn subscribe_invoice_requests(params: Vec<InvoiceRequestParams>) -> Self {
-        Self::Subscribe(SubscribeRequest::InvoiceRequest {
-            args: params,
-        })
+        Self::Subscribe(SubscribeRequest::InvoiceRequest { args: params })
     }
 }
 
@@ -968,7 +964,7 @@ pub struct InvoiceRequest {
     pub invoice_request: String,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct ErrorResponse {
     pub error: String,
 }

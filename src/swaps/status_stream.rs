@@ -1,20 +1,22 @@
-use crate::boltz::{SwapStatus, WsRequest, WsResponse};
+use crate::boltz::{InvoiceCreated, SwapStatus, WsRequest, WsResponse};
 use crate::error::Error;
 use crate::util::sleep;
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, trace, warn};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 use tokio_tungstenite_wasm::{connect, Message, WebSocketStream};
 
+use super::boltz::{ErrorResponse, InvoiceRequest, InvoiceRequestParams, SubscribeRequest};
+
 struct BoltzWsConnection {
     ws: WebSocketStream,
 }
 
-struct SubscriptionRequest {
-    swap_id: String,
+struct RequestPacket {
+    ws_request: WsRequest,
     response_sender: oneshot::Sender<Result<(), Error>>,
 }
 
@@ -24,16 +26,8 @@ impl BoltzWsConnection {
         Ok(Self { ws })
     }
 
-    async fn subscribe(&mut self, ids: Vec<String>) -> Result<(), Error> {
-        if ids.is_empty() {
-            return Ok(());
-        }
-        self.send_json(&WsRequest::subscribe_swaps_request(ids))
-            .await
-    }
-
-    async fn send_json(&mut self, data: &WsRequest) -> Result<(), Error> {
-        let t = serde_json::to_string(data)?;
+    async fn send_request(&mut self, ws_request: &WsRequest) -> Result<(), Error> {
+        let t = serde_json::to_string(ws_request)?;
         self.ws.send(Message::text(t)).await?;
         Ok(())
     }
@@ -60,31 +54,40 @@ pub struct BoltzWsApi {
     pub ws_url: String,
     pub config: BoltzWsConfig,
 
-    // broadcasts the swap ids after we got a successful subscription response from boltz
+    // broadcasts the ids after we got a successful subscription response from boltz
     subscription_notifier: broadcast::Sender<String>,
-    subscribed_swaps: Mutex<HashSet<String>>,
+    pending_subscriptions: Mutex<HashMap<String, SubscribeRequest>>,
+    subscriptions: Mutex<HashMap<String, SubscribeRequest>>,
 
-    // communication channel for the subscription requests to the websocket task.
-    subscription_sender: mpsc::Sender<SubscriptionRequest>,
-    subscription_receiver: Mutex<mpsc::Receiver<SubscriptionRequest>>,
+    // communication channel for the requests to the websocket task.
+    request_sender: mpsc::Sender<RequestPacket>,
+    request_receiver: Mutex<mpsc::Receiver<RequestPacket>>,
 
+    error_notifier: broadcast::Sender<ErrorResponse>,
+    invoice_request_notifier: broadcast::Sender<InvoiceRequest>,
     update_notifier: broadcast::Sender<SwapStatus>,
+
     shutdown_sender: Mutex<Option<oneshot::Sender<()>>>,
     restart_sender: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl BoltzWsApi {
     pub fn new(ws_url: String, config: BoltzWsConfig) -> Self {
-        let (subscription_sender, subscription_receiver) = mpsc::channel(16);
+        let (request_sender, request_receiver) = mpsc::channel(16);
+        let (error_notifier, _) = broadcast::channel(16);
+        let (invoice_request_notifier, _) = broadcast::channel(16);
         let (update_notifier, _) = broadcast::channel(16);
         let (subscription_notifier, _) = broadcast::channel(16);
         Self {
             ws_url,
             config,
-            subscribed_swaps: Mutex::new(HashSet::new()),
-            subscription_sender,
-            subscription_receiver: Mutex::new(subscription_receiver),
+            pending_subscriptions: Mutex::new(HashMap::new()),
+            subscriptions: Mutex::new(HashMap::new()),
+            request_sender,
+            request_receiver: Mutex::new(request_receiver),
             subscription_notifier,
+            error_notifier,
+            invoice_request_notifier,
             update_notifier,
             shutdown_sender: Mutex::new(None),
             restart_sender: Mutex::new(None),
@@ -95,8 +98,8 @@ impl BoltzWsApi {
         self.restart_sender.lock().await.is_some()
     }
 
-    pub async fn is_tracking(&self, swap_id: &str) -> bool {
-        self.subscribed_swaps.lock().await.contains(swap_id)
+    pub async fn is_tracking(&self, id: &str) -> bool {
+        self.subscriptions.lock().await.contains_key(id)
     }
 
     pub async fn reconnect(&self) -> Result<(), Error> {
@@ -109,12 +112,28 @@ impl BoltzWsApi {
         }
     }
 
+    pub fn errors(&self) -> broadcast::Receiver<ErrorResponse> {
+        self.error_notifier.subscribe()
+    }
+
     pub fn updates(&self) -> broadcast::Receiver<SwapStatus> {
         self.update_notifier.subscribe()
     }
 
+    pub fn invoice_requests(&self) -> broadcast::Receiver<InvoiceRequest> {
+        self.invoice_request_notifier.subscribe()
+    }
+
     pub async fn swap_ids(&self) -> HashSet<String> {
-        self.subscribed_swaps.lock().await.clone()
+        self.subscriptions
+            .lock()
+            .await
+            .iter()
+            .filter_map(|(id, s)| match s {
+                SubscribeRequest::SwapUpdate { .. } => Some(id.clone()),
+                _ => None,
+            })
+            .collect()
     }
 
     async fn wait_for_subscription(
@@ -138,37 +157,76 @@ impl BoltzWsApi {
         }
     }
 
-    pub async fn subscribe(&self, swap_id: &str) -> Result<(), Error> {
-        match self.try_subscribe(swap_id).await {
+    pub async fn send_invoice_created(&self, id: &str, invoice: &str) -> Result<(), Error> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        self.request_sender
+            .send(RequestPacket {
+                ws_request: WsRequest::Invoice(InvoiceCreated {
+                    id: id.to_string(),
+                    invoice: invoice.to_string(),
+                }),
+                response_sender,
+            })
+            .await
+            .map_err(|e| Error::Generic(format!("Failed to send request to channel: {e:?}")))?;
+
+        tokio::select! {
+            _ = response_receiver => Ok(()),
+            _ = sleep(self.config.subscription_timeout) => Err(Error::Generic("Send invoice created timeout".to_string())),
+        }
+    }
+
+    pub async fn subscribe_offer(&self, offer: &str, signature: &str) -> Result<(), Error> {
+        let ws_request = WsRequest::subscribe_invoice_request(InvoiceRequestParams {
+            offer: offer.to_string(),
+            signature: signature.to_string(),
+        });
+        match self.try_subscribe(ws_request.clone(), offer).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                info!(
+                    "Failed to subscribe to offer {offer}, forcing reconnect and trying again: {e:?}"
+                );
+                self.reconnect().await?;
+                self.try_subscribe(ws_request, offer).await
+            }
+        }
+    }
+
+    pub async fn subscribe_swap(&self, swap_id: &str) -> Result<(), Error> {
+        let ws_request = WsRequest::subscribe_swap_request(swap_id);
+        match self.try_subscribe(ws_request.clone(), swap_id).await {
             Ok(_) => Ok(()),
             Err(e) => {
                 info!(
                     "Failed to subscribe to swap {swap_id}, forcing reconnect and trying again: {e:?}"
                 );
                 self.reconnect().await?;
-                self.try_subscribe(swap_id).await
+                self.try_subscribe(ws_request, swap_id).await
             }
         }
     }
 
-    async fn try_subscribe(&self, swap_id: &str) -> Result<(), Error> {
+    async fn try_subscribe(&self, ws_request: WsRequest, id: &str) -> Result<(), Error> {
         let (response_sender, response_receiver) = oneshot::channel();
         let subscriptions = self.subscription_notifier.subscribe();
 
-        self.subscription_sender
-            .send(SubscriptionRequest {
-                swap_id: swap_id.to_string(),
+        if let WsRequest::Subscribe(subscribe_request) = &ws_request {
+            let mut pending_subscriptions = self.pending_subscriptions.lock().await;
+            pending_subscriptions.insert(id.to_string(), subscribe_request.clone());
+        }
+
+        self.request_sender
+            .send(RequestPacket {
+                ws_request,
                 response_sender,
             })
             .await
-            .map_err(|e| {
-                Error::Generic(format!(
-                    "Failed to send subscription request to channel: {e:?}"
-                ))
-            })?;
+            .map_err(|e| Error::Generic(format!("Failed to send request to channel: {e:?}")))?;
 
         tokio::select! {
-            _ = BoltzWsApi::wait_for_subscription(response_receiver, subscriptions, swap_id) => Ok(()),
+            _ = BoltzWsApi::wait_for_subscription(response_receiver, subscriptions, id) => Ok(()),
             _ = sleep(self.config.subscription_timeout) => Err(Error::Generic("Subscription timeout".to_string())),
         }
     }
@@ -190,19 +248,24 @@ impl BoltzWsApi {
             match BoltzWsConnection::new(self.ws_url.as_str()).await {
                 Ok(mut connection) => {
                     {
-                        let ids = self.subscribed_swaps.lock().await;
-                        match connection.subscribe(ids.iter().cloned().collect()).await {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!("Error subscribing to swaps: {e:?}");
-                                sleep(self.config.reconnect_delay).await;
-                                continue;
+                        let subscriptions = self.subscriptions.lock().await;
+                        for subscribe_request in subscriptions.values() {
+                            match connection
+                                .send_request(&WsRequest::Subscribe(subscribe_request.clone()))
+                                .await
+                            {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!("Error resubscribing to {subscribe_request:?}: {e:?}");
+                                    let _ = connection.ws.close().await;
+                                    break 'outer;
+                                }
                             }
                         }
                     }
 
                     loop {
-                        let mut sub_receiver = self.subscription_receiver.lock().await;
+                        let mut request_receiver = self.request_receiver.lock().await;
                         tokio::select! {
                             _ = &mut shutdown_receiver => {
                                 info!("Received shutdown signal, exiting socket loop");
@@ -215,20 +278,20 @@ impl BoltzWsApi {
                             },
 
                             _ = interval.next() => {
-                                match connection.send_json(&WsRequest::Ping).await {
+                                match connection.send_request(&WsRequest::Ping).await {
                                     Ok(_) => trace!("Sent keep-alive ping"),
                                     Err(e) => warn!("Failed to send keep-alive ping: {e:?}"),
                                 }
                             },
 
-                            Some(subscription) = sub_receiver.recv() => {
-                                match connection.subscribe(vec![subscription.swap_id.clone()]).await {
+                            Some(request_packet) = request_receiver.recv() => {
+                                match connection.send_request(&request_packet.ws_request).await {
                                     Ok(_) => {
-                                        let _ = subscription.response_sender.send(Ok(()));
+                                        let _ = request_packet.response_sender.send(Ok(()));
                                     }
                                     Err(e) => {
-                                        error!("Failed to subscribe to swap {}: {:?}", subscription.swap_id, e);
-                                        let _ = subscription.response_sender.send(Err(e));
+                                        error!("Failed to send request {:?}: {:?}", request_packet.ws_request, e);
+                                        let _ = request_packet.response_sender.send(Err(e));
                                     }
                                 }
                             },
@@ -243,15 +306,25 @@ impl BoltzWsApi {
                                         let payload = payload.as_str();
                                         debug!("Received text msg: {payload:?}");
                                         match serde_json::from_str::<WsResponse>(payload) {
-                                            // Subscribing/unsubscribing confirmation
+                                            // Subscribing confirmation
                                             Ok(WsResponse::Subscribe(subscribe)) => {
-                                                let mut swap_ids = self.subscribed_swaps.lock().await;
-                                                for swap_id in subscribe.args {
-                                                    self.subscription_notifier.send(swap_id.clone()).unwrap();
-                                                    swap_ids.insert(swap_id);
+                                                let mut pending_subscriptions = self.pending_subscriptions.lock().await;
+                                                let mut subscriptions = self.subscriptions.lock().await;
+                                                for id in subscribe.args {
+                                                    if let Some(subscribe_request) = pending_subscriptions.remove(&id) {
+                                                        subscriptions.insert(id.clone(), subscribe_request);
+                                                    }
+                                                    self.subscription_notifier.send(id.clone()).unwrap();
                                                 }
                                             }
-                                            Ok(WsResponse::Unsubscribe { .. }) => {}
+
+                                            // Usubscribing confirmation
+                                            Ok(WsResponse::Unsubscribe(unsubscribe)) => {
+                                                let mut subscriptions = self.subscriptions.lock().await;
+                                                for id in unsubscribe.args {
+                                                    subscriptions.remove(&id);
+                                                }
+                                            }
 
                                             // Status update(s)
                                             Ok(WsResponse::Update(update)) => {
@@ -259,6 +332,22 @@ impl BoltzWsApi {
                                                     if let Err(e) = self.update_notifier.send(update) {
                                                         warn!("Failed to broadcast update: {e}");
                                                     }
+                                                }
+                                            }
+
+                                            // Invoice request(s)
+                                            Ok(WsResponse::InvoiceRequest(invoice_request)) => {
+                                                for invoice_request in invoice_request.args {
+                                                    if let Err(e) = self.invoice_request_notifier.send(invoice_request) {
+                                                        warn!("Failed to broadcast invoice request: {e}");
+                                                    }
+                                                }
+                                            }
+
+                                            // Error response
+                                            Ok(WsResponse::Error(error)) => {
+                                                if let Err(e) = self.error_notifier.send(error) {
+                                                    warn!("Failed to broadcast error: {e}");
                                                 }
                                             }
 
@@ -325,7 +414,7 @@ mod tests {
         tokio::spawn(ws.clone().run_ws_loop());
 
         let swap_id = "swap_id";
-        ws.subscribe(swap_id).await.unwrap();
+        ws.subscribe_swap(swap_id).await.unwrap();
         assert!(ws.is_connected().await);
         assert!(ws.is_tracking(swap_id).await);
         let swap_ids = ws.swap_ids().await;

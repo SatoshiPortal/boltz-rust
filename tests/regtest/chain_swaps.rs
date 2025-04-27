@@ -137,7 +137,7 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
     let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
     utils::start_ws(ws_api.clone());
     let mut rx = ws_api.updates();
-    ws_api.subscribe(&swap_id).await.unwrap();
+    ws_api.subscribe_swap(&swap_id).await.unwrap();
 
     log::info!("Subscribed to swap {swap_id}");
 
