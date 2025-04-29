@@ -55,7 +55,7 @@ wasm-bindgen-futures = "0.4.50"
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 
 [patch.crates-io]
-secp256k1-zkp = { git = "https://github.com/danielgranhao/rust-secp256k1-zkp.git", rev = "eac2e479255a6e32b5588bc25ee53c642fdd8395" }
+secp256k1-zkp = { git = "https://github.com/breez/rust-secp256k1-zkp.git", rev = "eac2e479255a6e32b5588bc25ee53c642fdd8395" }
 
 [dev-dependencies]
 serial_test = "3.2.0"
