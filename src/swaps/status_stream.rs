@@ -398,13 +398,14 @@ impl Drop for BoltzWsApi {
 mod tests {
     use std::sync::Arc;
 
-    use crate::boltz::{BoltzApiClientV2, BoltzWsConfig, BOLTZ_REGTEST};
+    use crate::boltz::{BoltzApiClientV2, BoltzWsConfig, CreateBolt12OfferRequest, BOLTZ_REGTEST};
     use crate::util::setup_logger;
+    use lightning::offers::invoice_request::InvoiceRequest;
     use serial_test::serial;
 
     #[macros::async_test_all]
     #[serial]
-    async fn test_subscribe() {
+    async fn test_subscribe_swap() {
         setup_logger();
 
         let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), None);
@@ -424,5 +425,74 @@ mod tests {
         // we should resubscribe to the swap internally
         let mut subs = ws.subscription_notifier.subscribe();
         assert_eq!(subs.recv().await.unwrap(), swap_id);
+    }
+
+    #[macros::async_test_all]
+    #[serial]
+    async fn test_subscribe_invoice_request() {
+        setup_logger();
+
+        let offer = "lno1qgsqvgnwgcg35z6ee2h3yczraddm72xrfua9uve2rlrm9deu7xyfzrcsjgpnk92d4djxzuvgt65hwfn94vm2dfxa5c8pc9zyhgqz6rzfzmk40jsrqwkt9ar7t0q285ag5e3ksng3r0dt32gqm5tuwc4m0ks8pfu6q5nszqm2hw2ruqxzq0hp6r9va4weev8qwm3hq4nmahcshkjaqdzezudyq5qzerxh2gwyna5ge6alhucq80ulhpjkh5aeglz37yekzrc5j0gjfru4e7u9aerf8r6sjwknef73vggr5ye6r8mn2a276g9u48ctjy0p8xm2qnyz6ghmdjux27qkh7t7mres";
+        let signature = "0f86a6bc7bc34baeaf6f8a5539af3e20bbd5413e33ee9c214d9cd1821887a810639496bbdbefb2fe7fb1dd094c114ec2d038a9dd925b58683b57b83fa488c2f7";
+
+        let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), None);
+        let ws = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
+
+        assert!(!ws.is_connected().await);
+        tokio::spawn(ws.clone().run_ws_loop());
+
+        ws.subscribe_offer(offer, signature).await.unwrap();
+        assert!(ws.is_connected().await);
+        assert!(ws.is_tracking(offer).await);
+
+        ws.reconnect().await.unwrap();
+        // we should resubscribe to the offer internally
+        let mut subs = ws.subscription_notifier.subscribe();
+        assert_eq!(subs.recv().await.unwrap(), offer);
+    }
+
+    #[macros::async_test_all]
+    #[serial]
+    async fn test_receive_invoice_request() {
+        setup_logger();
+
+        let offer = "lno1qgsqvgnwgcg35z6ee2h3yczraddm72xrfua9uve2rlrm9deu7xyfzrcsjgpnk92d4djxzuvgt65hwfn94vm2dfxa5c8pc9zyhgqz6rzfzmk40jsrqwkt9ar7t0q285ag5e3ksng3r0dt32gqm5tuwc4m0ks8pfu6q5nszqm2hw2ruqxzq0hp6r9va4weev8qwm3hq4nmahcshkjaqdzezudyq5qzerxh2gwyna5ge6alhucq80ulhpjkh5aeglz37yekzrc5j0gjfru4e7u9aerf8r6sjwknef73vggr5ye6r8mn2a276g9u48ctjy0p8xm2qnyz6ghmdjux27qkh7t7mres";
+        let signature = "0f86a6bc7bc34baeaf6f8a5539af3e20bbd5413e33ee9c214d9cd1821887a810639496bbdbefb2fe7fb1dd094c114ec2d038a9dd925b58683b57b83fa488c2f7";
+
+        let boltz_api_v2 = BoltzApiClientV2::new(BOLTZ_REGTEST.to_string(), None);
+        let ws = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
+
+        // Register the offer with the server
+        boltz_api_v2
+            .post_bolt12_offer(CreateBolt12OfferRequest {
+                offer: offer.to_string(),
+                url: None,
+            })
+            .await
+            .unwrap();
+
+        assert!(!ws.is_connected().await);
+        tokio::spawn(ws.clone().run_ws_loop());
+
+        ws.subscribe_offer(offer, signature).await.unwrap();
+        assert!(ws.is_connected().await);
+        assert!(ws.is_tracking(offer).await);
+
+        let mut rx = ws.invoice_requests();
+
+        // Request a BOLT12 invoice in a separate task
+        let boltz_api_v2_clone = boltz_api_v2.clone();
+        tokio::spawn(async move {
+            let _ = boltz_api_v2_clone.get_bolt12_invoice(offer, 1000).await;
+        });
+
+        // Handle the WS message
+        let req = rx.recv().await.unwrap();
+        assert_eq!(req.offer, offer);
+
+        let invoice_request =
+            InvoiceRequest::try_from(hex::decode(req.invoice_request).unwrap()).unwrap();
+        let amount = invoice_request.amount_msats().unwrap() / 1000;
+        assert_eq!(amount, 1000);
     }
 }
