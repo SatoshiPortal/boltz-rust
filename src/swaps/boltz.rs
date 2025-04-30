@@ -638,8 +638,8 @@ impl BoltzApiClientV2 {
     /// # Arguments
     ///   * `req` - The request object containing the offer and the new webhook URL
     ///     * `offer` - The BOLT12 offer
-    ///     * `url` - The updated webhook URL
-    ///     * `signature` - This schnorr signature of the SHA256 hash of the webhook URL or "UPDATE"
+    ///     * `url` - The updated webhook URL. Setting to None will remove the webhook URL from the registered offer
+    ///     * `signature` - The schnorr signature of the SHA256 hash of the webhook URL or "UPDATE" when not set
     pub async fn patch_bolt12_offer(&self, req: UpdateBolt12OfferRequest) -> Result<(), Error> {
         let data = serde_json::to_value(req)?;
         let end_point = "lightning/BTC/bolt12".to_string();
@@ -1581,8 +1581,11 @@ pub struct CreateBolt12OfferRequest {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateBolt12OfferRequest {
     pub offer: String,
+    /// The updated webhook URL.
+    /// Setting to None will remove the webhook URL from the registered Offer.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// The schnorr signature of the SHA256 hash of the webhook URL or "UPDATE" when None
     pub signature: String,
 }
 

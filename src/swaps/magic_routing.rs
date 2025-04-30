@@ -21,16 +21,13 @@ const LBTC_TESTNET_ASSET_HASH: &str =
 const LBTC_MAINNET_ASSET_HASH: &str =
     "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d";
 
+pub type MagicRoutingHint = (
+    /* short_channel_id */ u64,
+    /* public_key */ String,
+);
+
 /// Decodes the provided invoice to find the magic routing hint.
-pub fn find_magic_routing_hint(
-    invoice: &str,
-) -> Result<
-    Option<(
-        /* short_channel_id */ u64,
-        /* public_key */ String,
-    )>,
-    Error,
-> {
+pub fn find_magic_routing_hint(invoice: &str) -> Result<Option<MagicRoutingHint>, Error> {
     match Bolt11Invoice::from_str(invoice) {
         Ok(invoice) => find_bolt11_magic_routing_hint(&invoice),
         Err(_) => match bolt12::decode_invoice(invoice) {
@@ -42,13 +39,7 @@ pub fn find_magic_routing_hint(
 
 pub fn find_bolt11_magic_routing_hint(
     invoice: &Bolt11Invoice,
-) -> Result<
-    Option<(
-        /* short_channel_id */ u64,
-        /* public_key */ String,
-    )>,
-    Error,
-> {
+) -> Result<Option<MagicRoutingHint>, Error> {
     Ok(invoice
         .private_routes()
         .iter()
@@ -60,13 +51,7 @@ pub fn find_bolt11_magic_routing_hint(
 
 pub fn find_bolt12_magic_routing_hint(
     invoice: &Bolt12Invoice,
-) -> Result<
-    Option<(
-        /* short_channel_id */ u64,
-        /* public_key */ String,
-    )>,
-    Error,
-> {
+) -> Result<Option<MagicRoutingHint>, Error> {
     Ok(invoice
         .payment_paths()
         .iter()
