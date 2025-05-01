@@ -1,4 +1,4 @@
-use crate::boltz::{InvoiceCreated, SwapStatus, WsRequest, WsResponse};
+use crate::boltz::{InvoiceCreated, InvoiceError, SwapStatus, WsRequest, WsResponse};
 use crate::error::Error;
 use crate::util::sleep;
 use futures_util::{SinkExt, StreamExt};
@@ -174,6 +174,26 @@ impl BoltzWsApi {
         tokio::select! {
             _ = response_receiver => Ok(()),
             _ = sleep(self.config.subscription_timeout) => Err(Error::Generic("Send invoice created timeout".to_string())),
+        }
+    }
+
+    pub async fn send_invoice_error(&self, id: &str, error: &str) -> Result<(), Error> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        self.request_sender
+            .send(RequestPacket {
+                ws_request: WsRequest::InvoiceError(InvoiceError {
+                    id: id.to_string(),
+                    error: error.to_string(),
+                }),
+                response_sender,
+            })
+            .await
+            .map_err(|e| Error::Generic(format!("Failed to send request to channel: {e:?}")))?;
+
+        tokio::select! {
+            _ = response_receiver => Ok(()),
+            _ = sleep(self.config.subscription_timeout) => Err(Error::Generic("Send invoice error timeout".to_string())),
         }
     }
 
@@ -402,6 +422,7 @@ mod tests {
     use crate::util::setup_logger;
     use lightning::offers::invoice_request::InvoiceRequest;
     use serial_test::serial;
+    use tokio::sync::oneshot;
 
     #[macros::async_test_all]
     #[serial]
@@ -453,7 +474,7 @@ mod tests {
 
     #[macros::async_test_all]
     #[serial]
-    async fn test_receive_invoice_request() {
+    async fn test_receive_invoice_request_error_response() {
         setup_logger();
 
         let offer = "lno1qgsqvgnwgcg35z6ee2h3yczraddm72xrfua9uve2rlrm9deu7xyfzrcsjgpnk92d4djxzuvgt65hwfn94vm2dfxa5c8pc9zyhgqz6rzfzmk40jsrqwkt9ar7t0q285ag5e3ksng3r0dt32gqm5tuwc4m0ks8pfu6q5nszqm2hw2ruqxzq0hp6r9va4weev8qwm3hq4nmahcshkjaqdzezudyq5qzerxh2gwyna5ge6alhucq80ulhpjkh5aeglz37yekzrc5j0gjfru4e7u9aerf8r6sjwknef73vggr5ye6r8mn2a276g9u48ctjy0p8xm2qnyz6ghmdjux27qkh7t7mres";
@@ -482,8 +503,12 @@ mod tests {
 
         // Request a BOLT12 invoice in a separate task
         let boltz_api_v2_clone = boltz_api_v2.clone();
+        let (complete_sender, complete_receiver) = oneshot::channel();
         tokio::spawn(async move {
-            let _ = boltz_api_v2_clone.get_bolt12_invoice(offer, 1000).await;
+            let res = boltz_api_v2_clone.get_bolt12_invoice(offer, 1000).await;
+            assert!(res.is_err());
+
+            complete_sender.send(()).unwrap();
         });
 
         // Handle the WS message
@@ -494,5 +519,10 @@ mod tests {
             InvoiceRequest::try_from(hex::decode(req.invoice_request).unwrap()).unwrap();
         let amount = invoice_request.amount_msats().unwrap() / 1000;
         assert_eq!(amount, 1000);
+
+        let error = "Failed to create invoice";
+        ws.send_invoice_error(&req.id, error).await.unwrap();
+
+        complete_receiver.await.unwrap();
     }
 }

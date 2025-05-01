@@ -866,6 +866,12 @@ pub struct InvoiceCreated {
     pub invoice: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct InvoiceError {
+    pub id: String,
+    pub error: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op")]
 pub enum WsRequest {
@@ -875,6 +881,8 @@ pub enum WsRequest {
     Unsubscribe(UnsubscribeRequest),
     #[serde(rename = "invoice")]
     Invoice(InvoiceCreated),
+    #[serde(rename = "invoice.error")]
+    InvoiceError(InvoiceError),
     #[serde(rename = "ping")]
     Ping,
 }
