@@ -21,7 +21,7 @@ use crate::{error::Error, network::Chain, util::secrets::Preimage};
 use crate::{BtcSwapScript, LBtcSwapScript};
 use bitcoin::secp256k1;
 use bitcoin::{hashes::sha256, hex::DisplayHex, PublicKey};
-use lightning::bolt11_invoice::Bolt11Invoice;
+use lightning_invoice::Bolt11Invoice;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -670,7 +670,7 @@ impl BoltzApiClientV2 {
         &self,
         offer: &str,
         amount: u64,
-    ) -> Result<GetBolt12InvoiceResponse, Error> {
+    ) -> Result<GetBolt12FetchResponse, Error> {
         let data = json!(
             {
                 "offer": offer,
@@ -1597,18 +1597,21 @@ pub struct UpdateBolt12OfferRequest {
     pub signature: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetBolt12InvoiceResponse {
-    /// BOLT12 invoice
-    pub invoice: String,
+pub struct MagicRoutingHint {
+    pub bip21: String,
+    pub signature: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MagicRoutingHint {
-    /// Channel ID to use for magic routing hints
-    pub channel_id: String,
+pub struct GetBolt12FetchResponse {
+    /// BOLT12 invoice
+    pub invoice: String,
+    /// The invoice magic routing hint
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub magic_routing_hint: Option<MagicRoutingHint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1616,8 +1619,6 @@ pub struct MagicRoutingHint {
 pub struct GetBolt12ParamsResponse {
     /// Minimum CLTV value
     pub min_cltv: u64,
-    /// The magic routing hint
-    pub magic_routing_hint: MagicRoutingHint,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -14,7 +14,7 @@ pub mod util;
 // Re-export common libs, so callers can make use of them and avoid version conflicts
 pub use bitcoin;
 pub use elements;
-pub use lightning;
+pub use lightning_invoice;
 #[cfg(feature = "lnurl")]
 pub use lnurl;
 pub use reqwest;
@@ -33,7 +33,7 @@ pub use elements::{
     pset::serialize::Serialize,
     secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1},
 };
-pub use lightning::bolt11_invoice::Bolt11Invoice;
+pub use lightning_invoice::Bolt11Invoice;
 
 pub use swaps::{
     bitcoin::{BtcSwapScript, BtcSwapTx},

@@ -420,7 +420,6 @@ mod tests {
 
     use crate::boltz::{BoltzApiClientV2, BoltzWsConfig, CreateBolt12OfferRequest, BOLTZ_REGTEST};
     use crate::util::setup_logger;
-    use lightning::offers::invoice_request::InvoiceRequest;
     use serial_test::serial;
     use tokio::sync::oneshot;
 
@@ -514,11 +513,6 @@ mod tests {
         // Handle the WS message
         let req = rx.recv().await.unwrap();
         assert_eq!(req.offer, offer);
-
-        let invoice_request =
-            InvoiceRequest::try_from(hex::decode(req.invoice_request).unwrap()).unwrap();
-        let amount = invoice_request.amount_msats().unwrap() / 1000;
-        assert_eq!(amount, 1000);
 
         let error = "Failed to create invoice";
         ws.send_invoice_error(&req.id, error).await.unwrap();

@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-pub mod bolt12;
 pub mod ec;
 pub mod fees;
 #[cfg(feature = "lnurl")]
