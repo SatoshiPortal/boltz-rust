@@ -6,8 +6,8 @@ use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
 use boltz_client::{
     network::Chain,
     swaps::{
-        boltz::{BoltzApiClientV2, Cooperative, CreateSubmarineRequest},
-        {Client, SwapScript, SwapTx},
+        boltz::{BoltzApiClientV2, CreateSubmarineRequest},
+        Client, SwapScript, SwapTransactionParams,
     },
     util::{setup_logger, sleep},
 };
@@ -126,28 +126,16 @@ async fn v2_submarine(client: &Client, underpay: bool, chain: Chain) {
             // the funds back via refund.
             "transaction.lockupFailed" | "invoice.failedToPay" => {
                 sleep(WAIT_TIME).await;
-                let swap_tx = SwapTx::new_refund(
-                    swap_script.clone(),
-                    &refund_address,
-                    client,
-                    &boltz_api_v2,
-                    swap_id.to_owned(),
-                )
-                .await
-                .expect("Funding UTXO not found");
-
-                let tx = swap_tx
-                    .sign_refund(
-                        &our_keys,
-                        Fee::Absolute(1000),
-                        Some(Cooperative {
-                            boltz_api: &boltz_api_v2,
-                            swap_id: swap_id.clone(),
-                            pub_nonce: None,
-                            partial_sig: None,
-                        }),
-                        None,
-                    )
+                let tx = swap_script
+                    .construct_refund(SwapTransactionParams {
+                        keys: our_keys,
+                        output_address: refund_address,
+                        fee: Fee::Absolute(1000),
+                        swap_id: swap_id.clone(),
+                        client,
+                        boltz_client: &boltz_api_v2,
+                        options: None,
+                    })
                     .await
                     .unwrap();
 

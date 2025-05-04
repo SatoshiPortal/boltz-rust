@@ -2,8 +2,7 @@ use crate::regtest::WAIT_TIME;
 use crate::utils;
 use bitcoin::{key::rand::thread_rng, PublicKey};
 use boltz_client::boltz::{
-    BoltzApiClientV2, BoltzWsConfig, ChainSwapDetails, Cooperative, CreateChainRequest, Side,
-    BOLTZ_REGTEST,
+    BoltzApiClientV2, BoltzWsConfig, ChainSwapDetails, CreateChainRequest, Side, BOLTZ_REGTEST,
 };
 use boltz_client::fees::Fee;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -12,7 +11,7 @@ use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClien
 #[cfg(feature = "esplora")]
 use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
 use boltz_client::network::{BitcoinChain, Chain, LiquidChain};
-use boltz_client::swaps::{Client, SwapScript, SwapTx};
+use boltz_client::swaps::{Client, SwapScript, SwapTransactionParams, TransactionOptions};
 use boltz_client::util::sleep;
 use boltz_client::{
     util::{secrets::Preimage, setup_logger},
@@ -150,26 +149,21 @@ async fn v2_chain(client: &Client, underpay: bool, from: Chain, to: Chain) {
                 sleep(WAIT_TIME).await;
                 log::info!("Claiming!");
 
-                let claim_tx = SwapTx::new_claim(
-                    claim_script.clone(),
-                    claim_address.clone(),
-                    client,
-                    &boltz_api_v2,
-                    swap_id.clone(),
-                )
-                .await
-                .unwrap();
-                let coop = lockup_script
-                    .cooperative_chain_claim(&our_refund_keys, &swap_id, &boltz_api_v2)
-                    .await
-                    .unwrap();
-                let tx = claim_tx
-                    .sign_claim(
-                        &our_claim_keys,
+                let tx = claim_script
+                    .construct_claim(
                         &preimage,
-                        Fee::Absolute(1000),
-                        Some(coop),
-                        None,
+                        SwapTransactionParams {
+                            keys: our_claim_keys,
+                            output_address: claim_address.clone(),
+                            fee: Fee::Absolute(1000),
+                            swap_id: swap_id.clone(),
+                            client,
+                            boltz_client: &boltz_api_v2,
+                            options: Some(
+                                TransactionOptions::default()
+                                    .with_chain_claim(our_refund_keys, lockup_script.clone()),
+                            ),
+                        },
                     )
                     .await
                     .unwrap();
@@ -228,27 +222,16 @@ async fn refund_v2_chain(
     absolute_fees: u64,
     client: &Client,
 ) {
-    let refund_tx = SwapTx::new_refund(
-        lockup_script.clone(),
-        &refund_address,
-        client,
-        &boltz_api_v2,
-        swap_id.clone(),
-    )
-    .await
-    .unwrap();
-    let tx = refund_tx
-        .sign_refund(
-            &our_refund_keys,
-            Fee::Absolute(absolute_fees),
-            Some(Cooperative {
-                boltz_api: &boltz_api_v2,
-                swap_id: swap_id.clone(),
-                pub_nonce: None,
-                partial_sig: None,
-            }),
-            None,
-        )
+    let tx = lockup_script
+        .construct_refund(SwapTransactionParams {
+            keys: our_refund_keys,
+            output_address: refund_address,
+            fee: Fee::Absolute(absolute_fees),
+            swap_id: swap_id.clone(),
+            client,
+            boltz_client: &boltz_api_v2,
+            options: None,
+        })
         .await
         .unwrap();
 

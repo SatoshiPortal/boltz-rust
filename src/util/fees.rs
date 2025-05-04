@@ -1,5 +1,6 @@
 use crate::error::Error;
 
+#[derive(Copy, Debug, Clone)]
 pub enum Fee {
     // In sat/vByte
     Relative(f64),

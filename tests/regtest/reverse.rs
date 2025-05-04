@@ -3,13 +3,14 @@
 use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClient};
 #[cfg(feature = "esplora")]
 use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
+use boltz_client::swaps::TransactionOptions;
 use boltz_client::util::sleep;
 use boltz_client::{
     network::Chain,
     swaps::{
-        boltz::{BoltzApiClientV2, Cooperative, CreateReverseRequest},
+        boltz::{BoltzApiClientV2, CreateReverseRequest},
         magic_routing::{check_for_mrh, sign_address},
-        {Client, SwapScript, SwapTx},
+        {Client, SwapScript, SwapTransactionParams},
     },
     util::{secrets::Preimage, setup_logger},
     Secp256k1,
@@ -98,32 +99,20 @@ async fn v2_reverse(client: &Client, chain: Chain, cooperative: bool) {
 
                 sleep(WAIT_TIME).await;
 
-                let claim_tx = SwapTx::new_claim(
-                    swap_script.clone(),
-                    claim_address.clone(),
-                    client,
-                    &boltz_api_v2,
-                    swap_id.clone(),
-                )
-                .await
-                .expect("Funding tx expected");
-
-                let tx = claim_tx
-                    .sign_claim(
-                        &our_keys,
+                let tx = swap_script
+                    .construct_claim(
                         &preimage,
-                        Fee::Absolute(1000),
-                        if cooperative {
-                            Some(Cooperative {
-                                boltz_api: &boltz_api_v2,
-                                swap_id: swap_id.clone(),
-                                pub_nonce: None,
-                                partial_sig: None,
-                            })
-                        } else {
-                            None
+                        SwapTransactionParams {
+                            keys: our_keys,
+                            output_address: claim_address.clone(),
+                            fee: Fee::Absolute(1000),
+                            swap_id: swap_id.clone(),
+                            client,
+                            boltz_client: &boltz_api_v2,
+                            options: Some(
+                                TransactionOptions::default().with_cooperative(cooperative),
+                            ),
                         },
-                        None,
                     )
                     .await
                     .unwrap();

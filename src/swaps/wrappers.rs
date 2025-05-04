@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use super::boltz::{
     BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateReverseResponse,
-    CreateSubmarineResponse, Side, SwapType,
+    CreateSubmarineResponse, Side, SwapTxKind, SwapType,
 };
 use crate::error::Error;
 use crate::network::{BitcoinClient, Chain, LiquidClient};
@@ -21,16 +21,42 @@ use crate::swaps::liquid::{LBtcSwapScript, LBtcSwapTx};
 use crate::util::fees::Fee;
 use crate::util::secrets::Preimage;
 
-/// Options for signing swap transactions
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
+struct ChainClaim {
+    refund_keys: Keypair,
+    lockup_script: SwapScript,
+}
+
+#[derive(Clone, Debug)]
 pub struct TransactionOptions {
-    /// Whether to use discount confidential transactions for Liquid swaps
-    pub is_discount_ct: bool,
+    cooperative: bool,
+    chain_claim: Option<ChainClaim>,
+}
+
+impl Default for TransactionOptions {
+    fn default() -> Self {
+        Self {
+            cooperative: true,
+            chain_claim: None,
+        }
+    }
 }
 
 impl TransactionOptions {
-    pub fn with_discount_ct(mut self) -> Self {
-        self.is_discount_ct = true;
+    /// Whether a cooperative claim with boltz should be attempted
+    pub fn with_cooperative(mut self, cooperative: bool) -> Self {
+        self.cooperative = cooperative;
+        self
+    }
+
+    /// For a cooperative claim of a chain swap, the refund keys and lockup script of the swap have to be provided
+    /// Calling this function will implicitly set cooperative to true
+    pub fn with_chain_claim(mut self, refund_keys: Keypair, lockup_script: SwapScript) -> Self {
+        self.cooperative = true;
+        self.chain_claim = Some(ChainClaim {
+            refund_keys,
+            lockup_script,
+        });
         self
     }
 }
@@ -145,6 +171,16 @@ pub trait SwapScriptCommon {
 pub enum SwapScript {
     Bitcoin(Arc<BtcSwapScript>),
     Liquid(Arc<LBtcSwapScript>),
+}
+
+pub struct SwapTransactionParams<'a> {
+    pub keys: Keypair,
+    pub output_address: String,
+    pub fee: Fee,
+    pub swap_id: String,
+    pub client: &'a Client,
+    pub boltz_client: &'a BoltzApiClientV2,
+    pub options: Option<TransactionOptions>,
 }
 
 impl SwapScript {
@@ -293,135 +329,121 @@ impl SwapScript {
             partial_sig: Some(partial_sig),
         })
     }
-}
 
-/// A wrapper for swap transactions that can be either Bitcoin or Liquid
-#[derive(Clone, Debug)]
-pub enum SwapTx {
-    Bitcoin(Arc<BtcSwapTx>),
-    Liquid(Arc<LBtcSwapTx>),
-}
-
-impl SwapTx {
-    pub fn bitcoin(tx: BtcSwapTx) -> Self {
-        Self::Bitcoin(Arc::new(tx))
-    }
-
-    pub fn liquid(tx: LBtcSwapTx) -> Self {
-        Self::Liquid(Arc::new(tx))
-    }
-
-    pub async fn sign_refund(
+    async fn get_cooperative<'a>(
         &self,
-        keys: &Keypair,
-        fee: Fee,
-        is_cooperative: Option<Cooperative<'_>>,
+        tx_kind: SwapTxKind,
         options: Option<TransactionOptions>,
-    ) -> Result<BtcLikeTransaction, Error> {
-        match self {
-            Self::Bitcoin(tx) => {
-                let tx = tx.sign_refund(keys, fee, is_cooperative).await?;
-                Ok(BtcLikeTransaction::bitcoin(tx))
-            }
-            Self::Liquid(tx) => {
-                let is_discount_ct = options.map(|o| o.is_discount_ct).unwrap_or_default();
-                let tx = tx
-                    .sign_refund(keys, fee, is_cooperative, is_discount_ct)
-                    .await?;
-                Ok(BtcLikeTransaction::liquid(tx))
-            }
-        }
-    }
-
-    pub async fn sign_claim(
-        &self,
-        keys: &Keypair,
-        preimage: &Preimage,
-        fee: Fee,
-        is_cooperative: Option<Cooperative<'_>>,
-        options: Option<TransactionOptions>,
-    ) -> Result<BtcLikeTransaction, Error> {
-        match self {
-            Self::Bitcoin(tx) => {
-                let tx = tx.sign_claim(keys, preimage, fee, is_cooperative).await?;
-                Ok(BtcLikeTransaction::bitcoin(tx))
-            }
-            Self::Liquid(tx) => {
-                let is_discount_ct = options.map(|o| o.is_discount_ct).unwrap_or_default();
-                let tx = tx
-                    .sign_claim(keys, preimage, fee, is_cooperative, is_discount_ct)
-                    .await?;
-                Ok(BtcLikeTransaction::liquid(tx))
-            }
-        }
-    }
-
-    pub async fn new_claim(
-        swap_script: SwapScript,
-        output_address: String,
-        client: &Client,
-        boltz_client: &BoltzApiClientV2,
+        boltz_client: &'a BoltzApiClientV2,
         swap_id: String,
-    ) -> Result<Self, Error> {
-        match swap_script {
+    ) -> Result<Option<Cooperative<'a>>, Error> {
+        let o = options.unwrap_or_default();
+        match o.cooperative {
+            true => match (self.common().swap_type(), tx_kind) {
+                (SwapType::Chain, SwapTxKind::Claim) => {
+                    let claim = o.chain_claim.ok_or(Error::Generic(
+                        "Chain claim options are missing".to_string(),
+                    ))?;
+                    claim
+                        .lockup_script
+                        .cooperative_chain_claim(&claim.refund_keys, &swap_id, boltz_client)
+                        .await
+                        .map(Option::Some)
+                }
+                _ => Ok(Some(Cooperative {
+                    boltz_api: boltz_client,
+                    swap_id,
+                    pub_nonce: None,
+                    partial_sig: None,
+                })),
+            },
+            false => Ok(None),
+        }
+    }
+
+    pub async fn construct_claim(
+        &self,
+        preimage: &Preimage,
+        params: SwapTransactionParams<'_>,
+    ) -> Result<BtcLikeTransaction, Error> {
+        let cooperative = self
+            .get_cooperative(
+                SwapTxKind::Claim,
+                params.options,
+                params.boltz_client,
+                params.swap_id.clone(),
+            )
+            .await?;
+        match self {
             SwapScript::Bitcoin(script) => {
-                let btc_client = client.require_bitcoin_client()?;
                 let tx = BtcSwapTx::new_claim(
                     script.as_ref().clone(),
-                    output_address,
-                    btc_client,
-                    boltz_client,
-                    swap_id,
+                    params.output_address.clone(),
+                    params.client.require_bitcoin_client()?,
+                    params.boltz_client,
+                    params.swap_id.clone(),
                 )
                 .await?;
-                Ok(Self::bitcoin(tx))
+
+                tx.sign_claim(&params.keys, preimage, params.fee, cooperative)
+                    .await
+                    .map(BtcLikeTransaction::bitcoin)
             }
             SwapScript::Liquid(script) => {
-                let lbtc_client = client.require_liquid_client()?;
                 let tx = LBtcSwapTx::new_claim(
                     script.as_ref().clone(),
-                    output_address,
-                    lbtc_client,
-                    boltz_client,
-                    swap_id,
+                    params.output_address.clone(),
+                    params.client.require_liquid_client()?,
+                    params.boltz_client,
+                    params.swap_id.clone(),
                 )
                 .await?;
-                Ok(Self::liquid(tx))
+
+                tx.sign_claim(&params.keys, preimage, params.fee, cooperative, true)
+                    .await
+                    .map(BtcLikeTransaction::liquid)
             }
         }
     }
 
-    pub async fn new_refund(
-        swap_script: SwapScript,
-        output_address: &str,
-        client: &Client,
-        boltz_client: &BoltzApiClientV2,
-        swap_id: String,
-    ) -> Result<Self, Error> {
-        match swap_script {
+    pub async fn construct_refund(
+        &self,
+        params: SwapTransactionParams<'_>,
+    ) -> Result<BtcLikeTransaction, Error> {
+        let cooperative = self
+            .get_cooperative(
+                SwapTxKind::Refund,
+                params.options,
+                params.boltz_client,
+                params.swap_id.clone(),
+            )
+            .await?;
+        match self {
             SwapScript::Bitcoin(script) => {
-                let btc_client = client.require_bitcoin_client()?;
                 let tx = BtcSwapTx::new_refund(
                     script.as_ref().clone(),
-                    output_address,
-                    btc_client,
-                    boltz_client,
-                    swap_id,
+                    &params.output_address,
+                    params.client.require_bitcoin_client()?,
+                    params.boltz_client,
+                    params.swap_id.clone(),
                 )
                 .await?;
-                Ok(Self::bitcoin(tx))
+                tx.sign_refund(&params.keys, params.fee, cooperative)
+                    .await
+                    .map(BtcLikeTransaction::bitcoin)
             }
             SwapScript::Liquid(script) => {
-                let lbtc_client = client.require_liquid_client()?;
                 let tx = LBtcSwapTx::new_refund(
                     script.as_ref().clone(),
-                    output_address,
-                    lbtc_client,
-                    boltz_client,
-                    swap_id,
+                    &params.output_address,
+                    params.client.require_liquid_client()?,
+                    params.boltz_client,
+                    params.swap_id.clone(),
                 )
                 .await?;
-                Ok(Self::liquid(tx))
+                tx.sign_refund(&params.keys, params.fee, cooperative, true)
+                    .await
+                    .map(BtcLikeTransaction::liquid)
             }
         }
     }
