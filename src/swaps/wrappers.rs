@@ -242,7 +242,7 @@ impl SwapScript {
 
         log::debug!("Received claim tx details : {claim_tx_response:?}");
 
-        let preimage = Vec::from_hex(&claim_tx_response.preimage).unwrap();
+        let preimage = Vec::from_hex(&claim_tx_response.preimage)?;
 
         // Verify preimage matches invoice payment hash
         let preimage_hash = sha256::Hash::hash(&preimage);
@@ -277,15 +277,12 @@ impl SwapScript {
         swap_id: &String,
         boltz_api: &'a BoltzApiClientV2,
     ) -> Result<Cooperative<'a>, Error> {
-        let claim_tx_response = boltz_api.get_chain_claim_tx_details(swap_id).await.unwrap();
-        let (partial_sig, pub_nonce) = self
-            .common()
-            .partial_sign(
-                our_refund_keys,
-                &claim_tx_response.pub_nonce,
-                &claim_tx_response.transaction_hash,
-            )
-            .unwrap();
+        let claim_tx_response = boltz_api.get_chain_claim_tx_details(swap_id).await?;
+        let (partial_sig, pub_nonce) = self.common().partial_sign(
+            our_refund_keys,
+            &claim_tx_response.pub_nonce,
+            &claim_tx_response.transaction_hash,
+        )?;
         Ok(Cooperative {
             boltz_api,
             swap_id: swap_id.clone(),
