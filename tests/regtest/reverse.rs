@@ -10,7 +10,7 @@ use boltz_client::{
     swaps::{
         boltz::{BoltzApiClientV2, CreateReverseRequest},
         magic_routing::{check_for_mrh, sign_address},
-        {Client, SwapScript, SwapTransactionParams},
+        {ChainClient, SwapScript, SwapTransactionParams},
     },
     util::{secrets::Preimage, setup_logger},
     Secp256k1,
@@ -31,7 +31,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 const BTC_CHAIN: BitcoinChain = BitcoinChain::BitcoinRegtest;
 const LIQUID_CHAIN: LiquidChain = LiquidChain::LiquidRegtest;
 
-async fn v2_reverse(client: &Client, chain: Chain, cooperative: bool) {
+async fn v2_reverse(chain_client: &ChainClient, chain: Chain, cooperative: bool) {
     let secp = Secp256k1::new();
     let preimage = Preimage::new();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
@@ -107,17 +107,17 @@ async fn v2_reverse(client: &Client, chain: Chain, cooperative: bool) {
                             output_address: claim_address.clone(),
                             fee: Fee::Absolute(1000),
                             swap_id: swap_id.clone(),
-                            client,
-                            boltz_client: &boltz_api_v2,
                             options: Some(
                                 TransactionOptions::default().with_cooperative(cooperative),
                             ),
+                            chain_client,
+                            boltz_client: &boltz_api_v2,
                         },
                     )
                     .await
                     .unwrap();
 
-                client.broadcast_tx(&tx).await.unwrap();
+                chain_client.broadcast_tx(&tx).await.unwrap();
 
                 log::info!("Successfully broadcasted claim tx!");
                 log::debug!("Claim Tx {tx:?}");
@@ -139,10 +139,10 @@ async fn v2_reverse(client: &Client, chain: Chain, cooperative: bool) {
 #[cfg(feature = "electrum")]
 async fn bitcoin_v2_reverse_electrum() {
     setup_logger();
-    let client =
-        Client::new().with_bitcoin(ElectrumBitcoinClient::default(BTC_CHAIN, None).unwrap());
-    v2_reverse(&client, BTC_CHAIN.into(), false).await;
-    v2_reverse(&client, BTC_CHAIN.into(), true).await;
+    let chain_client =
+        ChainClient::new().with_bitcoin(ElectrumBitcoinClient::default(BTC_CHAIN, None).unwrap());
+    v2_reverse(&chain_client, BTC_CHAIN.into(), false).await;
+    v2_reverse(&chain_client, BTC_CHAIN.into(), true).await;
 }
 
 #[macros::async_test_all]
@@ -150,9 +150,10 @@ async fn bitcoin_v2_reverse_electrum() {
 #[cfg(feature = "esplora")]
 async fn bitcoin_v2_reverse_esplora() {
     setup_logger();
-    let client = Client::new().with_bitcoin(EsploraBitcoinClient::default(BTC_CHAIN, None));
-    v2_reverse(&client, BTC_CHAIN.into(), false).await;
-    v2_reverse(&client, BTC_CHAIN.into(), true).await;
+    let chain_client =
+        ChainClient::new().with_bitcoin(EsploraBitcoinClient::default(BTC_CHAIN, None));
+    v2_reverse(&chain_client, BTC_CHAIN.into(), false).await;
+    v2_reverse(&chain_client, BTC_CHAIN.into(), true).await;
 }
 
 #[macros::async_test]
@@ -160,10 +161,10 @@ async fn bitcoin_v2_reverse_esplora() {
 #[cfg(feature = "electrum")]
 async fn liquid_v2_reverse_electrum() {
     setup_logger();
-    let client =
-        Client::new().with_liquid(ElectrumLiquidClient::default(LIQUID_CHAIN, None).unwrap());
-    v2_reverse(&client, LIQUID_CHAIN.into(), false).await;
-    v2_reverse(&client, LIQUID_CHAIN.into(), true).await;
+    let chain_client =
+        ChainClient::new().with_liquid(ElectrumLiquidClient::default(LIQUID_CHAIN, None).unwrap());
+    v2_reverse(&chain_client, LIQUID_CHAIN.into(), false).await;
+    v2_reverse(&chain_client, LIQUID_CHAIN.into(), true).await;
 }
 
 #[macros::async_test_all]
@@ -171,7 +172,8 @@ async fn liquid_v2_reverse_electrum() {
 #[cfg(feature = "esplora")]
 async fn liquid_v2_reverse_esplora() {
     setup_logger();
-    let client = Client::new().with_liquid(EsploraLiquidClient::default(LIQUID_CHAIN, None));
-    v2_reverse(&client, LIQUID_CHAIN.into(), false).await;
-    v2_reverse(&client, LIQUID_CHAIN.into(), true).await;
+    let chain_client =
+        ChainClient::new().with_liquid(EsploraLiquidClient::default(LIQUID_CHAIN, None));
+    v2_reverse(&chain_client, LIQUID_CHAIN.into(), false).await;
+    v2_reverse(&chain_client, LIQUID_CHAIN.into(), true).await;
 }

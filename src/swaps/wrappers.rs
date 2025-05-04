@@ -93,18 +93,18 @@ impl BtcLikeTransaction {
 }
 
 /// A wrapper for blockchain clients that can be either Bitcoin or Liquid
-pub struct Client {
+pub struct ChainClient {
     bitcoin: Option<Box<dyn BitcoinClient>>,
     liquid: Option<Box<dyn LiquidClient>>,
 }
 
-impl Default for Client {
+impl Default for ChainClient {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Client {
+impl ChainClient {
     pub fn new() -> Self {
         Self {
             bitcoin: None,
@@ -178,7 +178,7 @@ pub struct SwapTransactionParams<'a> {
     pub output_address: String,
     pub fee: Fee,
     pub swap_id: String,
-    pub client: &'a Client,
+    pub chain_client: &'a ChainClient,
     pub boltz_client: &'a BoltzApiClientV2,
     pub options: Option<TransactionOptions>,
 }
@@ -376,7 +376,7 @@ impl SwapScript {
                 let tx = BtcSwapTx::new_claim(
                     script.as_ref().clone(),
                     params.output_address.clone(),
-                    params.client.require_bitcoin_client()?,
+                    params.chain_client.require_bitcoin_client()?,
                     params.boltz_client,
                     params.swap_id.clone(),
                 )
@@ -390,7 +390,7 @@ impl SwapScript {
                 let tx = LBtcSwapTx::new_claim(
                     script.as_ref().clone(),
                     params.output_address.clone(),
-                    params.client.require_liquid_client()?,
+                    params.chain_client.require_liquid_client()?,
                     params.boltz_client,
                     params.swap_id.clone(),
                 )
@@ -420,7 +420,7 @@ impl SwapScript {
                 let tx = BtcSwapTx::new_refund(
                     script.as_ref().clone(),
                     &params.output_address,
-                    params.client.require_bitcoin_client()?,
+                    params.chain_client.require_bitcoin_client()?,
                     params.boltz_client,
                     params.swap_id.clone(),
                 )
@@ -433,7 +433,7 @@ impl SwapScript {
                 let tx = LBtcSwapTx::new_refund(
                     script.as_ref().clone(),
                     &params.output_address,
-                    params.client.require_liquid_client()?,
+                    params.chain_client.require_liquid_client()?,
                     params.boltz_client,
                     params.swap_id.clone(),
                 )

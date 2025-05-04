@@ -7,7 +7,7 @@ use boltz_client::{
     network::Chain,
     swaps::{
         boltz::{BoltzApiClientV2, CreateSubmarineRequest},
-        Client, SwapScript, SwapTransactionParams,
+        ChainClient, SwapScript, SwapTransactionParams,
     },
     util::{setup_logger, sleep},
 };
@@ -27,7 +27,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 const BTC_CHAIN: BitcoinChain = BitcoinChain::BitcoinRegtest;
 const LIQUID_CHAIN: LiquidChain = LiquidChain::LiquidRegtest;
 
-async fn v2_submarine(client: &Client, underpay: bool, chain: Chain) {
+async fn v2_submarine(chain_client: &ChainClient, underpay: bool, chain: Chain) {
     let secp = bitcoin::secp256k1::Secp256k1::new();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
 
@@ -132,14 +132,14 @@ async fn v2_submarine(client: &Client, underpay: bool, chain: Chain) {
                         output_address: refund_address,
                         fee: Fee::Absolute(1000),
                         swap_id: swap_id.clone(),
-                        client,
+                        chain_client,
                         boltz_client: &boltz_api_v2,
                         options: None,
                     })
                     .await
                     .unwrap();
 
-                let txid = client.broadcast_tx(&tx).await.unwrap();
+                let txid = chain_client.broadcast_tx(&tx).await.unwrap();
                 log::info!("Cooperative Refund Successfully broadcasted: {txid}");
 
                 // Non cooperative refund requires expired swap
@@ -169,10 +169,10 @@ async fn v2_submarine(client: &Client, underpay: bool, chain: Chain) {
 #[cfg(feature = "electrum")]
 async fn bitcoin_v2_submarine_electrum() {
     setup_logger();
-    let client =
-        Client::new().with_bitcoin(ElectrumBitcoinClient::default(BTC_CHAIN, None).unwrap());
-    v2_submarine(&client, false, Chain::Bitcoin(BTC_CHAIN)).await;
-    v2_submarine(&client, true, Chain::Bitcoin(BTC_CHAIN)).await;
+    let chain_client =
+        ChainClient::new().with_bitcoin(ElectrumBitcoinClient::default(BTC_CHAIN, None).unwrap());
+    v2_submarine(&chain_client, false, Chain::Bitcoin(BTC_CHAIN)).await;
+    v2_submarine(&chain_client, true, Chain::Bitcoin(BTC_CHAIN)).await;
 }
 
 #[macros::async_test_all]
@@ -180,9 +180,10 @@ async fn bitcoin_v2_submarine_electrum() {
 #[cfg(feature = "esplora")]
 async fn bitcoin_v2_submarine_esplora() {
     setup_logger();
-    let client = Client::new().with_bitcoin(EsploraBitcoinClient::default(BTC_CHAIN, None));
-    v2_submarine(&client, false, Chain::Bitcoin(BTC_CHAIN)).await;
-    v2_submarine(&client, true, Chain::Bitcoin(BTC_CHAIN)).await;
+    let chain_client =
+        ChainClient::new().with_bitcoin(EsploraBitcoinClient::default(BTC_CHAIN, None));
+    v2_submarine(&chain_client, false, Chain::Bitcoin(BTC_CHAIN)).await;
+    v2_submarine(&chain_client, true, Chain::Bitcoin(BTC_CHAIN)).await;
 }
 
 #[macros::async_test]
@@ -190,10 +191,10 @@ async fn bitcoin_v2_submarine_esplora() {
 #[cfg(feature = "electrum")]
 async fn liquid_v2_submarine_electrum() {
     setup_logger();
-    let client =
-        Client::new().with_liquid(ElectrumLiquidClient::default(LIQUID_CHAIN, None).unwrap());
-    v2_submarine(&client, false, Chain::Liquid(LIQUID_CHAIN)).await;
-    v2_submarine(&client, true, Chain::Liquid(LIQUID_CHAIN)).await;
+    let chain_client =
+        ChainClient::new().with_liquid(ElectrumLiquidClient::default(LIQUID_CHAIN, None).unwrap());
+    v2_submarine(&chain_client, false, Chain::Liquid(LIQUID_CHAIN)).await;
+    v2_submarine(&chain_client, true, Chain::Liquid(LIQUID_CHAIN)).await;
 }
 
 #[macros::async_test_all]
@@ -201,7 +202,8 @@ async fn liquid_v2_submarine_electrum() {
 #[cfg(feature = "esplora")]
 async fn liquid_v2_submarine_esplora() {
     setup_logger();
-    let client = Client::new().with_liquid(EsploraLiquidClient::default(LIQUID_CHAIN, None));
-    v2_submarine(&client, false, Chain::Liquid(LIQUID_CHAIN)).await;
-    v2_submarine(&client, true, Chain::Liquid(LIQUID_CHAIN)).await;
+    let chain_client =
+        ChainClient::new().with_liquid(EsploraLiquidClient::default(LIQUID_CHAIN, None));
+    v2_submarine(&chain_client, false, Chain::Liquid(LIQUID_CHAIN)).await;
+    v2_submarine(&chain_client, true, Chain::Liquid(LIQUID_CHAIN)).await;
 }

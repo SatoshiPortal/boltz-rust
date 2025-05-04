@@ -11,7 +11,7 @@ use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClien
 #[cfg(feature = "esplora")]
 use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
 use boltz_client::network::{BitcoinChain, Chain, LiquidChain};
-use boltz_client::swaps::{Client, SwapScript, SwapTransactionParams, TransactionOptions};
+use boltz_client::swaps::{ChainClient, SwapScript, SwapTransactionParams, TransactionOptions};
 use boltz_client::util::sleep;
 use boltz_client::{
     util::{secrets::Preimage, setup_logger},
@@ -31,11 +31,23 @@ const LIQUID_CHAIN: LiquidChain = LiquidChain::LiquidRegtest;
 #[cfg(feature = "electrum")]
 async fn bitcoin_liquid_v2_chain_electrum() {
     setup_logger();
-    let client = Client::new()
+    let chain_client = ChainClient::new()
         .with_bitcoin(ElectrumBitcoinClient::default(BITCOIN_CHAIN, None).unwrap())
         .with_liquid(ElectrumLiquidClient::default(LIQUID_CHAIN, None).unwrap());
-    v2_chain(&client, false, BITCOIN_CHAIN.into(), LIQUID_CHAIN.into()).await;
-    v2_chain(&client, true, BITCOIN_CHAIN.into(), LIQUID_CHAIN.into()).await;
+    v2_chain(
+        &chain_client,
+        false,
+        BITCOIN_CHAIN.into(),
+        LIQUID_CHAIN.into(),
+    )
+    .await;
+    v2_chain(
+        &chain_client,
+        true,
+        BITCOIN_CHAIN.into(),
+        LIQUID_CHAIN.into(),
+    )
+    .await;
 }
 
 #[macros::async_test_all]
@@ -43,14 +55,26 @@ async fn bitcoin_liquid_v2_chain_electrum() {
 #[cfg(feature = "esplora")]
 async fn bitcoin_liquid_v2_chain_esplora() {
     setup_logger();
-    let client = Client::new()
+    let chain_client = ChainClient::new()
         .with_bitcoin(EsploraBitcoinClient::default(BITCOIN_CHAIN, None))
         .with_liquid(EsploraLiquidClient::default(LIQUID_CHAIN, None));
-    v2_chain(&client, false, BITCOIN_CHAIN.into(), LIQUID_CHAIN.into()).await;
-    v2_chain(&client, true, BITCOIN_CHAIN.into(), LIQUID_CHAIN.into()).await;
+    v2_chain(
+        &chain_client,
+        false,
+        BITCOIN_CHAIN.into(),
+        LIQUID_CHAIN.into(),
+    )
+    .await;
+    v2_chain(
+        &chain_client,
+        true,
+        BITCOIN_CHAIN.into(),
+        LIQUID_CHAIN.into(),
+    )
+    .await;
 }
 
-async fn v2_chain(client: &Client, underpay: bool, from: Chain, to: Chain) {
+async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: Chain) {
     let secp = Secp256k1::new();
     let preimage = Preimage::new();
     log::info!("{preimage:#?}");
@@ -157,18 +181,18 @@ async fn v2_chain(client: &Client, underpay: bool, from: Chain, to: Chain) {
                             output_address: claim_address.clone(),
                             fee: Fee::Absolute(1000),
                             swap_id: swap_id.clone(),
-                            client,
-                            boltz_client: &boltz_api_v2,
                             options: Some(
                                 TransactionOptions::default()
                                     .with_chain_claim(our_refund_keys, lockup_script.clone()),
                             ),
+                            chain_client,
+                            boltz_client: &boltz_api_v2,
                         },
                     )
                     .await
                     .unwrap();
 
-                client.broadcast_tx(&tx).await.unwrap();
+                chain_client.broadcast_tx(&tx).await.unwrap();
 
                 log::info!("Successfully broadcasted claim tx!");
             }
@@ -188,7 +212,7 @@ async fn v2_chain(client: &Client, underpay: bool, from: Chain, to: Chain) {
                     our_refund_keys,
                     boltz_api_v2.clone(),
                     100,
-                    client,
+                    chain_client,
                 )
                 .await;
                 if let Chain::Bitcoin(_) = from {
@@ -200,7 +224,7 @@ async fn v2_chain(client: &Client, underpay: bool, from: Chain, to: Chain) {
                         our_refund_keys,
                         boltz_api_v2.clone(),
                         1000,
-                        client,
+                        chain_client,
                     )
                     .await;
                 }
@@ -220,7 +244,7 @@ async fn refund_v2_chain(
     our_refund_keys: Keypair,
     boltz_api_v2: BoltzApiClientV2,
     absolute_fees: u64,
-    client: &Client,
+    chain_client: &ChainClient,
 ) {
     let tx = lockup_script
         .construct_refund(SwapTransactionParams {
@@ -228,14 +252,14 @@ async fn refund_v2_chain(
             output_address: refund_address,
             fee: Fee::Absolute(absolute_fees),
             swap_id: swap_id.clone(),
-            client,
+            chain_client,
             boltz_client: &boltz_api_v2,
             options: None,
         })
         .await
         .unwrap();
 
-    client.broadcast_tx(&tx).await.unwrap();
+    chain_client.broadcast_tx(&tx).await.unwrap();
 
     log::info!("Successfully broadcasted refund tx!");
     log::debug!("Refund Tx {tx:#?}");
@@ -246,11 +270,23 @@ async fn refund_v2_chain(
 #[cfg(feature = "electrum")]
 async fn liquid_bitcoin_v2_chain_electrum() {
     setup_logger();
-    let client = Client::new()
+    let chain_client = ChainClient::new()
         .with_bitcoin(ElectrumBitcoinClient::default(BITCOIN_CHAIN, None).unwrap())
         .with_liquid(ElectrumLiquidClient::default(LIQUID_CHAIN, None).unwrap());
-    v2_chain(&client, false, LIQUID_CHAIN.into(), BITCOIN_CHAIN.into()).await;
-    v2_chain(&client, true, LIQUID_CHAIN.into(), BITCOIN_CHAIN.into()).await;
+    v2_chain(
+        &chain_client,
+        false,
+        LIQUID_CHAIN.into(),
+        BITCOIN_CHAIN.into(),
+    )
+    .await;
+    v2_chain(
+        &chain_client,
+        true,
+        LIQUID_CHAIN.into(),
+        BITCOIN_CHAIN.into(),
+    )
+    .await;
 }
 
 #[macros::async_test_all]
@@ -258,9 +294,21 @@ async fn liquid_bitcoin_v2_chain_electrum() {
 #[cfg(feature = "esplora")]
 async fn liquid_bitcoin_v2_chain_esplora() {
     setup_logger();
-    let client = Client::new()
+    let chain_client = ChainClient::new()
         .with_bitcoin(EsploraBitcoinClient::default(BITCOIN_CHAIN, None))
         .with_liquid(EsploraLiquidClient::default(LIQUID_CHAIN, None));
-    v2_chain(&client, false, LIQUID_CHAIN.into(), BITCOIN_CHAIN.into()).await;
-    v2_chain(&client, true, LIQUID_CHAIN.into(), BITCOIN_CHAIN.into()).await;
+    v2_chain(
+        &chain_client,
+        false,
+        LIQUID_CHAIN.into(),
+        BITCOIN_CHAIN.into(),
+    )
+    .await;
+    v2_chain(
+        &chain_client,
+        true,
+        LIQUID_CHAIN.into(),
+        BITCOIN_CHAIN.into(),
+    )
+    .await;
 }
