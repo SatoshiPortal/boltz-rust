@@ -53,7 +53,7 @@ async fn v2_submarine(chain_client: &ChainClient, underpay: bool, chain: Chain) 
 
     // Initiate the swap with Boltz
     let create_swap_req = CreateSubmarineRequest {
-        from: chain.symbol().to_string(),
+        from: chain.to_string(),
         to: "BTC".to_string(),
         invoice: invoice.to_string(),
         refund_public_key,
@@ -89,7 +89,7 @@ async fn v2_submarine(chain_client: &ChainClient, underpay: bool, chain: Chain) 
                 log::info!(
                     "Send {} sats to {} address {}",
                     create_swap_response.expected_amount,
-                    chain.symbol(),
+                    chain,
                     create_swap_response.address
                 );
 

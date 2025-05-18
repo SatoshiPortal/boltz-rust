@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::error::Error;
 use bitcoin::Network;
 use elements::AddressParams;
@@ -15,11 +17,11 @@ pub enum Chain {
     Liquid(LiquidChain),
 }
 
-impl Chain {
-    pub fn symbol(&self) -> &str {
+impl fmt::Display for Chain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Chain::Bitcoin(_) => "BTC",
-            Chain::Liquid(_) => "L-BTC",
+            Chain::Bitcoin(_) => write!(f, "BTC"),
+            Chain::Liquid(_) => write!(f, "L-BTC"),
         }
     }
 }

@@ -48,7 +48,7 @@ async fn v2_reverse(chain_client: &ChainClient, chain: Chain, cooperative: bool)
     let create_reverse_req = CreateReverseRequest {
         invoice_amount,
         from: "BTC".to_string(),
-        to: chain.symbol().to_string(),
+        to: chain.to_string(),
         preimage_hash: preimage.sha256,
         description: None,
         description_hash: None,

@@ -93,8 +93,8 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
     };
 
     let create_chain_req = CreateChainRequest {
-        from: from.symbol().to_string(),
-        to: to.symbol().to_string(),
+        from: from.to_string(),
+        to: to.to_string(),
         preimage_hash: preimage.sha256,
         claim_public_key: Some(claim_public_key),
         refund_public_key: Some(refund_public_key),
@@ -151,12 +151,7 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
                 };
                 let address = create_chain_response.lockup_details.clone().lockup_address;
 
-                log::info!(
-                    "Sending {} sats to {} address {}",
-                    amount,
-                    from.symbol(),
-                    address
-                );
+                log::info!("Sending {amount} sats to {from} address {address}");
 
                 utils::send_to_address(from, &address, amount)
                     .await
