@@ -344,7 +344,7 @@ impl BtcSwapScript {
             let lockup_xonly_pubkey =
                 XOnlyPublicKey::from_slice(lockup_xonly_pubkey_bytes.as_bytes())?;
 
-            if lockup_xonly_pubkey != claim_key.to_inner() {
+            if lockup_xonly_pubkey != claim_key.to_x_only_public_key() {
                 return Err(Error::Protocol(format!(
                     "Taproot construction Failed. Lockup Pubkey: {lockup_xonly_pubkey}, Claim Pubkey {claim_key}"
                 )));
@@ -735,7 +735,11 @@ impl BtcSwapTx {
 
             let output_key = self.swap_script.taproot_spendinfo()?.output_key();
 
-            secp.verify_schnorr(&final_schnorr_sig.signature, &msg, &output_key.to_inner())?;
+            secp.verify_schnorr(
+                &final_schnorr_sig.signature,
+                &msg,
+                &output_key.to_x_only_public_key(),
+            )?;
 
             let mut witness = Witness::new();
             witness.push(final_schnorr_sig.to_vec());
@@ -971,7 +975,11 @@ impl BtcSwapTx {
 
                 let output_key = self.swap_script.taproot_spendinfo()?.output_key();
 
-                secp.verify_schnorr(&final_schnorr_sig.signature, &msg, &output_key.to_inner())?;
+                secp.verify_schnorr(
+                    &final_schnorr_sig.signature,
+                    &msg,
+                    &output_key.to_x_only_public_key(),
+                )?;
 
                 let mut witness = Witness::new();
                 witness.push(final_schnorr_sig.to_vec());

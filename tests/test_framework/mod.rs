@@ -213,7 +213,7 @@ impl LbtcTestFramework {
         let get_raw_tx = self
             .elementsd
             .client()
-            .call::<Value>("getrawtransaction", &[txid.clone()])
+            .call::<Value>("getrawtransaction", std::slice::from_ref(txid))
             .unwrap();
 
         let tx: elements::Transaction =

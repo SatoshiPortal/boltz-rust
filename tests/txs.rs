@@ -68,7 +68,7 @@ fn prepare_btc_claim() -> (
 
     let scan_result = test_framework
         .as_ref()
-        .scan_tx_out_set_blocking(&[scan_request.clone()])
+        .scan_tx_out_set_blocking(std::slice::from_ref(&scan_request))
         .unwrap();
 
     assert_eq!(scan_result.unspents.len(), 1);
@@ -243,7 +243,7 @@ fn prepare_btc_refund() -> (
 
     let scan_result = test_framework
         .as_ref()
-        .scan_tx_out_set_blocking(&[scan_request.clone()])
+        .scan_tx_out_set_blocking(std::slice::from_ref(&scan_request))
         .unwrap();
 
     assert_eq!(scan_result.unspents.len(), 1);
