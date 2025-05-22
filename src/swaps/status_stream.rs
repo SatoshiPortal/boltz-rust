@@ -418,7 +418,10 @@ impl Drop for BoltzWsApi {
 mod tests {
     use std::sync::Arc;
 
-    use crate::boltz::{BoltzApiClientV2, BoltzWsConfig, CreateBolt12OfferRequest, BOLTZ_REGTEST};
+    use crate::boltz::{
+        BoltzApiClientV2, BoltzWsConfig, CreateBolt12OfferRequest, GetBolt12FetchRequest,
+        BOLTZ_REGTEST,
+    };
     use crate::util::setup_logger;
     use serial_test::serial;
     use tokio::sync::oneshot;
@@ -504,7 +507,13 @@ mod tests {
         let boltz_api_v2_clone = boltz_api_v2.clone();
         let (complete_sender, complete_receiver) = oneshot::channel();
         tokio::spawn(async move {
-            let res = boltz_api_v2_clone.get_bolt12_invoice(offer, 1000).await;
+            let res = boltz_api_v2_clone
+                .get_bolt12_invoice(GetBolt12FetchRequest {
+                    offer: offer.to_string(),
+                    amount: 1000,
+                    note: None,
+                })
+                .await;
             assert!(res.is_err());
 
             complete_sender.send(()).unwrap();

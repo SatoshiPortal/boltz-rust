@@ -668,16 +668,9 @@ impl BoltzApiClientV2 {
     /// Fetch an invoice for the specified BOLT12 offer
     pub async fn get_bolt12_invoice(
         &self,
-        offer: &str,
-        amount: u64,
+        req: GetBolt12FetchRequest,
     ) -> Result<GetBolt12FetchResponse, Error> {
-        let data = json!(
-            {
-                "offer": offer,
-                "amount": amount
-            }
-        );
-
+        let data = serde_json::to_value(req)?;
         let end_point = "lightning/BTC/bolt12/fetch".to_string();
         Ok(serde_json::from_str(&self.post(&end_point, data).await?)?)
     }
@@ -1602,6 +1595,18 @@ pub struct UpdateBolt12OfferRequest {
 pub struct MagicRoutingHint {
     pub bip21: String,
     pub signature: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetBolt12FetchRequest {
+    /// The offer to fetch an invoice for
+    pub offer: String,
+    /// The amount to pay, in satoshi
+    pub amount: u64,
+    /// The optional payer note
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
