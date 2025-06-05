@@ -345,6 +345,18 @@ impl BoltzApiClientV2 {
         }
     }
 
+    pub fn with_client(
+        base_url: String,
+        http_client: reqwest::Client,
+        timeout: Option<Duration>,
+    ) -> Self {
+        Self {
+            base_url,
+            http_client,
+            timeout,
+        }
+    }
+
     /// Returns the web socket connection to the boltz server
     #[cfg(feature = "ws")]
     pub async fn connect_ws(&self) -> Result<WebSocketStream, Error> {
