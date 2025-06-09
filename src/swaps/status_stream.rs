@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
-use tokio_tungstenite_wasm::{connect, Message, WebSocketStream};
+use tokio_tungstenite_wasm::{connect, connect_with_protocols, Message, WebSocketStream};
 
 use super::boltz::{ErrorResponse, InvoiceRequest, InvoiceRequestParams, SubscribeRequest};
 
@@ -21,8 +21,12 @@ struct RequestPacket {
 }
 
 impl BoltzWsConnection {
-    async fn new(url: &str) -> Result<Self, Error> {
-        let ws = connect(url).await?;
+    async fn new(url: &str, protocols: Option<&[&str]>) -> Result<Self, Error> {
+        let ws = if let Some(protocols) = protocols {
+            connect_with_protocols(url, protocols).await?
+        } else {
+            connect(url).await?
+        };
         Ok(Self { ws })
     }
 
@@ -38,6 +42,7 @@ pub struct BoltzWsConfig {
     pub keep_alive_interval: Duration,
     pub reconnect_delay: Duration,
     pub subscription_timeout: Duration,
+    pub protocols: Option<Vec<String>>,
 }
 
 impl Default for BoltzWsConfig {
@@ -46,6 +51,7 @@ impl Default for BoltzWsConfig {
             keep_alive_interval: Duration::from_secs(15),
             reconnect_delay: Duration::from_secs(2),
             subscription_timeout: Duration::from_secs(5),
+            protocols: None,
         }
     }
 }
@@ -265,7 +271,12 @@ impl BoltzWsApi {
                 Some(((), ()))
             }));
 
-            match BoltzWsConnection::new(self.ws_url.as_str()).await {
+            let protocols = self
+                .config
+                .protocols
+                .as_ref()
+                .map(|p| p.iter().map(|s| s.as_ref()).collect::<Vec<_>>());
+            match BoltzWsConnection::new(self.ws_url.as_str(), protocols.as_deref()).await {
                 Ok(mut connection) => {
                     {
                         let subscriptions = self.subscriptions.lock().await;

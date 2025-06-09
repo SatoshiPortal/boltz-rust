@@ -41,7 +41,7 @@ use reqwest::RequestBuilder;
 #[cfg(feature = "ws")]
 pub use tokio_tungstenite_wasm;
 #[cfg(feature = "ws")]
-use tokio_tungstenite_wasm::{connect, WebSocketStream};
+use tokio_tungstenite_wasm::{connect, connect_with_protocols, WebSocketStream};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HeightResponse {
@@ -357,17 +357,29 @@ impl BoltzApiClientV2 {
         }
     }
 
+    /// Returns the WebSocket URL for the Boltz server
+    fn get_ws_url(&self) -> String {
+        self.base_url.clone().replace("http", "ws") + "/ws"
+    }
+
     /// Returns the web socket connection to the boltz server
     #[cfg(feature = "ws")]
     pub async fn connect_ws(&self) -> Result<WebSocketStream, Error> {
-        let ws_string = self.base_url.clone().replace("http", "ws") + "/ws";
-        Ok(connect(ws_string).await?)
+        Ok(connect(self.get_ws_url()).await?)
+    }
+
+    /// Same as `connect_ws` but with protocols
+    #[cfg(feature = "ws")]
+    pub async fn connect_ws_with_protocols(
+        &self,
+        protocols: &[&str],
+    ) -> Result<WebSocketStream, Error> {
+        Ok(connect_with_protocols(self.get_ws_url(), protocols).await?)
     }
 
     #[cfg(feature = "ws")]
     pub fn ws(&self, config: BoltzWsConfig) -> BoltzWsApi {
-        let ws_string = self.base_url.clone().replace("http", "ws") + "/ws";
-        BoltzWsApi::new(ws_string, config)
+        BoltzWsApi::new(self.get_ws_url(), config)
     }
 
     /// Make a GET request. Returns the Response

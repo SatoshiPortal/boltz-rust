@@ -39,7 +39,7 @@ lnurl-rs = { version = "0.9.0", default-features = false, features = ["async", "
 # Pin to commit until https://github.com/seanmonstar/reqwest/pull/1760 gets released
 reqwest = { git = "https://github.com/seanmonstar/reqwest", rev = "00b15b9a893d350388af513179e1a973dfa26f85", features = ["json"] }
 tokio = { version = "1.43.0", features = ["time"] }
-tokio-tungstenite-wasm = { version = "0.5.0", features = ["native-tls-vendored"], optional = true }
+tokio-tungstenite-wasm = { version = "0.6.0", features = ["native-tls-vendored"], optional = true }
 async-trait = "0.1.86"
 macros = { path = "macros" }
 futures-util = "0.3.31"
