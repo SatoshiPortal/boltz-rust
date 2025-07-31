@@ -1,7 +1,6 @@
 use core::fmt;
 
 use crate::error::Error;
-use bitcoin::Network;
 use elements::AddressParams;
 
 #[cfg(feature = "electrum")]
@@ -45,7 +44,7 @@ pub enum BitcoinChain {
     BitcoinRegtest,
 }
 
-impl From<BitcoinChain> for Network {
+impl From<BitcoinChain> for bitcoin::Network {
     fn from(value: BitcoinChain) -> Self {
         match value {
             BitcoinChain::Bitcoin => Self::Bitcoin,
@@ -72,8 +71,44 @@ impl From<LiquidChain> for &'static AddressParams {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Network {
+    Mainnet,
+    Testnet,
+    Regtest,
+}
+
+impl From<Network> for BitcoinChain {
+    fn from(value: Network) -> Self {
+        match value {
+            Network::Mainnet => BitcoinChain::Bitcoin,
+            Network::Testnet => BitcoinChain::BitcoinTestnet,
+            Network::Regtest => BitcoinChain::BitcoinRegtest,
+        }
+    }
+}
+
+impl From<Network> for LiquidChain {
+    fn from(value: Network) -> Self {
+        match value {
+            Network::Mainnet => LiquidChain::Liquid,
+            Network::Testnet => LiquidChain::LiquidTestnet,
+            Network::Regtest => LiquidChain::LiquidRegtest,
+        }
+    }
+}
+
+impl From<Chain> for Network {
+    fn from(value: Chain) -> Self {
+        match value {
+            Chain::Bitcoin(_) => Network::Mainnet,
+            Chain::Liquid(_) => Network::Mainnet,
+        }
+    }
+}
+
 #[macros::async_trait]
-pub trait BitcoinClient {
+pub trait BitcoinClient: Send + Sync {
     async fn get_address_balance(&self, address: &bitcoin::Address) -> Result<(u64, i64), Error>;
 
     async fn get_address_utxos(
@@ -87,7 +122,7 @@ pub trait BitcoinClient {
 }
 
 #[macros::async_trait]
-pub trait LiquidClient {
+pub trait LiquidClient: Send + Sync {
     async fn get_address_utxo(
         &self,
         address: &elements::Address,

@@ -7,7 +7,6 @@ on:
 name: lint
 
 jobs:
-
   fmt:
     name: rust fmt
     runs-on: ubuntu-latest
@@ -32,3 +31,6 @@ jobs:
         run: make cargo-clippy
       - name: Clippy wasm
         run: make wasm-clippy
+      - name: Check python
+        working-directory: bindings
+        run: make check-python

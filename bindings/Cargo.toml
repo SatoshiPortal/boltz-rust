@@ -1,0 +1,28 @@
+[package]
+name = "bindings"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+elements = "0.25.0"
+thiserror = "1.0.50"
+uniffi = { version = "0.29.2", features = ["cli", "tokio"] }
+serde_json = "1"
+boltz-client = { path = "..", features = ["ws", "esplora", "electrum"] }
+bitcoin = "0.32.5"
+async-trait = "0.1.88"
+tokio = "1.44.1"
+
+[build-dependencies]
+uniffi = { version = "0.29.2", features = ["build"] }
+
+[dev-dependencies]
+uniffi = { version = "0.29.2", features = ["bindgen-tests"] }
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+name = "boltz_client"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"

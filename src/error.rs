@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 /// The Global Error enum. Encodes all possible internal library errors
 #[derive(Debug)]
 pub enum Error {
@@ -318,5 +320,12 @@ impl Error {
             Error::Musig2(e) => e.clone(),
             Error::Generic(e) => e.clone(),
         }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message())?;
+        Ok(())
     }
 }

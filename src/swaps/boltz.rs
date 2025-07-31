@@ -17,6 +17,7 @@
 //!     output_amount - base_fees - claim_fee
 //! );
 
+use crate::network::Network;
 use crate::{error::Error, network::Chain, util::secrets::Preimage};
 use crate::{BtcSwapScript, LBtcSwapScript};
 use bitcoin::secp256k1;
@@ -343,6 +344,15 @@ impl BoltzApiClientV2 {
             http_client,
             timeout,
         }
+    }
+
+    pub fn default(network: Network) -> Self {
+        let base_url = match network {
+            Network::Mainnet => BOLTZ_MAINNET_URL_V2.to_string(),
+            Network::Testnet => BOLTZ_TESTNET_URL_V2.to_string(),
+            Network::Regtest => BOLTZ_REGTEST.to_string(),
+        };
+        Self::new(base_url, None)
     }
 
     pub fn with_client(

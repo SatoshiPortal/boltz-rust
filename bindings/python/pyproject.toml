@@ -1,0 +1,19 @@
+[project]
+name = "boltz_client"
+version = "1.0.0"
+description = "Boltz Swap library"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = ["libboltz_client.so", "boltz_client.py"]
+ignore-vcs = true
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.7",
+]

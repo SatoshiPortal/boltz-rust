@@ -122,20 +122,20 @@ impl ChainClient {
         self
     }
 
-    pub fn bitcoin_client(&self) -> Option<&(dyn BitcoinClient)> {
+    pub fn bitcoin_client(&self) -> Option<&dyn BitcoinClient> {
         self.bitcoin.as_deref()
     }
 
-    pub fn liquid_client(&self) -> Option<&(dyn LiquidClient)> {
+    pub fn liquid_client(&self) -> Option<&dyn LiquidClient> {
         self.liquid.as_deref()
     }
 
-    fn require_bitcoin_client(&self) -> Result<&(dyn BitcoinClient), Error> {
+    fn require_bitcoin_client(&self) -> Result<&dyn BitcoinClient, Error> {
         self.bitcoin_client()
             .ok_or_else(|| Error::Generic("Expected Bitcoin client".to_string()))
     }
 
-    fn require_liquid_client(&self) -> Result<&(dyn LiquidClient), Error> {
+    fn require_liquid_client(&self) -> Result<&dyn LiquidClient, Error> {
         self.liquid_client()
             .ok_or_else(|| Error::Generic("Expected Liquid client".to_string()))
     }

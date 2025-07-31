@@ -14,7 +14,8 @@ crate-type = ["lib"]
 
 [workspace]
 members = [
-    "macros"
+    "bindings",
+    "macros",
 ]
 
 [profile.release]
