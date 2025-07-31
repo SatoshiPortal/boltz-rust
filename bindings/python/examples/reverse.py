@@ -32,7 +32,9 @@ async def main():
     # Get the amount to swap from user
     amount = int(input("Enter amount in sats to swap: "))
 
-    claim_address = input(f"Enter claim address for {'liquid' if to_chain.is_liquid() else 'bitcoin'}: ")
+    claim_address = input(
+        f"Enter claim address for {'liquid' if to_chain.is_liquid() else 'bitcoin'}: "
+    )
 
     preimage = boltz_client.Preimage()
 
