@@ -70,6 +70,7 @@ async def swap(from_chain: boltz_client.Chain, refund: bool):
             )
 
         await next_status(updates, "transaction.claimed")
+        await delay()
 
 
 async def main():
