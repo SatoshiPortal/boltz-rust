@@ -186,6 +186,12 @@ impl KeyPair {
     }
 }
 
+impl Default for KeyPair {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 uniffi::custom_type!(PublicKey, String, {
     remote,
     try_lift: |val| match PublicKey::from_str(val.as_str()) {

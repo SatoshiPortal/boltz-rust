@@ -2,7 +2,6 @@ use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClien
 use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
 use boltz_client::network::{BitcoinChain, Chain, LiquidChain, Network};
 use boltz_client::swaps::ChainClient as CoreClient;
-use uniffi;
 
 use crate::boltz::Error;
 use crate::swap::BtcLikeTransaction;
@@ -82,7 +81,7 @@ pub struct ChainClient(pub(crate) CoreClient);
 #[uniffi::export]
 impl ChainClient {
     #[uniffi::constructor]
-    pub fn new(config: ClientConfig) -> Self {
+    pub fn new(config: ClientConfig) -> Result<Self, Error> {
         let mut client = CoreClient::new();
         if let Some(connection) = config.bitcoin {
             client = match connection {
@@ -97,7 +96,7 @@ impl ChainClient {
                         electrum.validate_domain,
                         electrum.timeout,
                     )
-                    .unwrap(),
+                    .map_err(|e| Error::Generic(e.to_string()))?,
                 ),
             };
         };
@@ -116,11 +115,11 @@ impl ChainClient {
                         electrum.validate_domain,
                         electrum.timeout,
                     )
-                    .unwrap(),
+                    .map_err(|e| Error::Generic(e.to_string()))?,
                 ),
             };
         };
-        ChainClient(client)
+        Ok(ChainClient(client))
     }
 }
 

@@ -16,13 +16,12 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::Mutex;
-use uniffi;
 use uniffi::Record;
 
 #[derive(Debug, Error, uniffi::Enum)]
 pub enum Error {
     #[error("HTTP error: {0}")]
-    HTTP(String),
+    Http(String),
 
     #[error("{0}")]
     Generic(String),
@@ -31,7 +30,7 @@ pub enum Error {
 impl From<CoreError> for Error {
     fn from(err: CoreError) -> Self {
         match err {
-            CoreError::HTTP(s) => Error::HTTP(s),
+            CoreError::HTTP(s) => Error::Http(s),
             _ => Error::Generic(err.message()),
         }
     }
@@ -139,7 +138,10 @@ impl BoltzApiClientV2 {
             .post_chain_req(boltz::CreateChainRequest {
                 from: swap_request.from.to_string(),
                 to: swap_request.to.to_string(),
-                preimage_hash: swap_request.preimage_hash.parse::<sha256::Hash>().unwrap(),
+                preimage_hash: swap_request
+                    .preimage_hash
+                    .parse::<sha256::Hash>()
+                    .map_err(|e| Error::Generic(e.to_string()))?,
                 claim_public_key: Some(swap_request.claim_public_key),
                 refund_public_key: Some(swap_request.refund_public_key),
                 user_lock_amount: swap_request.user_lock_amount,

@@ -20,4 +20,3 @@ check-python:
 
 test:
 	cargo test --package bindings --test test_generated_bindings -- --nocapture
-

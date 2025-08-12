@@ -35,3 +35,9 @@ impl Preimage {
         self.0.hash160.to_string()
     }
 }
+
+impl Default for Preimage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
