@@ -2,7 +2,7 @@
 
 Uniffi bindings for the Boltz Rust library.
 
-[UniFFI](https://mozilla.github.io/uniffi-rs/) enables automatic generation of bindings for multiple programming languages from a single Rust codebase. Currently, only Python bindings are implemented in this repository, but UniFFI potentially supports many other languages including Kotlin, Swift, Ruby, and more.
+[UniFFI](https://mozilla.github.io/uniffi-rs/) enables automatic generation of bindings for multiple programming languages from a single Rust codebase. Currently, only Python bindings are implemented in this repository, but UniFFI supports many other languages including Kotlin, Swift, Ruby, and more.
 
 ## Python
 

@@ -12,7 +12,7 @@ build-python: build-release
 	cd python && uv build
 
 format-python:
-    # also format python tests
+	# Also formats Python tests
 	cd python && uv run ruff format . ../tests/bindings
 
 check-python:
