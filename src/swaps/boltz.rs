@@ -523,20 +523,27 @@ impl BoltzApiClientV2 {
         &self,
         id: &String,
         preimage: &Preimage,
-        pub_nonce: MusigPubNonce,
-        partial_sig: MusigPartialSignature,
+        signature: Option<(MusigPartialSignature, MusigPubNonce)>,
         to_sign: ToSign,
     ) -> Result<PartialSig, Error> {
-        let data = json!(
-            {
-                "preimage": preimage.bytes.expect("expected").to_lower_hex_string(),
-                "signature": PartialSig {
+        let data = match signature {
+            Some((partial_sig, pub_nonce)) => json!(
+                {
+                    "preimage": preimage.bytes.expect("expected").to_lower_hex_string(),
+                    "signature": PartialSig {
                     pub_nonce: pub_nonce.serialize().to_lower_hex_string(),
                     partial_signature: partial_sig.serialize().to_lower_hex_string(),
                 },
                 "toSign": to_sign,
             }
-        );
+            ),
+            None => json!(
+                {
+                    "preimage": preimage.bytes.expect("expected").to_lower_hex_string(),
+                    "toSign": to_sign,
+                }
+            ),
+        };
         let endpoint = format!("swap/chain/{id}/claim");
         Ok(serde_json::from_str(&self.post(&endpoint, data).await?)?)
     }
@@ -1267,10 +1274,9 @@ pub struct ToSign {
 pub struct Cooperative<'a> {
     pub boltz_api: &'a BoltzApiClientV2,
     pub swap_id: String,
-    /// The pub_nonce is needed to post the claim tx details of the Chain swap
-    pub pub_nonce: Option<MusigPubNonce>,
-    /// The partial_sig is needed to post the claim tx details of the Chain swap
-    pub partial_sig: Option<MusigPartialSignature>,
+    /// The signature (partial_sig + pub_nonce) is needed to post the claim tx details of the Chain swap
+    /// It may be omitted for a chain swap if we've already sent the signature to Boltz
+    pub signature: Option<(MusigPartialSignature, MusigPubNonce)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

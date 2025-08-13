@@ -313,17 +313,28 @@ impl SwapScript {
         swap_id: &String,
         boltz_api: &'a BoltzApiClientV2,
     ) -> Result<Cooperative<'a>, Error> {
-        let claim_tx_response = boltz_api.get_chain_claim_tx_details(swap_id).await?;
-        let (partial_sig, pub_nonce) = self.common().partial_sign(
-            our_refund_keys,
-            &claim_tx_response.pub_nonce,
-            &claim_tx_response.transaction_hash,
-        )?;
+        let signature: Option<(MusigPartialSignature, MusigPubNonce)> = match boltz_api
+            .get_chain_claim_tx_details(swap_id)
+            .await
+        {
+            Ok(claim_tx_response) => Some(self.common().partial_sign(
+                our_refund_keys,
+                &claim_tx_response.pub_nonce,
+                &claim_tx_response.transaction_hash,
+            )?),
+            Err(Error::JSON(e)) => {
+                log::warn!("Failed to parse chain claim tx details: {e} - continuing without signature as we may have already sent it");
+                None
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        };
+
         Ok(Cooperative {
             boltz_api,
             swap_id: swap_id.clone(),
-            pub_nonce: Some(pub_nonce),
-            partial_sig: Some(partial_sig),
+            signature,
         })
     }
 
@@ -350,8 +361,7 @@ impl SwapScript {
                 _ => Ok(Some(Cooperative {
                     boltz_api: boltz_client,
                     swap_id,
-                    pub_nonce: None,
-                    partial_sig: None,
+                    signature: None,
                 })),
             },
             false => Ok(None),

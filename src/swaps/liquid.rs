@@ -609,8 +609,7 @@ impl LBtcSwapTx {
         if let Some(Cooperative {
             boltz_api,
             swap_id,
-            pub_nonce,
-            partial_sig,
+            signature,
         }) = is_cooperative
         {
             let claim_tx_taproot_hash = SighashCache::new(&claim_tx)
@@ -651,26 +650,20 @@ impl LBtcSwapTx {
             // Step 7: Get boltz's partial sig
             let claim_tx_hex = serialize(&claim_tx).to_lower_hex_string();
             let partial_sig_resp = match self.swap_script.swap_type {
-                SwapType::Chain => match (pub_nonce, partial_sig) {
-                    (Some(pub_nonce), Some(partial_sig)) => {
-                        boltz_api
-                            .post_chain_claim_tx_details(
-                                &swap_id,
-                                preimage,
-                                pub_nonce,
-                                partial_sig,
-                                ToSign {
-                                    pub_nonce: claim_pub_nonce.serialize().to_lower_hex_string(),
-                                    transaction: claim_tx_hex,
-                                    index: 0,
-                                },
-                            )
-                            .await
-                    }
-                    _ => Err(Error::Protocol(
-                        "Chain swap claim needs a partial_sig".to_string(),
-                    )),
-                },
+                SwapType::Chain => {
+                    boltz_api
+                        .post_chain_claim_tx_details(
+                            &swap_id,
+                            preimage,
+                            signature,
+                            ToSign {
+                                pub_nonce: claim_pub_nonce.serialize().to_lower_hex_string(),
+                                transaction: claim_tx_hex,
+                                index: 0,
+                            },
+                        )
+                        .await
+                }
                 SwapType::ReverseSubmarine => {
                     boltz_api
                         .get_reverse_partial_sig(
