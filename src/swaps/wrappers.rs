@@ -173,6 +173,7 @@ pub enum SwapScript {
     Liquid(Arc<LBtcSwapScript>),
 }
 
+#[derive(Clone)]
 pub struct SwapTransactionParams<'a> {
     pub keys: Keypair,
     pub output_address: String,

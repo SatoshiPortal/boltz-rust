@@ -168,42 +168,26 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
                 sleep(WAIT_TIME).await;
                 log::info!("Claiming!");
 
+                let swap_params = SwapTransactionParams {
+                    keys: our_claim_keys,
+                    output_address: claim_address.clone(),
+                    fee: Fee::Absolute(1000),
+                    swap_id: swap_id.clone(),
+                    options: Some(
+                        TransactionOptions::default()
+                            .with_chain_claim(our_refund_keys, lockup_script.clone()),
+                    ),
+                    chain_client,
+                    boltz_client: &boltz_api_v2,
+                };
+
+                // Constructing a chain tx more than once should work
                 let _tx = claim_script
-                    .construct_claim(
-                        &preimage,
-                        SwapTransactionParams {
-                            keys: our_claim_keys,
-                            output_address: claim_address.clone(),
-                            fee: Fee::Absolute(1000),
-                            swap_id: swap_id.clone(),
-                            options: Some(
-                                TransactionOptions::default()
-                                    .with_chain_claim(our_refund_keys, lockup_script.clone()),
-                            ),
-                            chain_client,
-                            boltz_client: &boltz_api_v2,
-                        },
-                    )
+                    .construct_claim(&preimage, swap_params.clone())
                     .await
                     .unwrap();
-
-                // Trying to construct a claim tx again should work
                 let tx = claim_script
-                    .construct_claim(
-                        &preimage,
-                        SwapTransactionParams {
-                            keys: our_claim_keys,
-                            output_address: claim_address.clone(),
-                            fee: Fee::Absolute(1000),
-                            swap_id: swap_id.clone(),
-                            options: Some(
-                                TransactionOptions::default()
-                                    .with_chain_claim(our_refund_keys, lockup_script.clone()),
-                            ),
-                            chain_client,
-                            boltz_client: &boltz_api_v2,
-                        },
-                    )
+                    .construct_claim(&preimage, swap_params)
                     .await
                     .unwrap();
 
