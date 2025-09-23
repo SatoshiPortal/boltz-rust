@@ -69,7 +69,7 @@ secp256k1-zkp = { git = "https://github.com/breez/rust-secp256k1-zkp.git", rev =
 
 [dev-dependencies]
 serial_test = { workspace = true }
-tokio = { version = "1.43.0", features = ["rt"] }
+tokio = { version = "1.43.0", features = ["rt", "macros"] }
 anyhow = "1.0.100"
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dev-dependencies]
