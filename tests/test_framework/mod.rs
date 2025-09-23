@@ -31,7 +31,10 @@ impl BtcTestFramework {
         let mut conf = Conf::default();
 
         conf.args.push("-txindex=1");
-        let bitcoind = BitcoinD::from_downloaded_with_conf(&conf).unwrap();
+        let bitcoind = match std::env::var("BITCOIND_EXEC") {
+            Ok(exe) => BitcoinD::with_conf(&exe, &conf).unwrap(),
+            Err(_) => BitcoinD::from_downloaded_with_conf(&conf).unwrap(),
+        };
 
         // Generate initial 101 blocks
         let mining_address = bitcoind
@@ -113,7 +116,12 @@ impl LbtcTestFramework {
         let mut conf = elementsd::Conf::default();
         conf.0.args.push("-txindex=1");
 
-        let elementsd = ElementsD::with_conf(downloaded_exe_path().unwrap(), &conf).unwrap();
+        let exe = match std::env::var("ELEMENTSD_EXEC") {
+            Ok(exe) => exe,
+            Err(_) => downloaded_exe_path().unwrap(),
+        };
+
+        let elementsd = ElementsD::with_conf(&exe, &conf).unwrap();
 
         let tf = LbtcTestFramework { elementsd };
 
