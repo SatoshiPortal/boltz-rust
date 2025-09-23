@@ -48,8 +48,7 @@ log = "^0.4"
 env_logger = "0.7"
 hex = "0.4"
 lnurl-rs = { version = "0.9.0", default-features = false, features = ["async", "async-https"], optional = true }
-# Pin to commit until https://github.com/seanmonstar/reqwest/pull/1760 gets released
-reqwest = { git = "https://github.com/seanmonstar/reqwest", rev = "00b15b9a893d350388af513179e1a973dfa26f85", features = ["json"] }
+reqwest = { version = "0.12.12" , features = ["json"] }
 macros = { path = "macros" }
 futures-util = "0.3.31"
 tokio-tungstenite-wasm = { version = "0.6.0", features = ["native-tls-vendored"], optional = true }
