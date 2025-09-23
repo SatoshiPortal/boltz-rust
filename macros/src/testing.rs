@@ -6,7 +6,7 @@ pub fn async_test(
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let mut out = TokenStream::new();
-    out.extend(quote! { #[cfg_attr(not(all(target_family = "wasm", target_os = "unknown")), tokio::test)] });
+    out.extend(quote! { #[cfg_attr(not(all(target_family = "wasm", target_os = "unknown")), ::tokio::test)] });
     out.extend(TokenStream::from(input));
     out.into()
 }
@@ -26,7 +26,7 @@ pub fn async_test_all(
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let mut out = TokenStream::new();
-    out.extend(quote! { #[cfg_attr(not(all(target_family = "wasm", target_os = "unknown")), tokio::test)] });
+    out.extend(quote! { #[cfg_attr(not(all(target_family = "wasm", target_os = "unknown")), ::tokio::test)] });
     out.extend(quote! { #[cfg_attr(all(target_family = "wasm", target_os = "unknown"), wasm_bindgen_test::wasm_bindgen_test)] });
     out.extend(TokenStream::from(input));
     out.into()
