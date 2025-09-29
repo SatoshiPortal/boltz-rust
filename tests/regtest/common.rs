@@ -1,4 +1,5 @@
 use boltz_client::swaps::ChainClient;
+use boltz_client::util::sleep;
 use boltz_client::{
     boltz::{BoltzApiClientV2, SwapStatus, BOLTZ_REGTEST},
     network::{BitcoinChain, LiquidChain},
@@ -46,7 +47,7 @@ pub async fn next_status(
                 }
             }
         } => result,
-        _ = tokio::time::sleep(Duration::from_secs(10)) => {
+        _ = sleep(Duration::from_secs(10)) => {
             Err(RecvError::Closed)
         }
     }
