@@ -1,3 +1,4 @@
+use bitcoind::anyhow;
 use boltz_client::swaps::ChainClient;
 use boltz_client::util::sleep;
 use boltz_client::{
@@ -5,7 +6,7 @@ use boltz_client::{
     network::{BitcoinChain, LiquidChain},
 };
 use std::time::Duration;
-use tokio::sync::broadcast::{error::RecvError, Receiver};
+use tokio::sync::broadcast::Receiver;
 
 pub const BTC_CHAIN: BitcoinChain = BitcoinChain::BitcoinRegtest;
 pub const LBTC_CHAIN: LiquidChain = LiquidChain::LiquidRegtest;
@@ -36,7 +37,7 @@ pub fn create_chain_client_esplora() -> ChainClient {
 pub async fn next_status(
     updates: &mut Receiver<SwapStatus>,
     expected_status: &str,
-) -> Result<boltz_client::boltz::SwapStatus, RecvError> {
+) -> Result<boltz_client::boltz::SwapStatus, anyhow::Error> {
     tokio::select! {
         result = async {
             loop {
@@ -48,7 +49,7 @@ pub async fn next_status(
             }
         } => result,
         _ = sleep(Duration::from_secs(10)) => {
-            Err(RecvError::Closed)
+            Err(anyhow::anyhow!("Timeout waiting for status: {}", expected_status))
         }
     }
 }
