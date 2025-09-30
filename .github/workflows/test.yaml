@@ -53,6 +53,8 @@ jobs:
         env:
           COMPOSE_PROFILES: ci, esplora
         run: sh start.sh
+      - name: Permissions for regtest data
+        run: sudo chmod -R 777 regtest/boltz
       - name: Run cargo regtest tests
         run: make cargo-regtest-test
       - name: Run WASM regtest tests
