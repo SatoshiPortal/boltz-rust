@@ -1,4 +1,3 @@
-use anyhow;
 use boltz_client::swaps::ChainClient;
 use boltz_client::util::sleep;
 use boltz_client::{
