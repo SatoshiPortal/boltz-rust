@@ -7,9 +7,9 @@ use std::str::FromStr;
 
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
+use bitcoin::hashes::{hash160, ripemd160, sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::key::rand::{rngs::OsRng, RngCore};
-use bitcoin::secp256k1::hashes::{hash160, ripemd160, sha256, Hash};
 use bitcoin::secp256k1::{Keypair, Secp256k1};
 use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 use lightning_invoice::Bolt11Invoice;
