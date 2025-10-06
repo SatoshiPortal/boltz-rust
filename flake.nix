@@ -43,11 +43,9 @@
 
           nativeBuildInputs = with pkgs; [ 
             rustToolchain 
-            pkg-config 
           ]; # required only at build time
           
           buildInputs = with pkgs; [ 
-            openssl 
           ] ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin dependencies if needed
             pkgs.darwin.apple_sdk.frameworks.Security
