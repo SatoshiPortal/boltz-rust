@@ -48,10 +48,10 @@ log = "^0.4"
 env_logger = "0.7"
 hex = "0.4"
 lnurl-rs = { version = "0.9.0", default-features = false, features = ["async", "async-https"], optional = true }
-reqwest = { version = "0.12.12" , features = ["json"] }
+reqwest = { version = "0.12.12" , default-features = false, features = ["json", "rustls-tls"] }
 macros = { path = "macros" }
 futures-util = "0.3.31"
-tokio-tungstenite-wasm = { version = "0.6.0", features = ["native-tls-vendored"], optional = true }
+tokio-tungstenite-wasm = { version = "0.6.0", features = ["rustls-tls-webpki-roots"], optional = true }
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dependencies]
 electrum-client = { version = "0.21.0", default-features = false, features = ["use-rustls-ring", "proxy"], optional = true }
