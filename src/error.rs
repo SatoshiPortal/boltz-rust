@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
 
+use serde_json::Value;
+
 /// The Global Error enum. Encodes all possible internal library errors
 #[derive(Debug)]
 pub enum Error {
@@ -33,6 +35,7 @@ pub enum Error {
     Taproot(String),
     Musig2(String),
     Generic(String),
+    HTTPStatusNotSuccess(reqwest::StatusCode, Value),
 }
 
 #[cfg(feature = "electrum")]
@@ -282,6 +285,7 @@ impl Error {
             Error::Taproot(_) => "Taproot",
             Error::Musig2(_) => "Musig2",
             Error::Generic(_) => "Generic",
+            Error::HTTPStatusNotSuccess(_, _) => "HTTPStatusNotSuccess",
         }
         .to_string()
     }
@@ -319,6 +323,9 @@ impl Error {
             Error::Taproot(e) => e.clone(),
             Error::Musig2(e) => e.clone(),
             Error::Generic(e) => e.clone(),
+            Error::HTTPStatusNotSuccess(status, body) => {
+                format!("HTTP Status Not Success: {status}, {body}")
+            }
         }
     }
 }

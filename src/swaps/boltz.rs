@@ -507,7 +507,15 @@ impl BoltzApiClientV2 {
         id: &String,
     ) -> Result<SubmarineClaimTxResponse, Error> {
         let endpoint = format!("swap/submarine/{id}/claim");
-        Ok(serde_json::from_str(&self.get(&endpoint).await?)?)
+        let response = self.get_response(&endpoint).await?;
+        let status = response.status();
+        if status.is_success() {
+            let body = response.text().await?;
+            Ok(serde_json::from_str(&body)?)
+        } else {
+            let body = serde_json::from_str(&response.text().await?)?;
+            Err(Error::HTTPStatusNotSuccess(status, body))
+        }
     }
 
     pub async fn get_chain_claim_tx_details(
