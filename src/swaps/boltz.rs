@@ -393,11 +393,16 @@ impl BoltzApiClientV2 {
     }
 
     /// Make a GET request. Returns the Response
-    async fn get(&self, end_point: &str) -> Result<String, Error> {
+    async fn get_response(&self, end_point: &str) -> Result<reqwest::Response, Error> {
         let url = format!("{}/{}", self.base_url, end_point);
         let req_builder = self.http_client.get(url);
         let req_builder = self.maybe_add_timeout(req_builder);
-        Ok(req_builder.send().await?.text().await?)
+        Ok(req_builder.send().await?)
+    }
+
+    /// Make a GET request. Returns the Response as text
+    async fn get(&self, end_point: &str) -> Result<String, Error> {
+        Ok(self.get_response(end_point).await?.text().await?)
     }
 
     /// Make a POST request. Returns the Response
