@@ -768,6 +768,22 @@ impl BoltzApiClientV2 {
         let end_point = format!("swap/{swap_id}");
         Ok(serde_json::from_str(&self.get(&end_point).await?)?)
     }
+
+    /// Restore swaps from an xpub
+    pub async fn post_swap_restore(
+        &self,
+        xpub: &String,
+    ) -> Result<Vec<SwapRestoreResponse>, Error> {
+        let data = json!(
+            {
+                "xpub": xpub,
+            }
+        );
+
+        Ok(serde_json::from_str::<Vec<SwapRestoreResponse>>(
+            &self.post("swap/restore", data).await?,
+        )?)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -876,6 +892,32 @@ pub struct SwapTree {
 pub struct Leaf {
     pub output: String,
     pub version: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaimDetails {
+    pub tree: SwapTree,
+    pub amount: u64,
+    pub key_index: u32,
+    pub lockup_address: String,
+    pub server_public_key: String,
+    pub timeout_block_height: u32,
+    pub blinding_key: String,
+    pub preimage_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwapRestoreResponse {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub swap_type: String,
+    pub status: String,
+    pub created_at: u64,
+    pub from: String,
+    pub to: String,
+    pub claim_details: ClaimDetails,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
