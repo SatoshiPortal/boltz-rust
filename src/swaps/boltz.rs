@@ -909,15 +909,34 @@ pub struct ClaimDetails {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RefundDetails {
+    pub tree: SwapTree,
+    pub key_index: u32,
+    pub lockup_address: String,
+    pub server_public_key: String,
+    pub timeout_block_height: u32,
+    pub blinding_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SwapRestoreType {
+    Reverse,
+    Submarine,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SwapRestoreResponse {
     pub id: String,
     #[serde(rename = "type")]
-    pub swap_type: String,
+    pub swap_type: SwapRestoreType,
     pub status: String,
     pub created_at: u64,
     pub from: String,
     pub to: String,
-    pub claim_details: ClaimDetails,
+    pub claim_details: Option<ClaimDetails>,
+    pub refund_details: Option<RefundDetails>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
