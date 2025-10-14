@@ -923,6 +923,7 @@ pub struct RefundDetails {
 pub enum SwapRestoreType {
     Reverse,
     Submarine,
+    Chain,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
