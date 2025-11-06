@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use bip39::Mnemonic;
-use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv, Xpub};
 use bitcoin::hashes::{hash160, ripemd160, sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::key::rand::{rngs::OsRng, RngCore};
@@ -23,118 +23,257 @@ const SUBMARINE_SWAP_ACCOUNT: u32 = 21;
 const REVERSE_SWAP_ACCOUNT: u32 = 42;
 const CHAIN_SWAP_ACCOUNT: u32 = 84;
 
-const BITCOIN_NETWORK_PATH: u32 = 0;
-const LIQUID_NETWORK_PATH: u32 = 1776;
-const TESTNET_NETWORK_PATH: u32 = 1;
+fn chain_to_bitcoin_network(chain: Chain) -> bitcoin::Network {
+    match chain {
+        Chain::Bitcoin(bitcoin_chain) => bitcoin_chain.into(),
+        Chain::Liquid(liquid_chain) => match liquid_chain {
+            LiquidChain::Liquid => bitcoin::Network::Bitcoin,
+            LiquidChain::LiquidTestnet => bitcoin::Network::Testnet,
+            LiquidChain::LiquidRegtest => bitcoin::Network::Regtest,
+        },
+    }
+}
+
+fn get_network_path(network: Chain) -> u32 {
+    match network {
+        Chain::Bitcoin(BitcoinChain::Bitcoin) | Chain::Liquid(LiquidChain::Liquid) => 0,
+        _ => 1,
+    }
+}
+
+fn derive_root_xpriv(
+    mnemonic: &str,
+    passphrase: &str,
+    network: Chain,
+) -> Result<(Secp256k1<bitcoin::secp256k1::All>, Xpriv), Error> {
+    let secp = Secp256k1::new();
+    let mnemonic_struct = Mnemonic::from_str(mnemonic)?;
+    let seed = mnemonic_struct.to_seed(passphrase);
+    let root = Xpriv::new_master(chain_to_bitcoin_network(network), &seed)?;
+    Ok((secp, root))
+}
+
+fn build_base_path(purpose: DerivationPurpose, network_path: u32, account: u32) -> String {
+    format!("m/{purpose}h/{network_path}h/{account}h/0")
+}
+
+/// Swap key xpriv for reverse, submarine, and chain swaps
+/// Can be stored and used more easily to get SwapKeys for each swap rather than constantly passing the mnemonic and passphrase
+/// Can also be used to get the root xpubs that can be used with the swap/restore api
+#[derive(Clone)]
+pub struct SwapXKeys {
+    pub reverse: Xpriv,
+    pub submarine: Xpriv,
+    pub chain: Xpriv,
+    pub fingerprint: Fingerprint,
+    pub network: Chain,
+}
+
+impl SwapXKeys {
+    pub fn derive(mnemonic: &str, passphrase: &str, network: Chain) -> Result<SwapXKeys, Error> {
+        let (secp, root) = derive_root_xpriv(mnemonic, passphrase, network)?;
+        let fingerprint = root.fingerprint(&secp);
+        let network_path = get_network_path(network);
+
+        let submarine_path = build_base_path(
+            DerivationPurpose::Compatible,
+            network_path,
+            SUBMARINE_SWAP_ACCOUNT,
+        );
+        let submarine_xpriv =
+            root.derive_priv(&secp, &DerivationPath::from_str(&submarine_path)?)?;
+
+        let reverse_path = build_base_path(
+            DerivationPurpose::Native,
+            network_path,
+            REVERSE_SWAP_ACCOUNT,
+        );
+        let reverse_xpriv = root.derive_priv(&secp, &DerivationPath::from_str(&reverse_path)?)?;
+
+        let chain_path =
+            build_base_path(DerivationPurpose::Taproot, network_path, CHAIN_SWAP_ACCOUNT);
+        let chain_xpriv = root.derive_priv(&secp, &DerivationPath::from_str(&chain_path)?)?;
+
+        Ok(SwapXKeys {
+            reverse: reverse_xpriv,
+            submarine: submarine_xpriv,
+            chain: chain_xpriv,
+            fingerprint,
+            network,
+        })
+    }
+
+    pub fn derive_submarine_key(&self, index: u64) -> Result<SwapKey, Error> {
+        let network_path = get_network_path(self.network);
+        let base_path = build_base_path(
+            DerivationPurpose::Compatible,
+            network_path,
+            SUBMARINE_SWAP_ACCOUNT,
+        );
+        let full_path = DerivationPath::from_str(&format!("{base_path}/{index}"))?;
+        let mut swap_key = SwapKey::from_priv_key(
+            &self.submarine,
+            DerivationPath::from_str(&format!("m/{index}"))?,
+        )?;
+        swap_key.path = full_path;
+        swap_key.fingerprint = self.fingerprint;
+        Ok(swap_key)
+    }
+
+    pub fn derive_reverse_key(&self, index: u64) -> Result<SwapKey, Error> {
+        let network_path = get_network_path(self.network);
+        let base_path = build_base_path(
+            DerivationPurpose::Native,
+            network_path,
+            REVERSE_SWAP_ACCOUNT,
+        );
+        let full_path = DerivationPath::from_str(&format!("{base_path}/{index}"))?;
+        let mut swap_key = SwapKey::from_priv_key(
+            &self.reverse,
+            DerivationPath::from_str(&format!("m/{index}"))?,
+        )?;
+        swap_key.path = full_path;
+        swap_key.fingerprint = self.fingerprint;
+        Ok(swap_key)
+    }
+
+    pub fn derive_chain_key(&self, index: u64) -> Result<SwapKey, Error> {
+        let network_path = get_network_path(self.network);
+        let base_path =
+            build_base_path(DerivationPurpose::Taproot, network_path, CHAIN_SWAP_ACCOUNT);
+        let full_path = DerivationPath::from_str(&format!("{base_path}/{index}"))?;
+        let mut swap_key = SwapKey::from_priv_key(
+            &self.chain,
+            DerivationPath::from_str(&format!("m/{index}"))?,
+        )?;
+        swap_key.path = full_path;
+        swap_key.fingerprint = self.fingerprint;
+        Ok(swap_key)
+    }
+
+    pub fn get_reverse_xpub(&self) -> Xpub {
+        let secp = Secp256k1::new();
+        Xpub::from_priv(&secp, &self.reverse)
+    }
+
+    pub fn get_submarine_xpub(&self) -> Xpub {
+        let secp = Secp256k1::new();
+        Xpub::from_priv(&secp, &self.submarine)
+    }
+
+    pub fn get_chain_xpub(&self) -> Xpub {
+        let secp = Secp256k1::new();
+        Xpub::from_priv(&secp, &self.chain)
+    }
+}
 
 /// Derived Keypair for use in a script.
 /// Can be used directly with Bitcoin structures
 /// Can be converted .into() LiquidSwapKey
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/// Recommended to use SwapXKeys to derive SwapKeys for each swap rather than this struct and its methods directly
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SwapKey {
     pub fingerprint: Fingerprint,
     pub path: DerivationPath,
     pub keypair: Keypair,
 }
 impl SwapKey {
+    pub fn from_priv_key(root_xpriv: &Xpriv, path: DerivationPath) -> Result<SwapKey, Error> {
+        let secp = Secp256k1::new();
+        let fingerprint = root_xpriv.fingerprint(&secp);
+        let child_xprv = root_xpriv.derive_priv(&secp, &path)?;
+        let key_pair = Keypair::from_secret_key(&secp, &child_xprv.private_key);
+
+        Ok(SwapKey {
+            path,
+            fingerprint,
+            keypair: key_pair,
+        })
+    }
+
+    fn from_mnemonic(
+        mnemonic: &str,
+        passphrase: &str,
+        network: Chain,
+        path: DerivationPath,
+    ) -> Result<SwapKey, Error> {
+        let (secp, root) = derive_root_xpriv(mnemonic, passphrase, network)?;
+        let fingerprint = root.fingerprint(&secp);
+        let child_xprv = root.derive_priv(&secp, &path)?;
+        let key_pair = Keypair::from_secret_key(&secp, &child_xprv.private_key);
+
+        Ok(SwapKey {
+            path,
+            fingerprint,
+            keypair: key_pair,
+        })
+    }
+
     /// Derives keys for a submarine swap at standardized path
-    /// m/49'/<0;1777;1>/21'/0/*
+    /// m/49'/<0;1>'/21'/0/*
     pub fn from_submarine_account(
         mnemonic: &str,
         passphrase: &str,
         network: Chain,
         index: u64,
     ) -> Result<SwapKey, Error> {
-        let secp = Secp256k1::new();
-        let mnemonic_struct = Mnemonic::from_str(mnemonic)?;
-        let seed = mnemonic_struct.to_seed(passphrase);
-        let root = Xpriv::new_master(bitcoin::Network::Testnet, &seed)?;
-        let fingerprint = root.fingerprint(&secp);
-        let purpose = DerivationPurpose::Compatible;
-        let network_path = match network {
-            Chain::Bitcoin(BitcoinChain::Bitcoin) => BITCOIN_NETWORK_PATH,
-            Chain::Liquid(LiquidChain::Liquid) => LIQUID_NETWORK_PATH,
-            _ => TESTNET_NETWORK_PATH,
-        };
-        let derivation_path =
-            format!("m/{purpose}h/{network_path}h/{SUBMARINE_SWAP_ACCOUNT}h/0/{index}");
-        let path = DerivationPath::from_str(&derivation_path)?;
-        let child_xprv = root.derive_priv(&secp, &path)?;
-
-        let key_pair = Keypair::from_secret_key(&secp, &child_xprv.private_key);
-
-        Ok(SwapKey {
-            path,
-            fingerprint,
-            keypair: key_pair,
-        })
+        Self::from_mnemonic(
+            mnemonic,
+            passphrase,
+            network,
+            DerivationPath::from_str(&format!(
+                "{}/{index}",
+                build_base_path(
+                    DerivationPurpose::Compatible,
+                    get_network_path(network.clone()),
+                    SUBMARINE_SWAP_ACCOUNT,
+                )
+            ))?,
+        )
     }
     /// Derives keys for a reverse swap at standardized path
-    /// m/49'/<0;1777;1>/42'/0/*
+    /// m/84'/<0;1>'/42'/0/*
     pub fn from_reverse_account(
         mnemonic: &str,
         passphrase: &str,
         network: Chain,
         index: u64,
     ) -> Result<SwapKey, Error> {
-        let secp = Secp256k1::new();
-        let mnemonic_struct = Mnemonic::from_str(mnemonic)?;
-
-        let seed = mnemonic_struct.to_seed(passphrase);
-        let root = Xpriv::new_master(bitcoin::Network::Testnet, &seed)?;
-        let fingerprint = root.fingerprint(&secp);
-        let purpose = DerivationPurpose::Native;
-        let network_path = match network {
-            Chain::Bitcoin(BitcoinChain::Bitcoin) => BITCOIN_NETWORK_PATH,
-            Chain::Liquid(LiquidChain::Liquid) => LIQUID_NETWORK_PATH,
-            _ => TESTNET_NETWORK_PATH,
-        };
-        // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
-        let derivation_path =
-            format!("m/{purpose}h/{network_path}h/{REVERSE_SWAP_ACCOUNT}h/0/{index}");
-        let path = DerivationPath::from_str(&derivation_path)?;
-        let child_xprv = root.derive_priv(&secp, &path)?;
-
-        let key_pair = Keypair::from_secret_key(&secp, &child_xprv.private_key);
-
-        Ok(SwapKey {
-            path,
-            fingerprint,
-            keypair: key_pair,
-        })
+        Self::from_mnemonic(
+            mnemonic,
+            passphrase,
+            network,
+            DerivationPath::from_str(&format!(
+                "{}/{index}",
+                build_base_path(
+                    DerivationPurpose::Native,
+                    get_network_path(network.clone()),
+                    REVERSE_SWAP_ACCOUNT,
+                )
+            ))?,
+        )
     }
     /// Derives keys for a chain swap at standardized path
+    /// m/86'/<0;1>'/84'/0/*
     pub fn from_chain_account(
         mnemonic: &str,
         passphrase: &str,
         network: Chain,
         index: u64,
     ) -> Result<SwapKey, Error> {
-        let secp = Secp256k1::new();
-        let mnemonic_struct = Mnemonic::from_str(mnemonic)?;
-
-        let seed = mnemonic_struct.to_seed(passphrase);
-        let root = Xpriv::new_master(bitcoin::Network::Testnet, &seed)?;
-        let fingerprint = root.fingerprint(&secp);
-        let purpose = DerivationPurpose::Taproot;
-        let network_path = match network {
-            Chain::Bitcoin(BitcoinChain::Bitcoin) => BITCOIN_NETWORK_PATH,
-            Chain::Liquid(LiquidChain::Liquid) => LIQUID_NETWORK_PATH,
-            _ => TESTNET_NETWORK_PATH,
-        };
-        // m/84h/1h/42h/<0;1>/*  - child key for segwit wallet - xprv
-        let derivation_path =
-            format!("m/{purpose}h/{network_path}h/{CHAIN_SWAP_ACCOUNT}h/0/{index}");
-        let path = DerivationPath::from_str(&derivation_path)?;
-        let child_xprv = root.derive_priv(&secp, &path)?;
-
-        let key_pair = Keypair::from_secret_key(&secp, &child_xprv.private_key);
-
-        Ok(SwapKey {
-            path,
-            fingerprint,
-            keypair: key_pair,
-        })
+        Self::from_mnemonic(
+            mnemonic,
+            passphrase,
+            network,
+            DerivationPath::from_str(&format!(
+                "{}/{index}",
+                build_base_path(
+                    DerivationPurpose::Taproot,
+                    get_network_path(network.clone()),
+                    CHAIN_SWAP_ACCOUNT,
+                )
+            ))?,
+        )
     }
 }
 #[derive(Clone)]
@@ -210,6 +349,8 @@ impl Default for Preimage {
 
 impl Preimage {
     /// Creates a new random preimage
+    /// RECOMMENDED NOT TO USE THIS FUNCTION
+    /// USE FROM_SWAP_KEY INSTEAD
     pub fn new() -> Preimage {
         let preimage = rng_32b();
         let sha256 = sha256::Hash::hash(&preimage);
@@ -268,6 +409,22 @@ impl Preimage {
     /// Converts the preimage value bytes to String
     pub fn to_string(&self) -> Option<String> {
         self.bytes.map(|res| res.to_lower_hex_string())
+    }
+
+    /// Creates a Preimage from a SwapKey's private key hash
+    /// sha256(privateKey(index))
+    /// RECOMMENDED TO ENSURE SWAPS CAN BE RESTORED MORE EASILY
+    pub fn from_swap_key(swap_key: &SwapKey) -> Preimage {
+        let private_key_bytes = swap_key.keypair.secret_key().secret_bytes();
+        let preimage_bytes = sha256::Hash::hash(&private_key_bytes);
+        let preimage_array: [u8; 32] = *preimage_bytes.as_byte_array();
+        let hash160 = hash160::Hash::hash(&preimage_array);
+
+        Preimage {
+            bytes: Some(preimage_array),
+            sha256: preimage_bytes,
+            hash160,
+        }
     }
 }
 
@@ -383,28 +540,97 @@ mod tests {
         assert_eq!(compare.hash160, preimage.hash160);
     }
 
-    // #[macros::test_all]
-    // #[ignore]
-    // fn test_recover() {
-    //     let recovery = BtcSubmarineRecovery {
-    //         id: "y8uGeA".to_string(),
-    //         refund_key: "5416f1e024c191605502017d066786e294f841e711d3d437d13e9d27e40e066e".to_string(),
-    //         redeem_script: "a914046fabc17989627f6ca9c1846af8e470263e712d87632102c929edb654bc1da91001ec27d74d42b5d6a8cf8aef2fab7c55f2eb728eed0d1f6703634d27b1752102c530b4583640ab3df5c75c5ce381c4b747af6bdd6c618db7e5248cb0adcf3a1868ac".to_string(),
-    //     };
-    //     //let file: RefundSwapFile = recovery.try_into();
+    #[macros::test_all]
+    fn test_derive_swap_key_from_xpub() -> Result<(), Error> {
+        let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
+        let network = Chain::Bitcoin(BitcoinChain::Bitcoin);
+        let index = 1;
 
-    //     let file: RefundSwapFile = match BtcSubmarineRecovery::try_into(recovery) {
-    //         Ok(file) => file,
-    //         Err(err) => {
-    //             // Handle the error
-    //             return println!("Error converting: {:?}", err);
-    //         }
-    //     };
+        let chain_swap_key = SwapKey::from_chain_account(mnemonic, "", network, index)?;
+        let reverse_swap_key = SwapKey::from_reverse_account(mnemonic, "", network, index)?;
+        let submarine_swap_key = SwapKey::from_submarine_account(mnemonic, "", network, index)?;
 
-    //     let base_path = "/tmp/boltz-rust";
-    //     file.write_to_file(base_path).unwrap();
-    //     let file_path = base_path.to_owned() + "/" + &file.file_name();
-    //     let file_struct = RefundSwapFile::read_from_file(file_path);
-    //     println!("Refund File: {:?}", file_struct);
-    // }
+        let root_xprivs = SwapXKeys::derive(mnemonic, "", network)?;
+
+        let secp = Secp256k1::new();
+        let child_path = DerivationPath::from_str("m/1")?;
+
+        let chain_xpub = root_xprivs.get_chain_xpub();
+        let chain_derived_xpub = chain_xpub.derive_pub(&secp, &child_path)?;
+        assert_eq!(
+            chain_swap_key.keypair.public_key(),
+            chain_derived_xpub.public_key
+        );
+
+        let reverse_xpub = root_xprivs.get_reverse_xpub();
+        let reverse_derived_xpub = reverse_xpub.derive_pub(&secp, &child_path)?;
+        assert_eq!(
+            reverse_swap_key.keypair.public_key(),
+            reverse_derived_xpub.public_key
+        );
+
+        let submarine_xpub = root_xprivs.get_submarine_xpub();
+        let submarine_derived_xpub = submarine_xpub.derive_pub(&secp, &child_path)?;
+        assert_eq!(
+            submarine_swap_key.keypair.public_key(),
+            submarine_derived_xpub.public_key
+        );
+
+        Ok(())
+    }
+
+    #[macros::test_all]
+    fn test_swap_xkeys_backward_compatibility() -> Result<(), Error> {
+        let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
+        let passphrase = "";
+        let network = Chain::Bitcoin(BitcoinChain::Bitcoin);
+        let indices = vec![0, 1, 5, 10, 100];
+
+        let swap_xkeys = SwapXKeys::derive(mnemonic, passphrase, network)?;
+
+        for index in indices {
+            let chain_key_old = SwapKey::from_chain_account(mnemonic, passphrase, network, index)?;
+            let chain_key_new = swap_xkeys.derive_chain_key(index)?;
+            assert_eq!(chain_key_old.path, chain_key_new.path);
+            assert_eq!(chain_key_old.fingerprint, chain_key_new.fingerprint);
+            assert_eq!(
+                chain_key_old.keypair.public_key(),
+                chain_key_new.keypair.public_key()
+            );
+            assert_eq!(
+                chain_key_old.keypair.secret_key(),
+                chain_key_new.keypair.secret_key()
+            );
+
+            let reverse_key_old =
+                SwapKey::from_reverse_account(mnemonic, passphrase, network, index)?;
+            let reverse_key_new = swap_xkeys.derive_reverse_key(index)?;
+            assert_eq!(reverse_key_old.path, reverse_key_new.path);
+            assert_eq!(reverse_key_old.fingerprint, reverse_key_new.fingerprint);
+            assert_eq!(
+                reverse_key_old.keypair.public_key(),
+                reverse_key_new.keypair.public_key()
+            );
+            assert_eq!(
+                reverse_key_old.keypair.secret_key(),
+                reverse_key_new.keypair.secret_key()
+            );
+
+            let submarine_key_old =
+                SwapKey::from_submarine_account(mnemonic, passphrase, network, index)?;
+            let submarine_key_new = swap_xkeys.derive_submarine_key(index)?;
+            assert_eq!(submarine_key_old.path, submarine_key_new.path);
+            assert_eq!(submarine_key_old.fingerprint, submarine_key_new.fingerprint);
+            assert_eq!(
+                submarine_key_old.keypair.public_key(),
+                submarine_key_new.keypair.public_key()
+            );
+            assert_eq!(
+                submarine_key_old.keypair.secret_key(),
+                submarine_key_new.keypair.secret_key()
+            );
+        }
+
+        Ok(())
+    }
 }
