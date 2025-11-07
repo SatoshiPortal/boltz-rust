@@ -1,8 +1,5 @@
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use bip39::Mnemonic;
@@ -14,7 +11,6 @@ use bitcoin::secp256k1::{Keypair, Secp256k1};
 use elements::secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1};
 use lightning_invoice::Bolt11Invoice;
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 use crate::error::Error;
 use crate::network::{BitcoinChain, Chain, LiquidChain};
@@ -425,35 +421,6 @@ impl Preimage {
             sha256: preimage_bytes,
             hash160,
         }
-    }
-}
-
-/// Boltz standard JSON refund swap file. Can be used to create a file that can be uploaded to boltz.exchange
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RefundSwapFile {
-    pub id: String,
-    pub currency: String,
-    pub redeem_script: String,
-    pub private_key: String,
-    pub timeout_block_height: u32,
-}
-impl RefundSwapFile {
-    pub fn file_name(&self) -> String {
-        format!("boltz-{}.json", self.id)
-    }
-    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
-        let mut full_path = PathBuf::from(path.as_ref());
-        full_path.push(self.file_name());
-        let mut file = File::create(&full_path)?;
-        let json = serde_json::to_string_pretty(self)?;
-        writeln!(file, "{json}")?;
-        Ok(())
-    }
-    pub fn read_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        let mut file = File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        Ok(serde_json::from_str(&contents)?)
     }
 }
 
