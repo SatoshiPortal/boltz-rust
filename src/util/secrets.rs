@@ -221,7 +221,7 @@ impl SwapKey {
                 "{}/{index}",
                 build_base_path(
                     DerivationPurpose::Compatible,
-                    get_network_path(network.clone()),
+                    get_network_path(network),
                     SUBMARINE_SWAP_ACCOUNT,
                 )
             ))?,
@@ -243,7 +243,7 @@ impl SwapKey {
                 "{}/{index}",
                 build_base_path(
                     DerivationPurpose::Native,
-                    get_network_path(network.clone()),
+                    get_network_path(network),
                     REVERSE_SWAP_ACCOUNT,
                 )
             ))?,
@@ -265,7 +265,7 @@ impl SwapKey {
                 "{}/{index}",
                 build_base_path(
                     DerivationPurpose::Taproot,
-                    get_network_path(network.clone()),
+                    get_network_path(network),
                     CHAIN_SWAP_ACCOUNT,
                 )
             ))?,
