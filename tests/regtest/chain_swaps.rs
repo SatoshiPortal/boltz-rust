@@ -163,13 +163,17 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
             .unwrap();
         utils::mine_blocks(1).await.unwrap();
 
-        next_status(&mut rx, "transaction.server.confirmed")
+        let status = next_status(&mut rx, "transaction.server.confirmed")
+            .await
+            .unwrap();
+
+        let lockup_tx = claim_script
+            .parse_lockup_transaction(&status.transaction.unwrap())
             .await
             .unwrap();
 
         log::info!("Server lockup tx is confirmed!");
 
-        sleep(WAIT_TIME).await;
         log::info!("Claiming!");
 
         let swap_params = SwapTransactionParams {
@@ -179,7 +183,8 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
             swap_id: swap_id.clone(),
             options: Some(
                 TransactionOptions::default()
-                    .with_chain_claim(our_refund_keys, lockup_script.clone()),
+                    .with_chain_claim(our_refund_keys, lockup_script.clone())
+                    .with_lockup_tx(lockup_tx),
             ),
             chain_client,
             boltz_client: &boltz_api_v2,

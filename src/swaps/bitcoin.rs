@@ -406,6 +406,48 @@ impl BtcSwapScript {
             .await
     }
 
+    pub(crate) async fn swap_utxo<BC: BitcoinClient + ?Sized>(
+        &self,
+        lockup_tx: Option<&Transaction>,
+        bitcoin_client: &BC,
+        boltz_client: &BoltzApiClientV2,
+        swap_id: &str,
+        tx_kind: SwapTxKind,
+    ) -> Result<(OutPoint, TxOut), Error> {
+        let outpoint = match lockup_tx {
+            Some(tx) => self.find_utxo(tx, bitcoin_client.network()),
+            None => match self.fetch_utxos(bitcoin_client).await {
+                Ok(v) => Ok(v.first().cloned()),
+                Err(_) => {
+                    self.fetch_lockup_utxo_boltz(
+                        bitcoin_client.network(),
+                        boltz_client,
+                        swap_id,
+                        tx_kind,
+                    )
+                    .await
+                }
+            },
+        }?;
+
+        outpoint.ok_or(Error::Protocol("No UTXO found for this script".to_string()))
+    }
+
+    pub(crate) fn find_utxo(
+        &self,
+        tx: &Transaction,
+        network: BitcoinChain,
+    ) -> Result<Option<(OutPoint, TxOut)>, Error> {
+        let address = self.to_address(network)?;
+        for (vout, output) in tx.clone().output.into_iter().enumerate() {
+            if output.script_pubkey == address.script_pubkey() {
+                let outpoint = OutPoint::new(tx.compute_txid(), vout as u32);
+                return Ok(Some((outpoint, output)));
+            }
+        }
+        Ok(None)
+    }
+
     /// Fetch utxo for script from BoltzApi
     pub async fn fetch_lockup_utxo_boltz(
         &self,
@@ -445,15 +487,8 @@ impl BtcSwapScript {
                 "No transaction hex found in boltz response".to_string(),
             ));
         }
-        let address = self.to_address(network)?;
         let tx: Transaction = deserialize(&hex::decode(hex.unwrap())?)?;
-        for (vout, output) in tx.clone().output.into_iter().enumerate() {
-            if output.script_pubkey == address.script_pubkey() {
-                let outpoint_0 = OutPoint::new(tx.compute_txid(), vout as u32);
-                return Ok(Some((outpoint_0, output)));
-            }
-        }
-        Ok(None)
+        self.find_utxo(&tx, network)
     }
 }
 
@@ -488,6 +523,24 @@ impl BtcSwapTx {
         boltz_client: &BoltzApiClientV2,
         swap_id: String,
     ) -> Result<BtcSwapTx, Error> {
+        let utxo = swap_script
+            .swap_utxo(
+                None,
+                bitcoin_client,
+                boltz_client,
+                &swap_id,
+                SwapTxKind::Claim,
+            )
+            .await?;
+        Self::new_claim_with_utxo(swap_script, claim_address, bitcoin_client, utxo)
+    }
+
+    pub(crate) fn new_claim_with_utxo<BC: BitcoinClient + ?Sized>(
+        swap_script: BtcSwapScript,
+        claim_address: String,
+        bitcoin_client: &BC,
+        utxo: (OutPoint, TxOut),
+    ) -> Result<BtcSwapTx, Error> {
         if swap_script.swap_type == SwapType::Submarine {
             return Err(Error::Protocol(
                 "Claim transactions cannot be constructed for Submarine swaps.".to_string(),
@@ -498,31 +551,12 @@ impl BtcSwapTx {
 
         address.is_valid_for_network(bitcoin_client.network().into());
 
-        let utxo_info = match swap_script.fetch_utxos(bitcoin_client).await {
-            Ok(v) => v.first().cloned(),
-            Err(_) => {
-                swap_script
-                    .fetch_lockup_utxo_boltz(
-                        bitcoin_client.network(),
-                        boltz_client,
-                        &swap_id,
-                        SwapTxKind::Claim,
-                    )
-                    .await?
-            }
-        };
-        if let Some(utxo) = utxo_info {
-            Ok(BtcSwapTx {
-                kind: SwapTxKind::Claim,
-                swap_script,
-                output_address: address.assume_checked(),
-                utxos: vec![utxo], // When claiming, we only consider the first utxo
-            })
-        } else {
-            Err(Error::Protocol(
-                "No Bitcoin UTXO detected for this script".to_string(),
-            ))
-        }
+        Ok(BtcSwapTx {
+            kind: SwapTxKind::Claim,
+            swap_script,
+            output_address: address.assume_checked(),
+            utxos: vec![utxo], // When claiming, we only consider the first utxo
+        })
     }
 
     /// Construct a RefundTX corresponding to the swap_script. Only works for Submarine and Chain Swaps.

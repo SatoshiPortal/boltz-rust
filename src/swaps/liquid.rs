@@ -410,6 +410,47 @@ impl LBtcSwapScript {
         liquid_client.get_address_utxo(&address).await
     }
 
+    pub(crate) async fn swap_utxo<LC: LiquidClient + ?Sized>(
+        &self,
+        lockup_tx: Option<&Transaction>,
+        liquid_client: &LC,
+        boltz_client: &BoltzApiClientV2,
+        swap_id: &str,
+        tx_kind: SwapTxKind,
+    ) -> Result<(OutPoint, TxOut), Error> {
+        let utxo = match lockup_tx {
+            Some(tx) => self.find_utxo(tx, liquid_client.network()).await,
+            None => match self.fetch_utxo(liquid_client).await {
+                Ok(Some(r)) => Ok(r),
+                Ok(None) | Err(_) => {
+                    self.fetch_lockup_utxo_boltz(
+                        liquid_client.network(),
+                        boltz_client,
+                        swap_id,
+                        tx_kind,
+                    )
+                    .await
+                }
+            },
+        }?;
+        Ok(utxo)
+    }
+
+    pub(crate) async fn find_utxo(
+        &self,
+        tx: &Transaction,
+        network: LiquidChain,
+    ) -> Result<(OutPoint, TxOut), Error> {
+        let address = self.to_address(network)?;
+        for (vout, output) in tx.clone().output.into_iter().enumerate() {
+            if output.script_pubkey == address.script_pubkey() {
+                let outpoint = OutPoint::new(tx.txid(), vout as u32);
+                return Ok((outpoint, output));
+            }
+        }
+        Err(Error::Protocol("No UTXO found for this script".to_string()))
+    }
+
     /// Fetch utxo for script from BoltzApi
     pub async fn fetch_lockup_utxo_boltz(
         &self,
@@ -451,18 +492,8 @@ impl LBtcSwapScript {
                 "No transaction hex found in boltz response".to_string(),
             ));
         }
-        let address = self.to_address(network)?;
         let tx: Transaction = elements::encode::deserialize(&hex::decode(hex.unwrap())?)?;
-        for (vout, output) in tx.clone().output.into_iter().enumerate() {
-            if output.script_pubkey == address.script_pubkey() {
-                let outpoint_0 = OutPoint::new(tx.txid(), vout as u32);
-
-                return Ok((outpoint_0, output));
-            }
-        }
-        Err(Error::Protocol(
-            "Boltz could not find a Liquid UTXO for script".to_string(),
-        ))
+        self.find_utxo(&tx, network).await
     }
 
     // Get the chain genesis hash. Requires for sighash calculation
@@ -494,6 +525,30 @@ pub struct LBtcSwapTx {
 }
 
 impl LBtcSwapTx {
+    pub(crate) async fn new_claim_with_utxo<LC: LiquidClient + ?Sized>(
+        swap_script: LBtcSwapScript,
+        output_address: String,
+        liquid_client: &LC,
+        utxo: (OutPoint, TxOut),
+    ) -> Result<LBtcSwapTx, Error> {
+        if swap_script.swap_type == SwapType::Submarine {
+            return Err(Error::Protocol(
+                "Claim transactions cannot be constructed for Submarine swaps.".to_string(),
+            ));
+        }
+
+        let genesis_hash = liquid_client.get_genesis_hash().await?;
+
+        Ok(LBtcSwapTx {
+            kind: SwapTxKind::Claim,
+            swap_script,
+            output_address: Address::from_str(&output_address)?,
+            funding_outpoint: utxo.0,
+            funding_utxo: utxo.1,
+            genesis_hash,
+        })
+    }
+
     /// Craft a new ClaimTx. Only works for Reverse and Chain Swaps.
     pub async fn new_claim<LC: LiquidClient + ?Sized>(
         swap_script: LBtcSwapScript,
@@ -502,36 +557,17 @@ impl LBtcSwapTx {
         boltz_client: &BoltzApiClientV2,
         swap_id: String,
     ) -> Result<LBtcSwapTx, Error> {
-        if swap_script.swap_type == SwapType::Submarine {
-            return Err(Error::Protocol(
-                "Claim transactions cannot be constructed for Submarine swaps.".to_string(),
-            ));
-        }
+        let utxo = swap_script
+            .swap_utxo(
+                None,
+                liquid_client,
+                boltz_client,
+                &swap_id,
+                SwapTxKind::Claim,
+            )
+            .await?;
 
-        let (funding_outpoint, funding_utxo) = match swap_script.fetch_utxo(liquid_client).await {
-            Ok(Some(r)) => r,
-            Ok(None) | Err(_) => {
-                swap_script
-                    .fetch_lockup_utxo_boltz(
-                        liquid_client.network(),
-                        boltz_client,
-                        &swap_id,
-                        SwapTxKind::Claim,
-                    )
-                    .await?
-            }
-        };
-
-        let genesis_hash = liquid_client.get_genesis_hash().await?;
-
-        Ok(LBtcSwapTx {
-            kind: SwapTxKind::Claim,
-            swap_script,
-            output_address: Address::from_str(&output_address)?,
-            funding_outpoint,
-            funding_utxo,
-            genesis_hash,
-        })
+        Self::new_claim_with_utxo(swap_script, output_address, liquid_client, utxo).await
     }
 
     /// Construct a RefundTX corresponding to the swap_script. Only works for Submarine and Chain Swaps.
@@ -549,19 +585,15 @@ impl LBtcSwapTx {
         }
 
         let address = Address::from_str(output_address)?;
-        let (funding_outpoint, funding_utxo) = match swap_script.fetch_utxo(liquid_client).await {
-            Ok(Some(r)) => r,
-            Ok(None) | Err(_) => {
-                swap_script
-                    .fetch_lockup_utxo_boltz(
-                        liquid_client.network(),
-                        boltz_client,
-                        &swap_id,
-                        SwapTxKind::Refund,
-                    )
-                    .await?
-            }
-        };
+        let (funding_outpoint, funding_utxo) = swap_script
+            .swap_utxo(
+                None,
+                liquid_client,
+                boltz_client,
+                &swap_id,
+                SwapTxKind::Refund,
+            )
+            .await?;
 
         let genesis_hash = liquid_client.get_genesis_hash().await?;
 

@@ -31,6 +31,7 @@ struct ChainClaim {
 pub struct TransactionOptions {
     cooperative: bool,
     chain_claim: Option<ChainClaim>,
+    lockup_tx: Option<BtcLikeTransaction>,
 }
 
 impl Default for TransactionOptions {
@@ -38,6 +39,7 @@ impl Default for TransactionOptions {
         Self {
             cooperative: true,
             chain_claim: None,
+            lockup_tx: None,
         }
     }
 }
@@ -59,6 +61,11 @@ impl TransactionOptions {
         });
         self
     }
+
+    pub fn with_lockup_tx(mut self, lockup_tx: BtcLikeTransaction) -> Self {
+        self.lockup_tx = Some(lockup_tx);
+        self
+    }
 }
 
 /// A wrapper for transactions that can be either Bitcoin or Liquid
@@ -69,6 +76,24 @@ pub enum BtcLikeTransaction {
 }
 
 impl BtcLikeTransaction {
+    pub fn from_hex(chain: Chain, hex: &str) -> Result<Self, Error> {
+        let decoded = hex::decode(hex)?;
+        match chain {
+            Chain::Bitcoin(_) => Ok(Self::bitcoin(consensus::deserialize(&decoded)?)),
+            Chain::Liquid(_) => Ok(Self::liquid(elements::encode::deserialize(&decoded)?)),
+        }
+    }
+
+    pub fn from_hex_bitcoin(hex: &str) -> Result<Self, Error> {
+        let decoded = hex::decode(hex)?;
+        Ok(Self::bitcoin(consensus::deserialize(&decoded)?))
+    }
+
+    pub fn from_hex_liquid(hex: &str) -> Result<Self, Error> {
+        let decoded = hex::decode(hex)?;
+        Ok(Self::liquid(elements::encode::deserialize(&decoded)?))
+    }
+
     pub fn bitcoin(tx: BtcTransaction) -> Self {
         Self::Bitcoin(tx)
     }
@@ -149,6 +174,21 @@ impl ChainClient {
             BtcLikeTransaction::Liquid(tx) => {
                 let id = self.require_liquid_client()?.broadcast_tx(tx).await?;
                 Ok(id)
+            }
+        }
+    }
+
+    pub async fn try_broadcast_tx(&self, tx: &BtcLikeTransaction) -> Result<(), Error> {
+        match self.broadcast_tx(tx).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                if e.message().contains("already in block chain")
+                    || e.message().contains("already in utxo set")
+                {
+                    Ok(())
+                } else {
+                    Err(e)
+                }
             }
         }
     }
@@ -369,6 +409,20 @@ impl SwapScript {
         }
     }
 
+    pub async fn parse_lockup_transaction(
+        &self,
+        lockup_info: &TransactionInfo,
+    ) -> Result<BtcLikeTransaction, Error> {
+        let hex = lockup_info
+            .hex
+            .as_ref()
+            .ok_or(Error::Generic("Lockup info is missing".to_string()))?;
+        match self.script {
+            SwapScriptImpl::Bitcoin(_) => BtcLikeTransaction::from_hex_bitcoin(hex),
+            SwapScriptImpl::Liquid(_) => BtcLikeTransaction::from_hex_liquid(hex),
+        }
+    }
+
     pub async fn construct_claim(
         &self,
         preimage: &Preimage,
@@ -377,33 +431,72 @@ impl SwapScript {
         let cooperative = self
             .get_cooperative(
                 SwapTxKind::Claim,
-                params.options,
+                params.options.clone(),
                 params.boltz_client,
                 params.swap_id.clone(),
             )
             .await?;
-        match self {
-            SwapScript::Bitcoin(script) => {
-                let tx = BtcSwapTx::new_claim(
+        let lockup_tx = params.options.clone().and_then(|o| o.lockup_tx);
+        if let Some(lockup_tx) = lockup_tx.clone() {
+            params.chain_client.try_broadcast_tx(&lockup_tx).await?;
+        }
+        match self.script.clone() {
+            SwapScriptImpl::Bitcoin(script) => {
+                let chain_client = params.chain_client.require_bitcoin_client()?;
+
+                let utxo = script
+                    .swap_utxo(
+                        lockup_tx
+                            .as_ref()
+                            .map(|tx| {
+                                tx.as_bitcoin().ok_or(Error::Generic(
+                                    "Lockup transaction is not a Bitcoin transaction".to_string(),
+                                ))
+                            })
+                            .transpose()?,
+                        chain_client,
+                        params.boltz_client,
+                        &params.swap_id,
+                        SwapTxKind::Claim,
+                    )
+                    .await?;
+
+                let tx = BtcSwapTx::new_claim_with_utxo(
                     script.as_ref().clone(),
                     params.output_address.clone(),
-                    params.chain_client.require_bitcoin_client()?,
-                    params.boltz_client,
-                    params.swap_id.clone(),
-                )
-                .await?;
+                    chain_client,
+                    utxo,
+                )?;
 
                 tx.sign_claim(&params.keys, preimage, params.fee, cooperative)
                     .await
                     .map(BtcLikeTransaction::bitcoin)
             }
-            SwapScript::Liquid(script) => {
-                let tx = LBtcSwapTx::new_claim(
+            SwapScriptImpl::Liquid(script) => {
+                let chain_client = params.chain_client.require_liquid_client()?;
+
+                let utxo = script
+                    .swap_utxo(
+                        lockup_tx
+                            .as_ref()
+                            .map(|tx| {
+                                tx.as_liquid().ok_or(Error::Generic(
+                                    "Lockup transaction is not a Liquid transaction".to_string(),
+                                ))
+                            })
+                            .transpose()?,
+                        chain_client,
+                        params.boltz_client,
+                        &params.swap_id,
+                        SwapTxKind::Claim,
+                    )
+                    .await?;
+
+                let tx = LBtcSwapTx::new_claim_with_utxo(
                     script.as_ref().clone(),
                     params.output_address.clone(),
-                    params.chain_client.require_liquid_client()?,
-                    params.boltz_client,
-                    params.swap_id.clone(),
+                    chain_client,
+                    utxo,
                 )
                 .await?;
 

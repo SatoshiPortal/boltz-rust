@@ -9,14 +9,13 @@ use boltz_client::{
         magic_routing::{check_for_mrh, sign_address},
         {SwapScript, SwapTransactionParams},
     },
-    util::{secrets::Preimage, setup_logger, sleep},
+    util::{secrets::Preimage, setup_logger},
     Secp256k1,
 };
 use serial_test::serial;
 use std::sync::Arc;
 
 use crate::regtest::common::*;
-use crate::regtest::WAIT_TIME;
 use crate::utils;
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
@@ -61,6 +60,10 @@ async fn swap(chain: Chain, chain_client: &ChainClient) {
         .unwrap();
     let invoice = reverse_resp.invoice.clone().unwrap();
 
+    reverse_resp
+        .validate(&preimage, &claim_public_key, chain)
+        .unwrap();
+
     let _ = check_for_mrh(&boltz_api_v2, &invoice, chain)
         .await
         .unwrap()
@@ -79,11 +82,14 @@ async fn swap(chain: Chain, chain_client: &ChainClient) {
 
     utils::start_pay_invoice_lnd(reverse_resp.invoice.clone().unwrap());
 
-    next_status(&mut updates, "transaction.mempool")
+    let status = next_status(&mut updates, "transaction.mempool")
         .await
         .unwrap();
 
-    sleep(WAIT_TIME).await;
+    let lockup_tx = swap_script
+        .parse_lockup_transaction(&status.transaction.unwrap())
+        .await
+        .unwrap();
 
     let claim_address = utils::generate_address(chain).await.unwrap();
     let tx = swap_script
@@ -96,7 +102,7 @@ async fn swap(chain: Chain, chain_client: &ChainClient) {
                 output_address: claim_address,
                 chain_client,
                 boltz_client: &boltz_api_v2,
-                options: Some(TransactionOptions::default()),
+                options: Some(TransactionOptions::default().with_lockup_tx(lockup_tx)),
             },
         )
         .await
