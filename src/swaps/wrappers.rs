@@ -4,7 +4,7 @@ use std::sync::Arc;
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::FromHex;
 use bitcoin::secp256k1::Keypair;
-use bitcoin::Transaction as BtcTransaction;
+use bitcoin::{consensus, Transaction as BtcTransaction};
 use elements::Transaction as LbtcTransaction;
 use lightning_invoice::Bolt11Invoice;
 use secp256k1_musig::musig;
@@ -14,6 +14,7 @@ use super::boltz::{
     BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateReverseResponse,
     CreateSubmarineResponse, Side, SwapTxKind, SwapType,
 };
+use crate::boltz::TransactionInfo;
 use crate::error::Error;
 use crate::network::{BitcoinClient, Chain, LiquidClient};
 use crate::swaps::bitcoin::{BtcSwapScript, BtcSwapTx};
@@ -417,9 +418,9 @@ impl SwapScript {
             .hex
             .as_ref()
             .ok_or(Error::Generic("Lockup info is missing".to_string()))?;
-        match self.script {
-            SwapScriptImpl::Bitcoin(_) => BtcLikeTransaction::from_hex_bitcoin(hex),
-            SwapScriptImpl::Liquid(_) => BtcLikeTransaction::from_hex_liquid(hex),
+        match self {
+            SwapScript::Bitcoin(_) => BtcLikeTransaction::from_hex_bitcoin(hex),
+            SwapScript::Liquid(_) => BtcLikeTransaction::from_hex_liquid(hex),
         }
     }
 
@@ -440,8 +441,8 @@ impl SwapScript {
         if let Some(lockup_tx) = lockup_tx.clone() {
             params.chain_client.try_broadcast_tx(&lockup_tx).await?;
         }
-        match self.script.clone() {
-            SwapScriptImpl::Bitcoin(script) => {
+        match self {
+            SwapScript::Bitcoin(script) => {
                 let chain_client = params.chain_client.require_bitcoin_client()?;
 
                 let utxo = script
@@ -472,7 +473,7 @@ impl SwapScript {
                     .await
                     .map(BtcLikeTransaction::bitcoin)
             }
-            SwapScriptImpl::Liquid(script) => {
+            SwapScript::Liquid(script) => {
                 let chain_client = params.chain_client.require_liquid_client()?;
 
                 let utxo = script

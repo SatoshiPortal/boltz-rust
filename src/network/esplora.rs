@@ -161,7 +161,9 @@ impl BitcoinClient for EsploraBitcoinClient {
             .send()
             .await
             .map_err(|e| Error::Esplora(e.to_string()))?;
-        let txid = bitcoin::Txid::from_str(&response.text().await?)?;
+        let raw_text = response.text().await?;
+        let txid = bitcoin::Txid::from_str(&raw_text)
+            .map_err(|e| Error::Esplora(format!("Failed to parse txid {raw_text}: {e}")))?;
         Ok(txid)
     }
     fn network(&self) -> BitcoinChain {
