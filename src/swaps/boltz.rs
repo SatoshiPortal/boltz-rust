@@ -903,7 +903,7 @@ pub struct ClaimDetails {
     pub lockup_address: String,
     pub server_public_key: String,
     pub timeout_block_height: u32,
-    pub blinding_key: String,
+    pub blinding_key: Option<String>,
     pub preimage_hash: String,
 }
 
@@ -915,7 +915,7 @@ pub struct RefundDetails {
     pub lockup_address: String,
     pub server_public_key: String,
     pub timeout_block_height: u32,
-    pub blinding_key: String,
+    pub blinding_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
