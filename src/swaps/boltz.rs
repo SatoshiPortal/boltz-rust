@@ -898,7 +898,7 @@ pub struct Leaf {
 #[serde(rename_all = "camelCase")]
 pub struct ClaimDetails {
     pub tree: SwapTree,
-    pub amount: u64,
+    pub amount: Option<u64>,
     pub key_index: u32,
     pub lockup_address: String,
     pub server_public_key: String,
