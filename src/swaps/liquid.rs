@@ -448,7 +448,9 @@ impl LBtcSwapScript {
                 return Ok((outpoint, output));
             }
         }
-        Err(Error::Protocol("No UTXO found for this script".to_string()))
+        Err(Error::Protocol(
+            "No Liquid UTXO detected for this script".to_string(),
+        ))
     }
 
     /// Fetch utxo for script from BoltzApi

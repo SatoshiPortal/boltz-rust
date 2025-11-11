@@ -96,7 +96,6 @@ async fn swap(chain: Chain, chain_client: &ChainClient) {
         .construct_claim(
             &preimage,
             SwapTransactionParams {
-                swap_id: swap_id.clone(),
                 keys: our_keys,
                 fee: Fee::Absolute(200),
                 output_address: claim_address,

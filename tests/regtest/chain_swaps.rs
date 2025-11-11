@@ -83,6 +83,7 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
     let lockup_details = create_chain_response.clone().lockup_details;
 
     let lockup_script = SwapScript::chain_from_swap_resp(
+        swap_id.clone(),
         from,
         Side::Lockup,
         lockup_details.clone(),
@@ -94,9 +95,14 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
     let refund_address = utils::generate_address(from).await.unwrap();
 
     let claim_details = create_chain_response.claim_details;
-    let claim_script =
-        SwapScript::chain_from_swap_resp(to, Side::Claim, claim_details.clone(), claim_public_key)
-            .unwrap();
+    let claim_script = SwapScript::chain_from_swap_resp(
+        swap_id.clone(),
+        to,
+        Side::Claim,
+        claim_details.clone(),
+        claim_public_key,
+    )
+    .unwrap();
 
     let claim_address = utils::generate_address(to).await.unwrap();
     log::debug!("{claim_address:#?}");
@@ -132,7 +138,6 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
         refund_v2_chain(
             lockup_script.clone(),
             refund_address.clone(),
-            swap_id.clone(),
             our_refund_keys,
             boltz_api_v2.clone(),
             100,
@@ -144,7 +149,6 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
             refund_v2_chain(
                 lockup_script.clone(),
                 refund_address.clone(),
-                swap_id.clone(),
                 our_refund_keys,
                 boltz_api_v2.clone(),
                 1000,
@@ -180,7 +184,6 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
             keys: our_claim_keys,
             output_address: claim_address.clone(),
             fee: Fee::Absolute(1000),
-            swap_id: swap_id.clone(),
             options: Some(
                 TransactionOptions::default()
                     .with_chain_claim(our_refund_keys, lockup_script.clone())
@@ -212,7 +215,6 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
 async fn refund_v2_chain(
     lockup_script: SwapScript,
     refund_address: String,
-    swap_id: String,
     our_refund_keys: Keypair,
     boltz_api_v2: BoltzApiClientV2,
     absolute_fees: u64,
@@ -223,7 +225,6 @@ async fn refund_v2_chain(
             keys: our_refund_keys,
             output_address: refund_address,
             fee: Fee::Absolute(absolute_fees),
-            swap_id: swap_id.clone(),
             chain_client,
             boltz_client: &boltz_api_v2,
             options: None,

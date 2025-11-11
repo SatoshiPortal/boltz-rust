@@ -20,7 +20,6 @@ pub struct SwapScript(swaps_bitcoin::SwapScript);
 pub struct SwapTransactionParams {
     pub output_address: String,
     pub fee: Fee,
-    pub swap_id: String,
     pub keys: Arc<KeyPair>,
     pub chain_client: Arc<ChainClient>,
     pub boltz_client: Arc<BoltzApiClientV2>,
@@ -34,7 +33,6 @@ impl<'a> From<&'a SwapTransactionParams> for swaps_bitcoin::SwapTransactionParam
             keys: params.keys.inner,
             output_address: params.output_address.clone(),
             fee: params.fee,
-            swap_id: params.swap_id.clone(),
             options: params.options.clone().map(|o| {
                 let mut options =
                     swaps_bitcoin::TransactionOptions::default().with_cooperative(o.cooperative);
@@ -81,12 +79,14 @@ impl SwapScript {
 
     #[uniffi::constructor]
     pub fn from_chain(
+        swap_id: String,
         chain: Chain,
         side: Side,
         chain_swap_details: ChainSwapDetails,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
         let script = swaps_bitcoin::SwapScript::chain_from_swap_resp(
+            swap_id,
             chain,
             side,
             chain_swap_details,

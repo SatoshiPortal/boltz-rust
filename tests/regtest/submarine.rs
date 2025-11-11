@@ -108,7 +108,6 @@ async fn v2_submarine(chain_client: &ChainClient, underpay: bool, chain: Chain) 
                 keys: our_keys,
                 output_address: refund_address,
                 fee: Fee::Absolute(1000),
-                swap_id: swap_id.clone(),
                 chain_client,
                 boltz_client: &boltz_api_v2,
                 options: None,

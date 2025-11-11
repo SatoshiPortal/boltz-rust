@@ -3,9 +3,10 @@ use std::sync::Arc;
 
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::FromHex;
+use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::Keypair;
-use bitcoin::{consensus, Transaction as BtcTransaction};
-use elements::Transaction as LbtcTransaction;
+use bitcoin::{consensus, Amount, Transaction as BtcTransaction};
+use elements::{Sequence, Transaction as LbtcTransaction};
 use lightning_invoice::Bolt11Invoice;
 use secp256k1_musig::musig;
 use serde_json::Value;
@@ -14,7 +15,7 @@ use super::boltz::{
     BoltzApiClientV2, ChainSwapDetails, Cooperative, CreateReverseResponse,
     CreateSubmarineResponse, Side, SwapTxKind, SwapType,
 };
-use crate::boltz::TransactionInfo;
+use crate::boltz::{CreateChainResponse, TransactionInfo};
 use crate::error::Error;
 use crate::network::{BitcoinClient, Chain, LiquidClient};
 use crate::swaps::bitcoin::{BtcSwapScript, BtcSwapTx};
@@ -87,6 +88,13 @@ impl BtcLikeTransaction {
     pub fn from_hex_bitcoin(hex: &str) -> Result<Self, Error> {
         let decoded = hex::decode(hex)?;
         Ok(Self::bitcoin(consensus::deserialize(&decoded)?))
+    }
+
+    pub fn signals_rbf(&self) -> bool {
+        match self {
+            Self::Bitcoin(_) => true,
+            Self::Liquid(tx) => tx.input.iter().any(|input| input.sequence != Sequence::MAX),
+        }
     }
 
     pub fn from_hex_liquid(hex: &str) -> Result<Self, Error> {
@@ -208,9 +216,16 @@ pub trait SwapScriptCommon {
 
 /// A wrapper for swap scripts that can be either Bitcoin or Liquid
 #[derive(Clone, Debug)]
-pub enum SwapScript {
+pub enum SwapScriptImpl {
     Bitcoin(Arc<BtcSwapScript>),
     Liquid(Arc<LBtcSwapScript>),
+}
+
+#[derive(Clone, Debug)]
+pub struct SwapScript {
+    pub script: SwapScriptImpl,
+    pub boltz_lockup: Option<Amount>,
+    pub swap_id: String,
 }
 
 #[derive(Clone)]
@@ -218,13 +233,12 @@ pub struct SwapTransactionParams<'a> {
     pub keys: Keypair,
     pub output_address: String,
     pub fee: Fee,
-    pub swap_id: String,
     pub chain_client: &'a ChainClient,
     pub boltz_client: &'a BoltzApiClientV2,
     pub options: Option<TransactionOptions>,
 }
 
-impl SwapScript {
+impl SwapScriptImpl {
     pub fn bitcoin(script: BtcSwapScript) -> Self {
         Self::Bitcoin(Arc::new(script))
     }
@@ -239,24 +253,36 @@ impl SwapScript {
             Self::Liquid(script) => script.as_ref(),
         }
     }
+}
+
+impl SwapScript {
+    pub fn new(script: SwapScriptImpl, boltz_lockup: Option<Amount>, swap_id: String) -> Self {
+        Self {
+            script,
+            boltz_lockup,
+            swap_id,
+        }
+    }
 
     pub fn submarine_from_swap_resp(
         chain: Chain,
         create_swap_response: &CreateSubmarineResponse,
         our_pubkey: bitcoin::PublicKey,
     ) -> Result<Self, Error> {
-        match chain {
+        let script: Result<SwapScriptImpl, Error> = match chain {
             Chain::Bitcoin(_) => {
                 let script =
                     BtcSwapScript::submarine_from_swap_resp(create_swap_response, our_pubkey)?;
-                Ok(Self::bitcoin(script))
+                Ok(SwapScriptImpl::bitcoin(script))
             }
             Chain::Liquid(_) => {
                 let script =
                     LBtcSwapScript::submarine_from_swap_resp(create_swap_response, our_pubkey)?;
-                Ok(Self::liquid(script))
+                Ok(SwapScriptImpl::liquid(script))
             }
-        }
+        };
+        // we dont have to validate our own lockup amounts
+        Ok(Self::new(script?, None, create_swap_response.id.clone()))
     }
 
     pub fn reverse_from_swap_resp(
@@ -264,36 +290,52 @@ impl SwapScript {
         reverse_response: &CreateReverseResponse,
         our_pubkey: bitcoin::PublicKey,
     ) -> Result<Self, Error> {
-        match chain {
+        let script: Result<SwapScriptImpl, Error> = match chain {
             Chain::Bitcoin(_) => {
                 let script = BtcSwapScript::reverse_from_swap_resp(reverse_response, our_pubkey)?;
-                Ok(Self::bitcoin(script))
+                Ok(SwapScriptImpl::bitcoin(script))
             }
             Chain::Liquid(_) => {
                 let script = LBtcSwapScript::reverse_from_swap_resp(reverse_response, our_pubkey)?;
-                Ok(Self::liquid(script))
+                Ok(SwapScriptImpl::liquid(script))
             }
-        }
+        };
+        Ok(Self::new(
+            script?,
+            Some(Amount::from_sat(reverse_response.onchain_amount)),
+            reverse_response.id.clone(),
+        ))
     }
 
     pub fn chain_from_swap_resp(
+        swap_id: String,
         chain: Chain,
         side: Side,
         chain_swap_details: ChainSwapDetails,
         our_pubkey: bitcoin::PublicKey,
     ) -> Result<Self, Error> {
-        match chain {
+        let amount = chain_swap_details.amount;
+        let script: Result<SwapScriptImpl, Error> = match chain {
             Chain::Bitcoin(_) => {
                 let script =
                     BtcSwapScript::chain_from_swap_resp(side, chain_swap_details, our_pubkey)?;
-                Ok(Self::bitcoin(script))
+                Ok(SwapScriptImpl::bitcoin(script))
             }
             Chain::Liquid(_) => {
                 let script =
                     LBtcSwapScript::chain_from_swap_resp(side, chain_swap_details, our_pubkey)?;
-                Ok(Self::liquid(script))
+                Ok(SwapScriptImpl::liquid(script))
             }
-        }
+        };
+        Ok(Self::new(
+            script?,
+            if amount > 0 {
+                Some(Amount::from_sat(amount))
+            } else {
+                None
+            },
+            swap_id,
+        ))
     }
 
     /// Cooperatively claim a submarine swap with Boltz.
@@ -309,7 +351,7 @@ impl SwapScript {
         invoice: &str,
         boltz_api: &BoltzApiClientV2,
     ) -> Result<Value, Error> {
-        if self.common().swap_type() != SwapType::Submarine {
+        if self.script.common().swap_type() != SwapType::Submarine {
             return Err(Error::Generic(
                 "can only be called for submarine swaps".to_string(),
             ));
@@ -332,7 +374,7 @@ impl SwapScript {
         }
 
         // Generate partial signature
-        let (partial_sig, pub_nonce) = self.common().partial_sign(
+        let (partial_sig, pub_nonce) = self.script.common().partial_sign(
             keys,
             &claim_tx_response.pub_nonce.to_string(),
             &claim_tx_response.transaction_hash.to_string(),
@@ -351,14 +393,13 @@ impl SwapScript {
     pub async fn cooperative_chain_claim<'a>(
         &self,
         our_refund_keys: &Keypair,
-        swap_id: &String,
         boltz_api: &'a BoltzApiClientV2,
     ) -> Result<Cooperative<'a>, Error> {
         let signature: Option<(musig::PartialSignature, musig::PublicNonce)> = match boltz_api
-            .get_chain_claim_tx_details(swap_id)
+            .get_chain_claim_tx_details(&self.swap_id)
             .await
         {
-            Ok(claim_tx_response) => Some(self.common().partial_sign(
+            Ok(claim_tx_response) => Some(self.script.common().partial_sign(
                 our_refund_keys,
                 &claim_tx_response.pub_nonce,
                 &claim_tx_response.transaction_hash,
@@ -374,7 +415,7 @@ impl SwapScript {
 
         Ok(Cooperative {
             boltz_api,
-            swap_id: swap_id.clone(),
+            swap_id: self.swap_id.clone(),
             signature,
         })
     }
@@ -384,29 +425,38 @@ impl SwapScript {
         tx_kind: SwapTxKind,
         options: Option<TransactionOptions>,
         boltz_client: &'a BoltzApiClientV2,
-        swap_id: String,
     ) -> Result<Option<Cooperative<'a>>, Error> {
         let o = options.unwrap_or_default();
         match o.cooperative {
-            true => match (self.common().swap_type(), tx_kind) {
+            true => match (self.script.common().swap_type(), tx_kind) {
                 (SwapType::Chain, SwapTxKind::Claim) => {
                     let claim = o.chain_claim.ok_or(Error::Generic(
                         "Chain claim options are missing".to_string(),
                     ))?;
                     claim
                         .lockup_script
-                        .cooperative_chain_claim(&claim.refund_keys, &swap_id, boltz_client)
+                        .cooperative_chain_claim(&claim.refund_keys, boltz_client)
                         .await
                         .map(Option::Some)
                 }
                 _ => Ok(Some(Cooperative {
                     boltz_api: boltz_client,
-                    swap_id,
+                    swap_id: self.swap_id.clone(),
                     signature: None,
                 })),
             },
             false => Ok(None),
         }
+    }
+
+    pub async fn check_lockup(
+        &self,
+        chain_client: &ChainClient,
+        lockup_tx: &BtcLikeTransaction,
+    ) -> Result<(), Error> {
+        chain_client.try_broadcast_tx(lockup_tx).await?;
+
+        Ok(())
     }
 
     pub async fn parse_lockup_transaction(
@@ -417,10 +467,22 @@ impl SwapScript {
             .hex
             .as_ref()
             .ok_or(Error::Generic("Lockup info is missing".to_string()))?;
-        match self {
-            SwapScript::Bitcoin(_) => BtcLikeTransaction::from_hex_bitcoin(hex),
-            SwapScript::Liquid(_) => BtcLikeTransaction::from_hex_liquid(hex),
+        match self.script.clone() {
+            SwapScriptImpl::Bitcoin(_) => BtcLikeTransaction::from_hex_bitcoin(hex),
+            SwapScriptImpl::Liquid(_) => BtcLikeTransaction::from_hex_liquid(hex),
         }
+    }
+
+    fn validate_amount(&self, amount: Amount) -> Result<(), Error> {
+        if let Some(boltz_lockup) = self.boltz_lockup {
+            if amount != boltz_lockup {
+                return Err(Error::Protocol(format!(
+                    "Lockup amount mismatch: {} != {}",
+                    amount, boltz_lockup
+                )));
+            }
+        }
+        Ok(())
     }
 
     pub async fn construct_claim(
@@ -433,15 +495,14 @@ impl SwapScript {
                 SwapTxKind::Claim,
                 params.options.clone(),
                 params.boltz_client,
-                params.swap_id.clone(),
             )
             .await?;
         let lockup_tx = params.options.clone().and_then(|o| o.lockup_tx);
         if let Some(lockup_tx) = lockup_tx.clone() {
             params.chain_client.try_broadcast_tx(&lockup_tx).await?;
         }
-        match self {
-            SwapScript::Bitcoin(script) => {
+        match self.script.clone() {
+            SwapScriptImpl::Bitcoin(script) => {
                 let chain_client = params.chain_client.require_bitcoin_client()?;
 
                 let utxo = script
@@ -456,10 +517,12 @@ impl SwapScript {
                             .transpose()?,
                         chain_client,
                         params.boltz_client,
-                        &params.swap_id,
+                        &self.swap_id,
                         SwapTxKind::Claim,
                     )
                     .await?;
+
+                self.validate_amount(utxo.1.value)?;
 
                 let tx = BtcSwapTx::new_claim_with_utxo(
                     script.as_ref().clone(),
@@ -472,7 +535,7 @@ impl SwapScript {
                     .await
                     .map(BtcLikeTransaction::bitcoin)
             }
-            SwapScript::Liquid(script) => {
+            SwapScriptImpl::Liquid(script) => {
                 let chain_client = params.chain_client.require_liquid_client()?;
 
                 let utxo = script
@@ -487,10 +550,16 @@ impl SwapScript {
                             .transpose()?,
                         chain_client,
                         params.boltz_client,
-                        &params.swap_id,
+                        &self.swap_id,
                         SwapTxKind::Claim,
                     )
                     .await?;
+
+                if self.boltz_lockup.is_some() {
+                    let secp = Secp256k1::new();
+                    let secrets = utxo.1.unblind(&secp, script.blinding_key.secret_key())?;
+                    self.validate_amount(Amount::from_sat(secrets.value))?;
+                }
 
                 let tx = LBtcSwapTx::new_claim_with_utxo(
                     script.as_ref().clone(),
@@ -512,34 +581,30 @@ impl SwapScript {
         params: SwapTransactionParams<'_>,
     ) -> Result<BtcLikeTransaction, Error> {
         let cooperative = self
-            .get_cooperative(
-                SwapTxKind::Refund,
-                params.options,
-                params.boltz_client,
-                params.swap_id.clone(),
-            )
+            .get_cooperative(SwapTxKind::Refund, params.options, params.boltz_client)
             .await?;
-        match self {
-            SwapScript::Bitcoin(script) => {
+
+        match self.script.clone() {
+            SwapScriptImpl::Bitcoin(script) => {
                 let tx = BtcSwapTx::new_refund(
                     script.as_ref().clone(),
                     &params.output_address,
                     params.chain_client.require_bitcoin_client()?,
                     params.boltz_client,
-                    params.swap_id.clone(),
+                    self.swap_id.clone(),
                 )
                 .await?;
                 tx.sign_refund(&params.keys, params.fee, cooperative)
                     .await
                     .map(BtcLikeTransaction::bitcoin)
             }
-            SwapScript::Liquid(script) => {
+            SwapScriptImpl::Liquid(script) => {
                 let tx = LBtcSwapTx::new_refund(
                     script.as_ref().clone(),
                     &params.output_address,
                     params.chain_client.require_liquid_client()?,
                     params.boltz_client,
-                    params.swap_id.clone(),
+                    self.swap_id.clone(),
                 )
                 .await?;
                 tx.sign_refund(&params.keys, params.fee, cooperative, true)

@@ -40,6 +40,10 @@ pub enum Error {
     HTTPStatusNotSuccess(reqwest::StatusCode, Value),
 }
 
+pub enum SwapError {
+    UnexpectedAmount(u64, u64),
+}
+
 #[cfg(feature = "electrum")]
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 impl From<electrum_client::Error> for Error {

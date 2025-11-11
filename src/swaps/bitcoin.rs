@@ -430,7 +430,9 @@ impl BtcSwapScript {
             },
         }?;
 
-        outpoint.ok_or(Error::Protocol("No UTXO found for this script".to_string()))
+        outpoint.ok_or(Error::Protocol(
+            "No Bitcoin UTXO detected for this script".to_string(),
+        ))
     }
 
     pub(crate) fn find_utxo(
