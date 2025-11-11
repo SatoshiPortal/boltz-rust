@@ -1,6 +1,6 @@
 [project]
 name = "boltz_client"
-version = "0.3.0"
+version = "0.3.0.post1"
 description = "Boltz Swap library"
 readme = "README.md"
 requires-python = ">=3.10"
