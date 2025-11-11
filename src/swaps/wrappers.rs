@@ -476,7 +476,7 @@ impl SwapScript {
                 let chain_client = params.chain_client.require_liquid_client()?;
 
                 let utxo = script
-                    .swap_utxo(
+                    .fetch_swap_utxo(
                         lockup_tx
                             .as_ref()
                             .map(|tx| {

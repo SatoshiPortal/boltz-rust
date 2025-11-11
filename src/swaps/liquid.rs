@@ -410,7 +410,7 @@ impl LBtcSwapScript {
         liquid_client.get_address_utxo(&address).await
     }
 
-    pub(crate) async fn swap_utxo<LC: LiquidClient + ?Sized>(
+    pub(crate) async fn fetch_swap_utxo<LC: LiquidClient + ?Sized>(
         &self,
         lockup_tx: Option<&Transaction>,
         liquid_client: &LC,
@@ -558,7 +558,7 @@ impl LBtcSwapTx {
         swap_id: String,
     ) -> Result<LBtcSwapTx, Error> {
         let utxo = swap_script
-            .swap_utxo(
+            .fetch_swap_utxo(
                 None,
                 liquid_client,
                 boltz_client,
@@ -586,7 +586,7 @@ impl LBtcSwapTx {
 
         let address = Address::from_str(output_address)?;
         let (funding_outpoint, funding_utxo) = swap_script
-            .swap_utxo(
+            .fetch_swap_utxo(
                 None,
                 liquid_client,
                 boltz_client,
