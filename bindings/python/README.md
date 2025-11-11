@@ -50,6 +50,6 @@ asyncio.run(main())
 
 Complete working examples are available in the `examples/` directory:
 
-- [`submarine.py`](examples/submarine.py) - Lightning to Bitcoin
-- [`reverse.py`](examples/reverse.py) - Bitcoin to Lightning
-- [`chain.py`](examples/chain.py) - Bitcoin to Liquid (and vice versa)
+- [`reverse.py`](https://github.com/SatoshiPortal/boltz-rust/blob/trunk/bindings/python/examples/reverse.py) - Lightning to Bitcoin
+- [`submarine.py`](https://github.com/SatoshiPortal/boltz-rust/blob/trunk/bindings/python/examples/submarine.py) - Bitcoin to Lightning
+- [`chain.py`](https://github.com/SatoshiPortal/boltz-rust/blob/trunk/bindings/python/examples/chain.py) - Bitcoin to Liquid (and vice versa)
