@@ -406,7 +406,7 @@ impl BtcSwapScript {
             .await
     }
 
-    pub(crate) async fn swap_utxo<BC: BitcoinClient + ?Sized>(
+    pub(crate) async fn fetch_swap_utxo<BC: BitcoinClient + ?Sized>(
         &self,
         lockup_tx: Option<&Transaction>,
         bitcoin_client: &BC,
@@ -524,7 +524,7 @@ impl BtcSwapTx {
         swap_id: String,
     ) -> Result<BtcSwapTx, Error> {
         let utxo = swap_script
-            .swap_utxo(
+            .fetch_swap_utxo(
                 None,
                 bitcoin_client,
                 boltz_client,
