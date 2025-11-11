@@ -5,6 +5,11 @@ description = "Boltz Swap library"
 readme = "README.md"
 requires-python = ">=3.10"
 
+[project.urls]
+Homepage = "https://boltz.exchange"
+Repository = "https://github.com/SatoshiPortal/boltz-rust"
+Documentation = "https://docs.boltz.exchange"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
