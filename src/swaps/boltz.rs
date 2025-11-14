@@ -772,11 +772,13 @@ impl BoltzApiClientV2 {
     /// Restore swaps from an xpub
     pub async fn post_swap_restore(
         &self,
-        xpub: &String,
+        xpub: &str,
+        derivation_path: &str,
     ) -> Result<Vec<SwapRestoreResponse>, Error> {
         let data = json!(
             {
                 "xpub": xpub,
+                "derivationPath": derivation_path,
             }
         );
 
