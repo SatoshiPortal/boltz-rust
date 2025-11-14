@@ -12,7 +12,7 @@ use elements::{
     sighash::{Prevouts, SighashCache},
     taproot::{LeafVersion, TapLeafHash, TaprootBuilder, TaprootSpendInfo},
     Address, AssetIssuance, BlockHash, LockTime, OutPoint, SchnorrSig, SchnorrSighashType, Script,
-    Sequence, Transaction, TxIn, TxInWitness, TxOut, TxOutWitness,
+    Sequence, Transaction, TxIn, TxInWitness, TxOut, TxOutSecrets, TxOutWitness,
 };
 use secp256k1_musig::{musig, Scalar};
 use std::str::FromStr;
@@ -43,6 +43,32 @@ use elements::{
     opcodes::all::*,
     script::{Builder as EBuilder, Instruction},
 };
+
+pub(crate) fn find_utxo(tx: &Transaction, script_pubkey: &Script) -> Option<(OutPoint, TxOut)> {
+    for (vout, output) in tx.clone().output.into_iter().enumerate() {
+        if output.script_pubkey == *script_pubkey {
+            let outpoint = OutPoint::new(tx.txid(), vout as u32);
+            return Some((outpoint, output));
+        }
+    }
+    None
+}
+
+pub(crate) fn unblind_utxo(
+    network: LiquidChain,
+    utxo: TxOut,
+    blinding_key: SecretKey,
+) -> Result<TxOutSecrets, Error> {
+    let secp = Secp256k1::new();
+    let secrets = utxo.unblind(&secp, blinding_key)?;
+    if secrets.asset != network.bitcoin() {
+        return Err(Error::Protocol(format!(
+            "Asset is not bitcoin: {}",
+            secrets.asset
+        )));
+    }
+    Ok(secrets)
+}
 
 /// Liquid v2 swap script helper.
 #[derive(Debug, Clone, PartialEq)]
@@ -442,13 +468,9 @@ impl LBtcSwapScript {
         network: LiquidChain,
     ) -> Result<(OutPoint, TxOut), Error> {
         let address = self.to_address(network)?;
-        for (vout, output) in tx.clone().output.into_iter().enumerate() {
-            if output.script_pubkey == address.script_pubkey() {
-                let outpoint = OutPoint::new(tx.txid(), vout as u32);
-                return Ok((outpoint, output));
-            }
-        }
-        Err(Error::Protocol("No UTXO found for this script".to_string()))
+        find_utxo(tx, &address.script_pubkey()).ok_or(Error::Protocol(
+            "No Liquid UTXO detected for this script".to_string(),
+        ))
     }
 
     /// Fetch utxo for script from BoltzApi

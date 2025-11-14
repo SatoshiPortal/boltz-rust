@@ -1,7 +1,8 @@
 use core::fmt;
+use std::str::FromStr;
 
 use crate::error::Error;
-use elements::AddressParams;
+use elements::{AddressParams, AssetId};
 
 #[cfg(feature = "electrum")]
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -59,6 +60,19 @@ pub enum LiquidChain {
     Liquid,
     LiquidTestnet,
     LiquidRegtest,
+}
+
+const ASSET_ID_REGTEST: &str = "5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225";
+const ASSET_ID_TESTNET: &str = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+
+impl LiquidChain {
+    pub fn bitcoin(self) -> AssetId {
+        match self {
+            LiquidChain::Liquid => AssetId::LIQUID_BTC,
+            LiquidChain::LiquidTestnet => AssetId::from_str(ASSET_ID_TESTNET).unwrap(),
+            LiquidChain::LiquidRegtest => AssetId::from_str(ASSET_ID_REGTEST).unwrap(),
+        }
+    }
 }
 
 impl From<LiquidChain> for &'static AddressParams {

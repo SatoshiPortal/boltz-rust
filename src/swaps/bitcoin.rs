@@ -13,7 +13,7 @@ use bitcoin::{
     Address, OutPoint, PublicKey,
 };
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
-use bitcoin::{Amount, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey};
+use bitcoin::{Amount, Script, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey};
 use elements::pset::serialize::Serialize;
 use secp256k1_musig::{
     musig::{self},
@@ -35,6 +35,16 @@ use super::wrappers::SwapScriptCommon;
 
 use crate::network::{BitcoinChain, BitcoinClient};
 use crate::util::fees::{create_tx_with_fee, Fee};
+
+pub(crate) fn find_utxo(tx: &Transaction, script_pubkey: &Script) -> Option<(OutPoint, TxOut)> {
+    for (vout, output) in tx.clone().output.into_iter().enumerate() {
+        if output.script_pubkey == *script_pubkey {
+            let outpoint = OutPoint::new(tx.compute_txid(), vout as u32);
+            return Some((outpoint, output));
+        }
+    }
+    None
+}
 
 /// Bitcoin v2 swap script helper.
 // TODO: This should encode the network at global level.
@@ -430,7 +440,9 @@ impl BtcSwapScript {
             },
         }?;
 
-        outpoint.ok_or(Error::Protocol("No UTXO found for this script".to_string()))
+        outpoint.ok_or(Error::Protocol(
+            "No Bitcoin UTXO detected for this script".to_string(),
+        ))
     }
 
     pub(crate) fn find_utxo(
@@ -439,13 +451,7 @@ impl BtcSwapScript {
         network: BitcoinChain,
     ) -> Result<Option<(OutPoint, TxOut)>, Error> {
         let address = self.to_address(network)?;
-        for (vout, output) in tx.clone().output.into_iter().enumerate() {
-            if output.script_pubkey == address.script_pubkey() {
-                let outpoint = OutPoint::new(tx.compute_txid(), vout as u32);
-                return Ok(Some((outpoint, output)));
-            }
-        }
-        Ok(None)
+        Ok(find_utxo(tx, &address.script_pubkey()))
     }
 
     /// Fetch utxo for script from BoltzApi

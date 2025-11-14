@@ -84,6 +84,11 @@ pub async fn generate_address(chain: Chain) -> Result<String, Box<dyn Error>> {
         .ok_or_else(|| "Invalid response".into())
 }
 
+pub async fn get_blinding_key(chain: Chain, address: &str) -> Result<String, Box<dyn Error>> {
+    let result = json_rpc_request(chain, "dumpblindingkey", json!([address])).await?;
+    Ok(result.as_str().unwrap().to_string())
+}
+
 pub async fn send_to_address(
     chain: Chain,
     address: &str,
