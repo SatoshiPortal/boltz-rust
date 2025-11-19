@@ -1054,12 +1054,13 @@ impl BtcSwapTx {
             .iter()
             .fold(Amount::ZERO, |acc, (_, txo)| acc + txo.value);
         let absolute_fees_amount = Amount::from_sat(absolute_fees);
-        if utxos_amount <= absolute_fees_amount {
-            return Err(Error::Generic(
-                format!("Cannot sign Refund Tx because utxos_amount ({utxos_amount}) <= absolute_fees ({absolute_fees_amount})")
-            ));
-        }
-        let output_amount: Amount = utxos_amount - absolute_fees_amount;
+        let output_amount =
+            utxos_amount
+                .checked_sub(absolute_fees_amount)
+                .ok_or(Error::Protocol(format!(
+                    "Refund output value {} is less than fees {}",
+                    utxos_amount, absolute_fees_amount
+                )))?;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
             value: output_amount,
