@@ -1058,8 +1058,7 @@ impl BtcSwapTx {
             utxos_amount
                 .checked_sub(absolute_fees_amount)
                 .ok_or(Error::Protocol(format!(
-                    "Refund output value {} is less than fees {}",
-                    utxos_amount, absolute_fees_amount
+                    "Refund output value {utxos_amount} is less than fees {absolute_fees_amount}"
                 )))?;
         let output: TxOut = TxOut {
             script_pubkey: self.output_address.script_pubkey(),
