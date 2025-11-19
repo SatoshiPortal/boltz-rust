@@ -817,9 +817,18 @@ impl BtcSwapTx {
 
         let destination_spk = self.output_address.script_pubkey();
 
+        let output_value = utxo
+            .1
+            .value
+            .checked_sub(Amount::from_sat(absolute_fees))
+            .ok_or(Error::Protocol(format!(
+                "Claim output value {} is less than fees {}",
+                utxo.1.value, absolute_fees
+            )))?;
+
         let txout = TxOut {
             script_pubkey: destination_spk,
-            value: Amount::from_sat(utxo.1.value.to_sat() - absolute_fees),
+            value: output_value,
         };
 
         let mut claim_tx = Transaction {
