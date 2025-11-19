@@ -814,7 +814,12 @@ impl LBtcSwapTx {
         let (blinded_asset, asset_surjection_proof) =
             exp_asset.blind(&mut rng, &secp, out_abf, &[unblined_utxo])?;
 
-        let output_value = Amount::from_sat(unblined_utxo.value) - Amount::from_sat(absolute_fees);
+        let output_value = Amount::from_sat(unblined_utxo.value)
+            .checked_sub(Amount::from_sat(absolute_fees))
+            .ok_or(Error::Protocol(format!(
+                "Output value {} is less than fees {}",
+                unblined_utxo.value, absolute_fees
+            )))?;
 
         let final_vbf = ValueBlindingFactor::last(
             &secp,
@@ -1101,7 +1106,12 @@ impl LBtcSwapTx {
         let (blinded_asset, asset_surjection_proof) =
             exp_asset.blind(&mut rng, &secp, out_abf, &[unblined_utxo])?;
 
-        let output_value = Amount::from_sat(unblined_utxo.value) - Amount::from_sat(absolute_fees);
+        let output_value = Amount::from_sat(unblined_utxo.value)
+            .checked_sub(Amount::from_sat(absolute_fees))
+            .ok_or(Error::Protocol(format!(
+                "Output value {} is less than fees {}",
+                unblined_utxo.value, absolute_fees
+            )))?;
 
         let final_vbf = ValueBlindingFactor::last(
             &secp,
