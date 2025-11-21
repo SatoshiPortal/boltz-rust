@@ -521,9 +521,21 @@ impl BoltzApiClientV2 {
     pub async fn get_chain_claim_tx_details(
         &self,
         id: &String,
-    ) -> Result<ChainClaimTxResponse, Error> {
+    ) -> Result<Option<ChainClaimTxResponse>, Error> {
         let endpoint = format!("swap/chain/{id}/claim");
-        Ok(serde_json::from_str(&self.get(&endpoint).await?)?)
+        let res = self.get(&endpoint).await?;
+
+        match serde_json::from_str(&res) {
+            Ok(response) => Ok(response),
+            Err(e) => {
+                let error: ErrorResponse = serde_json::from_str(&res)?;
+                if error.error == "server claim succeeded already" {
+                    Ok(None)
+                } else {
+                    Err(Error::JSON(e))
+                }
+            }
+        }
     }
 
     pub async fn post_submarine_claim_tx_details(

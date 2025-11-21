@@ -210,20 +210,19 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
             .unwrap();
 
         chain_client.broadcast_tx(&tx).await.unwrap();
+        log::info!("Successfully broadcasted claim tx!");
 
-        // Constructing a chain tx more than once should work
+        // Constructing a chain tx more than once should work...
         let _tx = claim_script
             .construct_claim(&preimage, swap_params.clone())
             .await
             .unwrap();
-        let tx = claim_script
+        let _tx = claim_script
             .construct_claim(&preimage, swap_params)
             .await
             .unwrap();
 
-        chain_client.broadcast_tx(&tx).await.unwrap();
-
-        log::info!("Successfully broadcasted claim tx!");
+        // ... but broadcasting multiple times will lead to mempool conflicts
 
         next_status(&mut rx, "transaction.claimed").await.unwrap();
         log::info!("Successfully completed chain swap");

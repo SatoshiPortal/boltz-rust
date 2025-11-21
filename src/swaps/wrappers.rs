@@ -416,11 +416,17 @@ impl SwapScript {
             .get_chain_claim_tx_details(swap_id)
             .await
         {
-            Ok(claim_tx_response) => Some(self.script.common().partial_sign(
-                our_refund_keys,
-                &claim_tx_response.pub_nonce,
-                &claim_tx_response.transaction_hash,
-            )?),
+            Ok(claim_tx_response) => {
+                if let Some(claim_tx_response) = claim_tx_response {
+                    Some(self.script.common().partial_sign(
+                        our_refund_keys,
+                        &claim_tx_response.pub_nonce,
+                        &claim_tx_response.transaction_hash,
+                    )?)
+                } else {
+                    None
+                }
+            }
             Err(Error::JSON(e)) => {
                 log::warn!("Failed to parse chain claim tx details: {e} - continuing without signature as we may have already sent it");
                 None
