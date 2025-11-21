@@ -503,7 +503,7 @@ impl SwapScript {
                         (secrets.value, secrets.asset)
                     }
                     (_, _) => {
-                        return Err(Error::Generic("UTXO value is null".to_string()));
+                        return Err(Error::Generic("Inconsistent blinding".to_string()));
                     }
                 };
                 if asset != chain.bitcoin() {
