@@ -107,13 +107,6 @@ impl BtcLikeTransaction {
         Ok(Self::bitcoin(consensus::deserialize(&decoded)?))
     }
 
-    pub fn signals_rbf(&self) -> bool {
-        match self {
-            Self::Bitcoin(_) => true,
-            Self::Liquid(tx) => tx.input.iter().any(|input| input.sequence != Sequence::MAX),
-        }
-    }
-
     pub fn from_hex_liquid(hex: &str) -> Result<Self, Error> {
         let decoded = hex::decode(hex)?;
         Ok(Self::liquid(elements::encode::deserialize(&decoded)?))
