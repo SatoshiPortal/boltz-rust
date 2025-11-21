@@ -6,7 +6,7 @@ use bitcoin::hex::FromHex;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::Keypair;
 use bitcoin::{consensus, Amount, Transaction as BtcTransaction};
-use elements::{confidential, Sequence, Transaction as LbtcTransaction};
+use elements::{confidential, Transaction as LbtcTransaction};
 use lightning_invoice::Bolt11Invoice;
 use secp256k1_musig::musig;
 use serde_json::Value;
