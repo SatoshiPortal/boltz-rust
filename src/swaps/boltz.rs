@@ -784,6 +784,22 @@ impl BoltzApiClientV2 {
             &self.post("swap/restore", data).await?,
         )?)
     }
+
+    /// Restore swaps from an xpub
+    pub async fn post_swap_restore_index(
+        &self,
+        xpub: &String,
+    ) -> Result<SwapRestoreIndexResponse, Error> {
+        let data = json!(
+            {
+                "xpub": xpub,
+            }
+        );
+
+        Ok(serde_json::from_str::<SwapRestoreIndexResponse>(
+            &self.post("swap/restore/index", data).await?,
+        )?)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -938,6 +954,12 @@ pub struct SwapRestoreResponse {
     pub to: String,
     pub claim_details: Option<ClaimDetails>,
     pub refund_details: Option<RefundDetails>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwapRestoreIndexResponse {
+    pub index: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
