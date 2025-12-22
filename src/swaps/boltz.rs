@@ -944,6 +944,7 @@ pub struct RefundDetails {
     pub server_public_key: String,
     pub timeout_block_height: u32,
     pub blinding_key: Option<String>,
+    pub amount: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
