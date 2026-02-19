@@ -943,6 +943,7 @@ pub struct ClaimDetails {
     pub tree: SwapTree,
     pub amount: Option<u64>,
     pub key_index: u32,
+    pub transaction: Option<TransactionOut>,
     pub lockup_address: String,
     pub server_public_key: String,
     pub timeout_block_height: u32,
@@ -955,6 +956,7 @@ pub struct ClaimDetails {
 pub struct RefundDetails {
     pub tree: SwapTree,
     pub key_index: u32,
+    pub transaction: Option<TransactionOut>,
     pub lockup_address: String,
     pub server_public_key: String,
     pub timeout_block_height: u32,
@@ -1831,6 +1833,13 @@ pub struct GetQuoteResponse {
 pub struct TransactionResponse {
     pub id: String,
     pub hex: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionOut {
+    pub id: String,
+    pub vout: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
