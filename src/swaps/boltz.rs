@@ -890,7 +890,7 @@ pub struct CreateSubmarineResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referral_id: Option<String>,
     pub swap_tree: SwapTree,
-    pub timeout_block_height: u64,
+    pub timeout_block_height: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blinding_key: Option<String>,
 }
