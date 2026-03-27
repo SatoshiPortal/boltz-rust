@@ -58,6 +58,8 @@ macros = { version = "1.0.0", package = "boltz-client-macros" }
 futures-util = "0.3.31"
 tokio-tungstenite-wasm = { version = "0.6.0", features = ["rustls-tls-webpki-roots"], optional = true }
 bip85_extended = "1.1.0"
+lightning = "0.2.2"
+bech32 = "0.9.1"
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dependencies]
 electrum-client = { version = "0.21.0", default-features = false, features = ["use-rustls-ring", "proxy"], optional = true }
@@ -68,6 +70,7 @@ js-sys = "0.3.77"
 web-sys = "0.3.77"
 wasm-bindgen-futures = "0.4.50"
 gloo-timers = { version = "0.3.0", features = ["futures"] }
+
 
 
 [dev-dependencies]
