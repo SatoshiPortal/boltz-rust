@@ -3,7 +3,7 @@ use lightning::offers::invoice::Bolt12Invoice;
 
 use crate::error::Error;
 
-const BECH32_BOLT12_INVOICE_HRP: &str = "lni";
+pub const BECH32_BOLT12_INVOICE_HRP: &str = "lni";
 pub fn parse_bolt12_invoice(bolt12_invoice: &str) -> Result<Bolt12Invoice, Error> {
     // TODO: for some reason, upstream Bolt12Invoice::from_str is not supported, thus we do it manually
     let (hrp, data) = bech32::decode_without_checksum(bolt12_invoice)
