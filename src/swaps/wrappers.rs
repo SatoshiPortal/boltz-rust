@@ -7,7 +7,6 @@ use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::Keypair;
 use bitcoin::{consensus, Amount, Transaction as BtcTransaction};
 use elements::{confidential, Transaction as LbtcTransaction};
-use lightning_invoice::Bolt11Invoice;
 use secp256k1_musig::musig;
 use serde_json::Value;
 
@@ -21,8 +20,8 @@ use crate::network::{BitcoinClient, Chain, LiquidChain, LiquidClient, Network};
 use crate::swaps::bitcoin::{BtcSwapScript, BtcSwapTx};
 use crate::swaps::fees::estimate_claim_fee;
 use crate::swaps::liquid::{LBtcSwapScript, LBtcSwapTx};
-use crate::util::bolt12::parse_bolt12_invoice;
 use crate::util::fees::Fee;
+use crate::util::invoice::LightningInvoice;
 use crate::util::secrets::Preimage;
 
 #[derive(Clone, Debug)]
@@ -382,21 +381,8 @@ impl SwapScript {
 
         // Verify preimage matches invoice payment hash
         let preimage_hash = sha256::Hash::hash(&preimage);
-        let invoice_payment_hash_string = match Bolt11Invoice::from_str(invoice) {
-            Ok(invoice) => invoice.payment_hash().to_string(),
-            Err(e1) => {
-                // try bolt12
-                match parse_bolt12_invoice(invoice) {
-                    Ok(invoice) => invoice.payment_hash().to_string(),
-                    Err(e2) => {
-                        return Err(Error::Generic(format!(
-                            "Invalid invoice (neither bolt11 nor bolt12) {e1:?} {e2:?}"
-                        )))
-                    }
-                }
-            }
-        };
-        if invoice_payment_hash_string != preimage_hash.to_string() {
+        let invoice = LightningInvoice::from_str(invoice)?;
+        if invoice.payment_hash() != preimage_hash.to_string() {
             return Err(Error::Protocol(
                 "Preimage does not match invoice payment hash".to_string(),
             ));
