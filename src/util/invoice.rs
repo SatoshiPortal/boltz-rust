@@ -23,7 +23,7 @@ impl FromStr for LightningInvoice {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with(BECH32_BOLT12_INVOICE_HRP) {
+        if s.to_lowercase().starts_with(BECH32_BOLT12_INVOICE_HRP) {
             Ok(LightningInvoice::Bolt12(Box::new(parse_bolt12_invoice(s)?)))
         } else {
             Ok(LightningInvoice::Bolt11(Box::new(
