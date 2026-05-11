@@ -6,7 +6,7 @@ use bitcoin::{
     Amount, Witness, XOnlyPublicKey,
 };
 use elements::{
-    confidential::{Asset, AssetBlindingFactor, ValueBlindingFactor},
+    confidential::{Asset, AssetBlindingFactor, Value, ValueBlindingFactor},
     hex::FromHex,
     secp256k1_zkp::{Secp256k1, SecretKey},
     sighash::{Prevouts, SighashCache},
@@ -60,19 +60,39 @@ pub(crate) fn unblind_utxo(
     blinding_key: SecretKey,
 ) -> Result<TxOutSecrets, Error> {
     let secp = Secp256k1::new();
-    let secrets = utxo.unblind(&secp, blinding_key)?;
-    if secrets.asset != network.bitcoin() {
-        return Err(Error::Protocol(format!(
-            "Asset is not bitcoin: {}",
-            secrets.asset
-        )));
+
+    match (utxo.asset, utxo.value) {
+        (Asset::Explicit(asset_id), Value::Explicit(amount)) => {
+            if asset_id != network.bitcoin() {
+                return Err(Error::Protocol(format!(
+                    "Asset is not bitcoin: {}",
+                    asset_id
+                )));
+            }
+            Ok(TxOutSecrets {
+                asset: asset_id,
+                asset_bf: AssetBlindingFactor::zero(),
+                value: amount,
+                value_bf: ValueBlindingFactor::zero(),
+            })
+        }
+        _ => {
+            let secrets = utxo.unblind(&secp, blinding_key)?;
+            if secrets.asset != network.bitcoin() {
+                return Err(Error::Protocol(format!(
+                    "Asset is not bitcoin: {}",
+                    secrets.asset
+                )));
+            }
+            Ok(secrets)
+        }
     }
-    Ok(secrets)
 }
 
 /// Liquid v2 swap script helper.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LBtcSwapScript {
+    pub network: LiquidChain,
     pub swap_type: SwapType,
     pub side: Option<Side>,
     pub funding_addrs: Option<Address>,
@@ -88,6 +108,7 @@ impl LBtcSwapScript {
     pub fn submarine_from_swap_resp(
         create_swap_response: &CreateSubmarineResponse,
         our_pubkey: PublicKey,
+        network: LiquidChain,
     ) -> Result<Self, Error> {
         let claim_script = Script::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?;
         let refund_script = Script::from_hex(&create_swap_response.swap_tree.refund_leaf.output)?;
@@ -144,6 +165,7 @@ impl LBtcSwapScript {
         let blinding_key = ZKKeyPair::from_seckey_str(&Secp256k1::new(), blinding_str)?;
 
         Ok(Self {
+            network,
             swap_type: SwapType::Submarine,
             side: None,
             funding_addrs: Some(funding_addrs),
@@ -159,6 +181,7 @@ impl LBtcSwapScript {
     pub fn reverse_from_swap_resp(
         reverse_response: &CreateReverseResponse,
         our_pubkey: PublicKey,
+        network: LiquidChain,
     ) -> Result<Self, Error> {
         let claim_script = Script::from_hex(&reverse_response.swap_tree.claim_leaf.output)?;
         let refund_script = Script::from_hex(&reverse_response.swap_tree.refund_leaf.output)?;
@@ -215,6 +238,7 @@ impl LBtcSwapScript {
         let blinding_key = ZKKeyPair::from_seckey_str(&Secp256k1::new(), blinding_str)?;
 
         Ok(Self {
+            network,
             swap_type: SwapType::ReverseSubmarine,
             side: None,
             funding_addrs: Some(funding_addrs),
@@ -231,6 +255,7 @@ impl LBtcSwapScript {
         side: Side,
         chain_swap_details: ChainSwapDetails,
         our_pubkey: PublicKey,
+        network: LiquidChain,
     ) -> Result<Self, Error> {
         let claim_script = Script::from_hex(&chain_swap_details.swap_tree.claim_leaf.output)?;
         let refund_script = Script::from_hex(&chain_swap_details.swap_tree.refund_leaf.output)?;
@@ -292,6 +317,7 @@ impl LBtcSwapScript {
         let blinding_key = ZKKeyPair::from_seckey_str(&Secp256k1::new(), blinding_str)?;
 
         Ok(Self {
+            network,
             swap_type: SwapType::Chain,
             side: Some(side),
             funding_addrs: Some(funding_addrs),
@@ -406,7 +432,7 @@ impl LBtcSwapScript {
 
     /// Get taproot address for the swap script.
     /// Always returns a confidential address
-    pub fn to_address(&self, network: LiquidChain) -> Result<EAddress, Error> {
+    pub fn to_address(&self) -> Result<EAddress, Error> {
         let taproot_spend_info = self.taproot_spendinfo()?;
 
         Ok(EAddress::p2tr(
@@ -414,12 +440,12 @@ impl LBtcSwapScript {
             taproot_spend_info.internal_key(),
             taproot_spend_info.merkle_root(),
             Some(self.blinding_key.public_key()),
-            network.into(),
+            self.network.into(),
         ))
     }
 
-    pub fn validate_address(&self, chain: LiquidChain, address: String) -> Result<(), Error> {
-        let to_address = self.to_address(chain)?;
+    pub fn validate_address(&self, address: String) -> Result<(), Error> {
+        let to_address = self.to_address()?;
         if to_address.to_string() == address {
             Ok(())
         } else {
@@ -432,7 +458,7 @@ impl LBtcSwapScript {
         &self,
         liquid_client: &LC,
     ) -> Result<Option<(OutPoint, TxOut)>, Error> {
-        let address = self.to_address(liquid_client.network())?;
+        let address = self.to_address()?;
         liquid_client.get_address_utxo(&address).await
     }
 
@@ -467,7 +493,7 @@ impl LBtcSwapScript {
         tx: &Transaction,
         network: LiquidChain,
     ) -> Result<(OutPoint, TxOut), Error> {
-        let address = self.to_address(network)?;
+        let address = self.to_address()?;
         find_utxo(tx, &address.script_pubkey()).ok_or(Error::Protocol(
             "No Liquid UTXO detected for this script".to_string(),
         ))
