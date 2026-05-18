@@ -12,6 +12,13 @@ build-release:
 build-python: build-release
 	cd python && uv build
 
+prepare-release-python: build-python
+	cd python && \
+		uvx auditwheel repair dist/*-py3-none-any.whl --wheel-dir dist/ && \
+		rm dist/*-py3-none-any.whl && \
+		uv run --isolated --no-project --with dist/*.whl python -c "import boltz_client" && \
+		uv run --isolated --no-project --with dist/*.tar.gz python -c "import boltz_client"
+
 format-python:
 	# Also formats Python tests
 	cd python && uv run ruff format . ../tests/bindings
