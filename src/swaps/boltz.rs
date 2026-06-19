@@ -1453,26 +1453,26 @@ pub enum SubSwapStates {
     /// Can be the initial state when the invoice was specified in the request that created the swap
     #[serde(rename = "invoice.set")]
     InvoiceSet,
-    /// Boltz successfully paid the invoice.
-    #[serde(rename = "invoice.paid")]
-    InvoicePaid,
     /// Boltz started paying the invoice.
     #[serde(rename = "invoice.pending")]
     InvoicePending,
+    /// Boltz successfully paid the invoice.
+    #[serde(rename = "invoice.paid")]
+    InvoicePaid,
     /// Boltz failed to pay the invoice. In this case the user needs to broadcast a refund
     /// transaction to reclaim the locked up onchain coins.
     #[serde(rename = "invoice.failedToPay")]
     InvoiceFailedToPay,
-    /// Indicates that after the invoice was successfully paid, the onchain were successfully
-    /// claimed by Boltz. This is the final status of a successful Normal Submarine Swap.
-    #[serde(rename = "transaction.claimed")]
-    TransactionClaimed,
     /// Indicates that Boltz is ready for the creation of a cooperative signature for a key path
     /// spend. Taproot Swaps are not claimed immediately by Boltz after the invoice has been paid,
     /// but instead Boltz waits for the API client to post a signature for a key path spend. If the
     /// API client does not cooperate in a key path spend, Boltz will eventually claim via the script path.
     #[serde(rename = "transaction.claim.pending")]
     TransactionClaimPending,
+    /// Indicates that after the invoice was successfully paid, the onchain were successfully
+    /// claimed by Boltz. This is the final status of a successful Normal Submarine Swap.
+    #[serde(rename = "transaction.claimed")]
+    TransactionClaimed,
     /// Indicates the lockup failed, which is usually because the user sent too little.
     #[serde(rename = "transaction.lockupFailed")]
     TransactionLockupFailed,
@@ -1489,11 +1489,11 @@ impl Display for SubSwapStates {
             SubSwapStates::TransactionMempool => "transaction.mempool".to_string(),
             SubSwapStates::TransactionConfirmed => "transaction.confirmed".to_string(),
             SubSwapStates::InvoiceSet => "invoice.set".to_string(),
-            SubSwapStates::InvoicePaid => "invoice.paid".to_string(),
             SubSwapStates::InvoicePending => "invoice.pending".to_string(),
+            SubSwapStates::InvoicePaid => "invoice.paid".to_string(),
             SubSwapStates::InvoiceFailedToPay => "invoice.failedToPay".to_string(),
-            SubSwapStates::TransactionClaimed => "transaction.claimed".to_string(),
             SubSwapStates::TransactionClaimPending => "transaction.claim.pending".to_string(),
+            SubSwapStates::TransactionClaimed => "transaction.claimed".to_string(),
             SubSwapStates::TransactionLockupFailed => "transaction.lockupFailed".to_string(),
             SubSwapStates::SwapExpired => "swap.expired".to_string(),
         };
@@ -1510,11 +1510,11 @@ impl FromStr for SubSwapStates {
             "transaction.mempool" => Ok(SubSwapStates::TransactionMempool),
             "transaction.confirmed" => Ok(SubSwapStates::TransactionConfirmed),
             "invoice.set" => Ok(SubSwapStates::InvoiceSet),
-            "invoice.paid" => Ok(SubSwapStates::InvoicePaid),
             "invoice.pending" => Ok(SubSwapStates::InvoicePending),
+            "invoice.paid" => Ok(SubSwapStates::InvoicePaid),
             "invoice.failedToPay" => Ok(SubSwapStates::InvoiceFailedToPay),
-            "transaction.claimed" => Ok(SubSwapStates::TransactionClaimed),
             "transaction.claim.pending" => Ok(SubSwapStates::TransactionClaimPending),
+            "transaction.claimed" => Ok(SubSwapStates::TransactionClaimed),
             "transaction.lockupFailed" => Ok(SubSwapStates::TransactionLockupFailed),
             "swap.expired" => Ok(SubSwapStates::SwapExpired),
             _ => Err(()),
@@ -1552,15 +1552,15 @@ pub enum RevSwapStates {
     /// currently expire after 50% of the swap timeout window.
     #[serde(rename = "invoice.expired")]
     InvoiceExpired,
-    /// This is the final status of a swap, if the swap expires without the lightning invoice being paid.
-    #[serde(rename = "swap.expired")]
-    SwapExpired,
     /// Set in the unlikely event that Boltz is unable to send the agreed amount of onchain coins
     /// after the user set up the payment to the provided Lightning invoice. If this happens, the
     /// pending Lightning HTLC will also be cancelled. The Lightning bitcoin automatically bounce
     /// back to the user, no further action or refund is required and the user didn't pay any fees.
     #[serde(rename = "transaction.failed")]
     TransactionFailed,
+    /// This is the final status of a swap, if the swap expires without the lightning invoice being paid.
+    #[serde(rename = "swap.expired")]
+    SwapExpired,
     /// This is the final status of a swap, if the user successfully set up the Lightning payment
     /// and Boltz successfully locked up coins onchain, but the Boltz API Client did not claim
     /// the locked oncahin coins before swap expiry. In this case, Boltz will also automatically refund
@@ -1578,8 +1578,8 @@ impl Display for RevSwapStates {
             RevSwapStates::TransactionConfirmed => "transaction.confirmed".to_string(),
             RevSwapStates::InvoiceSettled => "invoice.settled".to_string(),
             RevSwapStates::InvoiceExpired => "invoice.expired".to_string(),
-            RevSwapStates::SwapExpired => "swap.expired".to_string(),
             RevSwapStates::TransactionFailed => "transaction.failed".to_string(),
+            RevSwapStates::SwapExpired => "swap.expired".to_string(),
             RevSwapStates::TransactionRefunded => "transaction.refunded".to_string(),
         };
         write!(f, "{str}")
@@ -1597,8 +1597,8 @@ impl FromStr for RevSwapStates {
             "transaction.confirmed" => Ok(RevSwapStates::TransactionConfirmed),
             "invoice.settled" => Ok(RevSwapStates::InvoiceSettled),
             "invoice.expired" => Ok(RevSwapStates::InvoiceExpired),
-            "swap.expired" => Ok(RevSwapStates::SwapExpired),
             "transaction.failed" => Ok(RevSwapStates::TransactionFailed),
+            "swap.expired" => Ok(RevSwapStates::SwapExpired),
             "transaction.refunded" => Ok(RevSwapStates::TransactionRefunded),
             _ => Err(()),
         }
@@ -1626,6 +1626,10 @@ pub enum ChainSwapStates {
     /// The lockup transaction of the server has been included in a block.
     #[serde(rename = "transaction.server.confirmed")]
     TransactionServerConfirmed,
+    /// Indicates that Boltz is ready for the creation of a cooperative signature for a key path
+    /// spend. This state is entered once Boltz knows the preimage.
+    #[serde(rename = "transaction.claim.pending")]
+    TransactionClaimPending,
     /// The server claimed the coins that the client locked.
     #[serde(rename = "transaction.claimed")]
     TransactionClaimed,
@@ -1660,6 +1664,7 @@ impl Display for ChainSwapStates {
             ChainSwapStates::TransactionServerConfirmed => {
                 "transaction.server.confirmed".to_string()
             }
+            ChainSwapStates::TransactionClaimPending => "transaction.claim.pending".to_string(),
             ChainSwapStates::TransactionClaimed => "transaction.claimed".to_string(),
             ChainSwapStates::TransactionLockupFailed => "transaction.lockupFailed".to_string(),
             ChainSwapStates::SwapExpired => "swap.expired".to_string(),
@@ -1681,6 +1686,7 @@ impl FromStr for ChainSwapStates {
             "transaction.confirmed" => Ok(ChainSwapStates::TransactionConfirmed),
             "transaction.server.mempool" => Ok(ChainSwapStates::TransactionServerMempool),
             "transaction.server.confirmed" => Ok(ChainSwapStates::TransactionServerConfirmed),
+            "transaction.claim.pending" => Ok(ChainSwapStates::TransactionClaimPending),
             "transaction.claimed" => Ok(ChainSwapStates::TransactionClaimed),
             "transaction.lockupFailed" => Ok(ChainSwapStates::TransactionLockupFailed),
             "swap.expired" => Ok(ChainSwapStates::SwapExpired),
