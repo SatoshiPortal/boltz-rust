@@ -62,7 +62,7 @@ lightning = "0.2.2"
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dependencies]
 electrum-client = { version = "0.25.0", default-features = false, features = ["use-rustls-ring", "proxy"], optional = true }
-rustls = { version = "0.23.32", default-features = false, features = ["ring"] }
+rustls = { version = "0.23.32", default-features = false, features = ["ring"], optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
@@ -94,4 +94,4 @@ esplora = []
 electrum = ["dep:electrum-client"]
 # Feature to enable tests that require previous initialization of a regtest environment
 regtest = []
-ws = ["tokio/sync", "tokio/rt", "tokio/macros", "dep:tokio-tungstenite-wasm"]
+ws = ["tokio/sync", "tokio/rt", "tokio/macros", "dep:tokio-tungstenite-wasm", "dep:rustls"]
