@@ -43,9 +43,7 @@ pub fn setup_logger() {
     not(all(target_family = "wasm", target_os = "unknown"))
 ))]
 pub(crate) fn ensure_rustls_crypto_provider() {
-    RUSTLS_CRYPTO_PROVIDER.call_once(|| {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
+    let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
 #[cfg(all(feature = "ws", target_family = "wasm", target_os = "unknown"))]
