@@ -62,6 +62,7 @@ lightning = "0.2.2"
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dependencies]
 electrum-client = { version = "0.25.0", default-features = false, features = ["use-rustls-ring", "proxy"], optional = true }
+rustls = { version = "0.23.32", default-features = false, features = ["ring"] }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }

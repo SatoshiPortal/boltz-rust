@@ -17,6 +17,12 @@ use crate::error::Error;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 static INIT: std::sync::Once = std::sync::Once::new();
 
+#[cfg(all(
+    feature = "ws",
+    not(all(target_family = "wasm", target_os = "unknown"))
+))]
+static RUSTLS_CRYPTO_PROVIDER: std::sync::Once = std::sync::Once::new();
+
 /// Setup function that will only run once, even if called multiple times.
 pub fn setup_logger() {
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -31,6 +37,19 @@ pub fn setup_logger() {
         .init();
     });
 }
+
+#[cfg(all(
+    feature = "ws",
+    not(all(target_family = "wasm", target_os = "unknown"))
+))]
+pub(crate) fn ensure_rustls_crypto_provider() {
+    RUSTLS_CRYPTO_PROVIDER.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
+#[cfg(all(feature = "ws", target_family = "wasm", target_os = "unknown"))]
+pub(crate) fn ensure_rustls_crypto_provider() {}
 
 pub async fn sleep(duration: Duration) {
     #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]

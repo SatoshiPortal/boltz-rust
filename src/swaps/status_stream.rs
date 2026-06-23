@@ -1,6 +1,6 @@
 use crate::boltz::{InvoiceCreated, InvoiceError, SwapStatus, WsRequest, WsResponse};
 use crate::error::Error;
-use crate::util::sleep;
+use crate::util::{ensure_rustls_crypto_provider, sleep};
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, trace, warn};
 use std::collections::{HashMap, HashSet};
@@ -22,6 +22,8 @@ struct RequestPacket {
 
 impl BoltzWsConnection {
     async fn new(url: &str, protocols: Option<&[&str]>) -> Result<Self, Error> {
+        ensure_rustls_crypto_provider();
+
         let ws = if let Some(protocols) = protocols {
             connect_with_protocols(url, protocols).await?
         } else {

@@ -18,6 +18,8 @@
 //! );
 
 use crate::network::Network;
+#[cfg(feature = "ws")]
+use crate::util::ensure_rustls_crypto_provider;
 use crate::{error::Error, network::Chain, util::secrets::Preimage};
 use crate::{BtcSwapScript, LBtcSwapScript};
 use bitcoin::secp256k1;
@@ -376,6 +378,7 @@ impl BoltzApiClientV2 {
     /// Returns the web socket connection to the boltz server
     #[cfg(feature = "ws")]
     pub async fn connect_ws(&self) -> Result<WebSocketStream, Error> {
+        ensure_rustls_crypto_provider();
         Ok(connect(self.get_ws_url()).await?)
     }
 
@@ -385,6 +388,7 @@ impl BoltzApiClientV2 {
         &self,
         protocols: &[&str],
     ) -> Result<WebSocketStream, Error> {
+        ensure_rustls_crypto_provider();
         Ok(connect_with_protocols(self.get_ws_url(), protocols).await?)
     }
 
