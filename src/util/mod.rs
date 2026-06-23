@@ -17,12 +17,6 @@ use crate::error::Error;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 static INIT: std::sync::Once = std::sync::Once::new();
 
-#[cfg(all(
-    feature = "ws",
-    not(all(target_family = "wasm", target_os = "unknown"))
-))]
-static RUSTLS_CRYPTO_PROVIDER: std::sync::Once = std::sync::Once::new();
-
 /// Setup function that will only run once, even if called multiple times.
 pub fn setup_logger() {
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
