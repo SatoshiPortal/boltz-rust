@@ -353,7 +353,7 @@ pub struct CreateSubmarineResponse {
     pub id: String,
     pub referral_id: Option<String>,
     pub swap_tree: SwapTree,
-    pub timeout_block_height: u64,
+    pub timeout_block_height: u32,
     pub blinding_key: Option<String>,
 }
 
