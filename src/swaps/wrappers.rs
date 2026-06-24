@@ -285,14 +285,20 @@ impl SwapScript {
         our_pubkey: bitcoin::PublicKey,
     ) -> Result<Self, Error> {
         let script: Result<SwapScriptImpl, Error> = match chain {
-            Chain::Bitcoin(_) => {
-                let script =
-                    BtcSwapScript::submarine_from_swap_resp(create_swap_response, our_pubkey)?;
+            Chain::Bitcoin(bitcoin_chain) => {
+                let script = BtcSwapScript::submarine_from_swap_resp(
+                    create_swap_response,
+                    our_pubkey,
+                    bitcoin_chain,
+                )?;
                 Ok(SwapScriptImpl::bitcoin(script))
             }
-            Chain::Liquid(_) => {
-                let script =
-                    LBtcSwapScript::submarine_from_swap_resp(create_swap_response, our_pubkey)?;
+            Chain::Liquid(liquid_chain) => {
+                let script = LBtcSwapScript::submarine_from_swap_resp(
+                    create_swap_response,
+                    our_pubkey,
+                    liquid_chain,
+                )?;
                 Ok(SwapScriptImpl::liquid(script))
             }
         };
@@ -306,12 +312,20 @@ impl SwapScript {
         our_pubkey: bitcoin::PublicKey,
     ) -> Result<Self, Error> {
         let script: Result<SwapScriptImpl, Error> = match chain {
-            Chain::Bitcoin(_) => {
-                let script = BtcSwapScript::reverse_from_swap_resp(reverse_response, our_pubkey)?;
+            Chain::Bitcoin(bitcoin_chain) => {
+                let script = BtcSwapScript::reverse_from_swap_resp(
+                    reverse_response,
+                    our_pubkey,
+                    bitcoin_chain,
+                )?;
                 Ok(SwapScriptImpl::bitcoin(script))
             }
-            Chain::Liquid(_) => {
-                let script = LBtcSwapScript::reverse_from_swap_resp(reverse_response, our_pubkey)?;
+            Chain::Liquid(liquid_chain) => {
+                let script = LBtcSwapScript::reverse_from_swap_resp(
+                    reverse_response,
+                    our_pubkey,
+                    liquid_chain,
+                )?;
                 Ok(SwapScriptImpl::liquid(script))
             }
         };
@@ -332,14 +346,22 @@ impl SwapScript {
     ) -> Result<Self, Error> {
         let amount = chain_swap_details.amount;
         let script: Result<SwapScriptImpl, Error> = match chain {
-            Chain::Bitcoin(_) => {
-                let script =
-                    BtcSwapScript::chain_from_swap_resp(side, chain_swap_details, our_pubkey)?;
+            Chain::Bitcoin(bitcoin_chain) => {
+                let script = BtcSwapScript::chain_from_swap_resp(
+                    side,
+                    chain_swap_details,
+                    our_pubkey,
+                    bitcoin_chain,
+                )?;
                 Ok(SwapScriptImpl::bitcoin(script))
             }
-            Chain::Liquid(_) => {
-                let script =
-                    LBtcSwapScript::chain_from_swap_resp(side, chain_swap_details, our_pubkey)?;
+            Chain::Liquid(liquid_chain) => {
+                let script = LBtcSwapScript::chain_from_swap_resp(
+                    side,
+                    chain_swap_details,
+                    our_pubkey,
+                    liquid_chain,
+                )?;
                 Ok(SwapScriptImpl::liquid(script))
             }
         };

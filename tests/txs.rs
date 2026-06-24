@@ -16,6 +16,7 @@ use elements::Address;
 
 mod test_framework;
 use test_framework::{BtcTestFramework, LbtcTestFramework};
+use serial_test::serial;
 
 const FUNDING_AMOUNT: u64 = 10_000;
 
@@ -38,8 +39,8 @@ fn prepare_btc_claim() -> (
     let recvr_keypair = Keypair::new(&secp, &mut thread_rng());
     let sender_keypair = Keypair::new(&secp, &mut thread_rng());
 
-    // create a btc swap script.
     let swap_script = BtcSwapScript {
+        network: BitcoinChain::BitcoinRegtest,
         swap_type: SwapType::ReverseSubmarine,
         side: None,
         funding_addrs: None,
@@ -57,7 +58,7 @@ fn prepare_btc_claim() -> (
 
     // Send coin the swapscript address and confirm tx
     let swap_addrs = swap_script
-        .to_address(BitcoinChain::BitcoinRegtest)
+        .to_address()
         .unwrap();
     let spk = swap_addrs.script_pubkey();
     println!("spk: {spk}");
@@ -112,6 +113,7 @@ fn prepare_btc_claim() -> (
 }
 
 #[test]
+#[serial]
 fn btc_reverse_claim_size() {
     let (_test_framework, _scan_request, swap_tx, _preimage, recvr_keypair, _utxos) =
         prepare_btc_claim();
@@ -124,6 +126,7 @@ fn btc_reverse_claim_size() {
 }
 
 #[tokio::test]
+#[serial]
 async fn btc_reverse_claim() {
     let (test_framework, scan_request, swap_tx, preimage, recvr_keypair, utxos) =
         prepare_btc_claim();
@@ -160,6 +163,7 @@ async fn btc_reverse_claim() {
 }
 
 #[tokio::test]
+#[serial]
 async fn btc_reverse_claim_relative_fee() {
     let (test_framework, scan_request, swap_tx, preimage, recvr_keypair, utxos) =
         prepare_btc_claim();
@@ -217,6 +221,7 @@ fn prepare_btc_refund() -> (
 
     // create a btc swap script.
     let swap_script = BtcSwapScript {
+        network: BitcoinChain::BitcoinRegtest,
         swap_type: SwapType::Submarine,
         side: None,
         funding_addrs: None,
@@ -234,7 +239,7 @@ fn prepare_btc_refund() -> (
 
     // Send coin the swapscript address and confirm tx
     let swap_addrs = swap_script
-        .to_address(BitcoinChain::BitcoinRegtest)
+        .to_address()
         .unwrap();
     test_framework.send_coins(&swap_addrs, Amount::from_sat(10000));
     test_framework.generate_blocks(1);
@@ -280,6 +285,7 @@ fn prepare_btc_refund() -> (
 }
 
 #[test]
+#[serial]
 fn btc_submarine_refund_size() {
     let (_test_framework, _scan_request, swap_tx, sender_keypair, _utxos) = prepare_btc_refund();
 
@@ -291,6 +297,7 @@ fn btc_submarine_refund_size() {
 }
 
 #[tokio::test]
+#[serial]
 async fn btc_submarine_refund() {
     let (test_framework, scan_request, swap_tx, sender_keypair, utxos) = prepare_btc_refund();
     let test_wallet = test_framework.get_test_wallet();
@@ -332,6 +339,7 @@ async fn btc_submarine_refund() {
 }
 
 #[tokio::test]
+#[serial]
 async fn btc_submarine_refund_relative_fee() {
     let (test_framework, scan_request, swap_tx, sender_keypair, utxos) = prepare_btc_refund();
     let test_wallet = test_framework.get_test_wallet();
@@ -399,6 +407,7 @@ fn prepare_lbtc_claim() -> (
 
     // create a btc swap script.
     let swap_script = LBtcSwapScript {
+        network: LiquidChain::LiquidRegtest,
         swap_type: SwapType::ReverseSubmarine,
         side: None,
         funding_addrs: None,
@@ -416,7 +425,7 @@ fn prepare_lbtc_claim() -> (
     };
 
     // Send coin the swapscript address and confirm tx
-    let swap_addrs = swap_script.to_address(LiquidChain::LiquidRegtest).unwrap();
+    let swap_addrs = swap_script.to_address().unwrap();
 
     test_framework.send_coins(&swap_addrs, Amount::from_sat(10000));
     test_framework.generate_blocks(1);
@@ -448,6 +457,7 @@ fn prepare_lbtc_claim() -> (
 }
 
 #[test]
+#[serial]
 fn lbtc_reverse_claim_size() {
     let (
         _test_framework,
@@ -467,6 +477,7 @@ fn lbtc_reverse_claim_size() {
 }
 
 #[tokio::test]
+#[serial]
 async fn lbtc_reverse_claim() {
     let (test_framework, swap_tx, preimage, recvr_keypair, blinding_keypair, swap_addrs, utxo) =
         prepare_lbtc_claim();
@@ -500,6 +511,7 @@ async fn lbtc_reverse_claim() {
 }
 
 #[tokio::test]
+#[serial]
 async fn lbtc_reverse_claim_relative_fee() {
     let (test_framework, swap_tx, preimage, recvr_keypair, blinding_keypair, swap_addrs, utxo) =
         prepare_lbtc_claim();
@@ -551,6 +563,7 @@ fn prepare_lbtc_refund() -> (
 
     // create a btc swap script.
     let swap_script = LBtcSwapScript {
+        network: LiquidChain::LiquidRegtest,
         swap_type: SwapType::Submarine,
         side: None,
         funding_addrs: None,
@@ -568,7 +581,7 @@ fn prepare_lbtc_refund() -> (
     };
 
     // Send coin the swapscript address and confirm tx
-    let swap_addrs = swap_script.to_address(LiquidChain::LiquidRegtest).unwrap();
+    let swap_addrs = swap_script.to_address().unwrap();
     test_framework.send_coins(&swap_addrs, Amount::from_sat(10000));
     test_framework.generate_blocks(1);
 
@@ -599,6 +612,7 @@ fn prepare_lbtc_refund() -> (
 }
 
 #[test]
+#[serial]
 fn lbtc_submarine_refund_size() {
     let (_test_framework, swap_tx, sender_keypair, _blinding_keypair, _swap_addrs, _utxos) =
         prepare_lbtc_refund();
@@ -611,6 +625,7 @@ fn lbtc_submarine_refund_size() {
 }
 
 #[tokio::test]
+#[serial]
 async fn lbtc_submarine_refund() {
     let (test_framework, swap_tx, sender_keypair, blinding_keypair, swap_addrs, utxo) =
         prepare_lbtc_refund();
@@ -639,6 +654,7 @@ async fn lbtc_submarine_refund() {
 }
 
 #[tokio::test]
+#[serial]
 async fn lbtc_submarine_refund_relative_fee() {
     let (test_framework, swap_tx, sender_keypair, blinding_keypair, swap_addrs, utxo) =
         prepare_lbtc_refund();

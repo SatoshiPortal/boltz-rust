@@ -47,9 +47,9 @@ pub(crate) fn find_utxo(tx: &Transaction, script_pubkey: &Script) -> Option<(Out
 }
 
 /// Bitcoin v2 swap script helper.
-// TODO: This should encode the network at global level.
 #[derive(Debug, PartialEq, Clone)]
 pub struct BtcSwapScript {
+    pub network: BitcoinChain,
     pub swap_type: SwapType,
     // pub swap_id: String,
     pub side: Option<Side>,
@@ -66,6 +66,7 @@ impl BtcSwapScript {
     pub fn submarine_from_swap_resp(
         create_swap_response: &CreateSubmarineResponse,
         our_pubkey: PublicKey,
+        network: BitcoinChain,
     ) -> Result<Self, Error> {
         let claim_script = ScriptBuf::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?;
         let refund_script =
@@ -116,8 +117,8 @@ impl BtcSwapScript {
         let funding_addrs = Address::from_str(&create_swap_response.address)?.assume_checked();
 
         Ok(BtcSwapScript {
+            network,
             swap_type: SwapType::Submarine,
-            // swap_id: create_swap_response.id.clone(),
             side: None,
             funding_addrs: Some(funding_addrs),
             hashlock,
@@ -147,6 +148,7 @@ impl BtcSwapScript {
     pub fn reverse_from_swap_resp(
         reverse_response: &CreateReverseResponse,
         our_pubkey: PublicKey,
+        network: BitcoinChain,
     ) -> Result<Self, Error> {
         let claim_script = ScriptBuf::from_hex(&reverse_response.swap_tree.claim_leaf.output)?;
         let refund_script = ScriptBuf::from_hex(&reverse_response.swap_tree.refund_leaf.output)?;
@@ -196,8 +198,8 @@ impl BtcSwapScript {
         let funding_addrs = Address::from_str(&reverse_response.lockup_address)?.assume_checked();
 
         Ok(BtcSwapScript {
+            network,
             swap_type: SwapType::ReverseSubmarine,
-            // swap_id: reverse_response.id.clone(),
             side: None,
             funding_addrs: Some(funding_addrs),
             hashlock,
@@ -212,6 +214,7 @@ impl BtcSwapScript {
         side: Side,
         chain_swap_details: ChainSwapDetails,
         our_pubkey: PublicKey,
+        network: BitcoinChain,
     ) -> Result<Self, Error> {
         let claim_script = ScriptBuf::from_hex(&chain_swap_details.swap_tree.claim_leaf.output)?;
         let refund_script = ScriptBuf::from_hex(&chain_swap_details.swap_tree.refund_leaf.output)?;
@@ -266,8 +269,8 @@ impl BtcSwapScript {
         };
 
         Ok(BtcSwapScript {
+            network,
             swap_type: SwapType::Chain,
-            // swap_id: reverse_response.id.clone(),
             side: Some(side),
             funding_addrs: Some(funding_addrs),
             hashlock,
@@ -364,7 +367,7 @@ impl BtcSwapScript {
             if lockup_xonly_pubkey != claim_key.to_x_only_public_key() {
                 return Err(Error::Protocol(format!(
                     "Taproot construction Failed. Lockup Pubkey: {lockup_xonly_pubkey}, Claim Pubkey {claim_key}"
-                )));
+                )))
             }
 
             log::info!("Taproot creation and verification success!");
@@ -374,11 +377,11 @@ impl BtcSwapScript {
     }
 
     /// Get taproot address for the swap script.
-    pub fn to_address(&self, network: BitcoinChain) -> Result<Address, Error> {
+    pub fn to_address(&self) -> Result<Address, Error> {
         let spend_info = self.taproot_spendinfo()?;
         let output_key = spend_info.output_key();
 
-        let network = match network {
+        let network = match self.network {
             BitcoinChain::Bitcoin => Network::Bitcoin,
             BitcoinChain::BitcoinRegtest => Network::Regtest,
             BitcoinChain::BitcoinTestnet => Network::Testnet,
@@ -387,8 +390,8 @@ impl BtcSwapScript {
         Ok(Address::p2tr_tweaked(output_key, network))
     }
 
-    pub fn validate_address(&self, chain: BitcoinChain, address: String) -> Result<(), Error> {
-        let to_address = self.to_address(chain)?;
+    pub fn validate_address(&self, address: String) -> Result<(), Error> {
+        let to_address = self.to_address()?;
         if to_address.to_string() == address {
             Ok(())
         } else {
@@ -402,7 +405,7 @@ impl BtcSwapScript {
         bitcoin_client: &BC,
     ) -> Result<(u64, i64), Error> {
         bitcoin_client
-            .get_address_balance(&self.to_address(bitcoin_client.network())?)
+            .get_address_balance(&self.to_address()?)
             .await
     }
 
@@ -412,7 +415,7 @@ impl BtcSwapScript {
         bitcoin_client: &BC,
     ) -> Result<Vec<(OutPoint, TxOut)>, Error> {
         bitcoin_client
-            .get_address_utxos(&self.to_address(bitcoin_client.network())?)
+            .get_address_utxos(&self.to_address()?)
             .await
     }
 
@@ -450,7 +453,7 @@ impl BtcSwapScript {
         tx: &Transaction,
         network: BitcoinChain,
     ) -> Result<Option<(OutPoint, TxOut)>, Error> {
-        let address = self.to_address(network)?;
+        let address = self.to_address()?;
         Ok(find_utxo(tx, &address.script_pubkey()))
     }
 
