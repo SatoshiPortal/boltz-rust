@@ -974,6 +974,7 @@ pub struct ClaimDetails {
 #[serde(rename_all = "camelCase")]
 pub struct RefundDetails {
     pub tree: SwapTree,
+    pub amount: Option<u64>,
     pub key_index: u32,
     pub transaction: Option<TransactionOut>,
     pub lockup_address: String,
