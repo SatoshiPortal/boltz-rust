@@ -558,8 +558,9 @@ impl BtcSwapTx {
         }
 
         let address = Address::from_str(&claim_address)?;
-
-        address.is_valid_for_network(bitcoin_client.network().into());
+        if !address.is_valid_for_network(bitcoin_client.network().into()) {
+            return Err(Error::Address("Address validation failed".to_string()));
+        };
 
         Ok(BtcSwapTx {
             kind: SwapTxKind::Claim,
@@ -570,10 +571,16 @@ impl BtcSwapTx {
         })
     }
 
-    /// Add fixed-amount outputs paid in addition to the primary output address.
-    /// The primary output receives the remainder (input - fee - sum of additional
-    /// outputs) and stays at output index 0. All amounts must be non-zero;
-    /// violations error when the transaction is built.
+    /// Add fixed-amount outputs (in satoshis) paid in addition to the primary
+    /// output address. The primary output receives the remainder
+    /// (input - fee - sum of additional outputs) and stays at output index 0,
+    /// with the additional outputs following in the given order.
+    ///
+    /// Calling this again replaces the previously set list. Construction only
+    /// enforces balance (no overflow, no overspend): zero-valued outputs are
+    /// accepted, so meeting dust and relay policy is the broadcaster's
+    /// responsibility. Cooperative signing commits to every output, including
+    /// the additional ones.
     pub fn with_additional_outputs(mut self, additional_outputs: Vec<(Address, u64)>) -> Self {
         self.additional_outputs = additional_outputs;
         self
@@ -813,6 +820,10 @@ impl BtcSwapTx {
 
     /// Build the payment outputs: the primary output (which receives the
     /// remainder) at index 0, followed by any additional fixed-amount outputs.
+    ///
+    /// Zero-valued outputs are consensus-valid and accepted here; construction
+    /// does not guarantee relayability. Meeting node dust and relay policy is
+    /// the broadcaster's responsibility.
     fn create_payment_outputs(
         &self,
         input_value: Amount,
@@ -822,11 +833,6 @@ impl BtcSwapTx {
             self.additional_outputs
                 .iter()
                 .try_fold(0u64, |sum, (_, amount)| {
-                    if *amount == 0 {
-                        return Err(Error::Protocol(
-                            "Additional output amount must be greater than zero.".to_string(),
-                        ));
-                    }
                     sum.checked_add(*amount).ok_or(Error::Protocol(
                         "Additional output amounts overflow.".to_string(),
                     ))
@@ -839,14 +845,6 @@ impl BtcSwapTx {
                 "Output value {} is less than fees {absolute_fees} plus additional outputs {total_additional}",
                 input_value.to_sat()
             )))?;
-
-        // A zero remainder is rejected only when caused by additional outputs;
-        // the historical single-output behavior (input == fee) is preserved.
-        if !self.additional_outputs.is_empty() && primary_value == Amount::ZERO {
-            return Err(Error::Protocol(
-                "Primary output value is zero after fees and additional outputs".to_string(),
-            ));
-        }
 
         let mut outputs = Vec::with_capacity(1 + self.additional_outputs.len());
         outputs.push(TxOut {
@@ -1476,16 +1474,73 @@ mod tests {
     }
 
     #[macros::test_all]
-    fn test_additional_output_zero_amount_rejected() {
+    fn test_additional_output_zero_amount_allowed() {
         let (swap_tx, keys, preimage) =
             swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
         let secp = Secp256k1::new();
 
         let extra_address = p2wpkh_address(&secp);
+        let tx = swap_tx
+            .with_additional_outputs(vec![(extra_address.clone(), 0)])
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap();
+
+        assert_eq!(tx.output.len(), 2);
+        assert_eq!(tx.output[0].value.to_sat(), FUNDING_SAT - FEE_SAT);
+        assert_eq!(tx.output[1].value.to_sat(), 0);
+        assert_eq!(tx.output[1].script_pubkey, extra_address.script_pubkey());
+    }
+
+    #[macros::test_all]
+    fn test_additional_output_one_satoshi_allowed() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
+        let extra_address = p2wpkh_address(&secp);
+        let tx = swap_tx
+            .with_additional_outputs(vec![(extra_address.clone(), 1)])
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap();
+
+        assert_eq!(tx.output.len(), 2);
+        assert_eq!(tx.output[0].value.to_sat(), FUNDING_SAT - FEE_SAT - 1);
+        assert_eq!(tx.output[1].value.to_sat(), 1);
+    }
+
+    #[macros::test_all]
+    fn test_zero_primary_remainder_allowed() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
+        let extra_address = p2wpkh_address(&secp);
+        let primary_script = swap_tx.output_address.script_pubkey();
+        let tx = swap_tx
+            .with_additional_outputs(vec![(extra_address.clone(), FUNDING_SAT - FEE_SAT)])
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap();
+
+        assert_eq!(tx.output.len(), 2);
+        assert_eq!(tx.output[0].value.to_sat(), 0);
+        assert_eq!(tx.output[0].script_pubkey, primary_script);
+        assert_eq!(tx.output[1].value.to_sat(), FUNDING_SAT - FEE_SAT);
+        assert_eq!(tx.output[1].script_pubkey, extra_address.script_pubkey());
+    }
+
+    #[macros::test_all]
+    fn test_additional_outputs_overflow() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
         let err = swap_tx
-            .with_additional_outputs(vec![(extra_address, 0)])
+            .with_additional_outputs(vec![
+                (p2wpkh_address(&secp), u64::MAX),
+                (p2wpkh_address(&secp), 1),
+            ])
             .create_claim(&keys, &preimage, FEE_SAT, false)
             .unwrap_err();
-        assert!(err.message().contains("greater than zero"));
+        assert!(err.message().contains("overflow"));
     }
 }

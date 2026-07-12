@@ -576,11 +576,18 @@ impl LBtcSwapTx {
         })
     }
 
-    /// Add fixed-amount outputs paid in addition to the primary output address.
-    /// The primary output receives the remainder (input - fee - sum of additional
-    /// outputs) and remains the first payment output. All addresses must be
-    /// confidential and all amounts non-zero; violations error when the
-    /// transaction is built.
+    /// Add fixed-amount outputs (in satoshis) paid in addition to the primary
+    /// output address. The primary output receives the remainder
+    /// (input - fee - sum of additional outputs) and remains the first payment
+    /// output, with the additional outputs following in the given order:
+    /// claims order outputs [primary, additions.., fee], refunds
+    /// [fee, primary, additions..].
+    ///
+    /// Calling this again replaces the previously set list. All addresses must
+    /// be confidential and all amounts positive (the rangeproof cannot prove a
+    /// zero value); violations error when the transaction is built.
+    /// Cooperative signing commits to every output, including the additional
+    /// ones.
     pub fn with_additional_outputs(mut self, additional_outputs: Vec<(Address, u64)>) -> Self {
         self.additional_outputs = additional_outputs;
         self
@@ -823,6 +830,11 @@ impl LBtcSwapTx {
     /// the remainder) first, followed by any additional fixed-amount outputs.
     /// The last payment output balances the confidential-transaction blinding
     /// against the input and the explicit fee output.
+    ///
+    /// All payment outputs are confidential and must carry at least 1 satoshi:
+    /// the rangeproof constructor (`TxOut::RANGEPROOF_MIN_VALUE`) cannot prove
+    /// a zero value, so zero-valued outputs are rejected up front with a clear
+    /// error instead of failing deep inside blinding.
     fn create_payment_outputs(
         &self,
         secp: &Secp256k1<elements::secp256k1_zkp::All>,
@@ -854,9 +866,9 @@ impl LBtcSwapTx {
                 unblinded_utxo.value, absolute_fees, total_additional
             )))?;
 
-        // A zero remainder is rejected only when caused by additional outputs;
-        // the historical single-output behavior (input == fee) is preserved.
-        if !self.additional_outputs.is_empty() && primary_value == Amount::ZERO {
+        // A zero primary cannot be blinded (rangeproof minimum is 1 satoshi),
+        // so fail here with a protocol error rather than inside blinding.
+        if primary_value == Amount::ZERO {
             return Err(Error::Protocol(
                 "Primary output value is zero after fees and additional outputs".to_string(),
             ));
@@ -1710,5 +1722,71 @@ mod tests {
             .create_claim(&keys, &preimage, FEE_SAT, false)
             .unwrap_err();
         assert!(err.message().contains("blinding key"));
+    }
+
+    #[macros::test_all]
+    fn test_zero_primary_rejected_without_additional_outputs() {
+        let (swap_tx, keys, preimage, ..) = claim_fixture();
+
+        // input == fee leaves a zero primary, which cannot be blinded.
+        let err = swap_tx
+            .create_claim(&keys, &preimage, FUNDING_SAT, false)
+            .unwrap_err();
+        assert!(err.message().contains("Primary output value is zero"));
+    }
+
+    #[macros::test_all]
+    fn test_zero_primary_rejected_with_additional_outputs() {
+        let (swap_tx, keys, preimage, ..) = claim_fixture();
+        let secp = Secp256k1::new();
+
+        let (extra_address, _) = confidential_address(&secp);
+        let err = swap_tx
+            .with_additional_outputs(vec![(extra_address, FUNDING_SAT - FEE_SAT)])
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap_err();
+        assert!(err.message().contains("Primary output value is zero"));
+    }
+
+    #[macros::test_all]
+    fn test_additional_output_one_satoshi_blinds_and_verifies() {
+        let (swap_tx, keys, preimage, primary_blinder, asset_id) = claim_fixture();
+        let secp = Secp256k1::new();
+
+        let (extra_address, extra_blinder) = confidential_address(&secp);
+        let swap_tx = swap_tx.with_additional_outputs(vec![(extra_address.clone(), 1)]);
+
+        let tx = swap_tx
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap();
+
+        tx.verify_tx_amt_proofs(&secp, &[swap_tx.funding_utxo.clone()])
+            .unwrap();
+
+        assert_eq!(tx.output[1].script_pubkey, extra_address.script_pubkey());
+        let extra = tx.output[1]
+            .unblind(&secp, extra_blinder.secret_key())
+            .unwrap();
+        assert_eq!(extra.value, 1);
+        assert_eq!(extra.asset, asset_id);
+
+        let primary = tx.output[0]
+            .unblind(&secp, primary_blinder.secret_key())
+            .unwrap();
+        assert_eq!(primary.value, FUNDING_SAT - FEE_SAT - 1);
+    }
+
+    #[macros::test_all]
+    fn test_additional_outputs_overflow() {
+        let (swap_tx, keys, preimage, ..) = claim_fixture();
+        let secp = Secp256k1::new();
+
+        let (extra_1, _) = confidential_address(&secp);
+        let (extra_2, _) = confidential_address(&secp);
+        let err = swap_tx
+            .with_additional_outputs(vec![(extra_1, u64::MAX), (extra_2, 1)])
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap_err();
+        assert!(err.message().contains("overflow"));
     }
 }

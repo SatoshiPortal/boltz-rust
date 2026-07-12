@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - Unreleased
+
+Must ship as `0.5.0`: this release is source-breaking and must not be
+published on the `0.4.x` compatibility line. The version bump itself is left
+to the release PR.
+
+### Added
+- Multi-output claim and refund transactions. `BtcSwapTx` and `LBtcSwapTx`
+  gained a `with_additional_outputs` builder taking `(address, satoshis)`
+  pairs; `TransactionOptions::with_additional_outputs` forwards
+  `(String, u64)` pairs through `construct_claim` / `construct_refund`. The
+  primary output receives the remainder (input - fee - sum of additional
+  outputs); additional outputs pay their fixed amounts in the given order.
+  Output ordering: Bitcoin keeps the primary at index 0; Liquid claims order
+  outputs [primary, additions.., fee] and refunds [fee, primary, additions..].
+  Cooperative signing commits to every output.
+
+### Changed
+- Bitcoin transaction construction no longer rejects zero-valued outputs:
+  construction enforces balance (overflow, overspend) but not dust or relay
+  policy, which belongs to the broadcaster.
+- Liquid transaction construction now rejects a zero-valued primary output
+  up front with a clear protocol error (previously it failed deep inside
+  blinding); confidential outputs cannot carry less than 1 satoshi.
+- The wrapper conversions of additional-output address strings validate the
+  address network on Bitcoin and require confidential addresses on Liquid.
+- Fixed `BtcSwapTx::new_claim_with_utxo` silently discarding the result of
+  its claim-address network check; an address for the wrong network is now
+  rejected.
+
+### Breaking
+- `BtcSwapTx` and `LBtcSwapTx` gained a public `additional_outputs` field;
+  struct-literal construction of these types must be updated (the
+  constructors initialize it to an empty vector).
+
 ## [0.4.1]
 
 ### Added
