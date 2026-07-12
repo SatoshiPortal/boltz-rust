@@ -5,7 +5,10 @@ use boltz_client::network::electrum::{ElectrumBitcoinClient, ElectrumLiquidClien
 use boltz_client::network::esplora::{EsploraBitcoinClient, EsploraLiquidClient};
 use boltz_client::{
     network::Chain,
-    swaps::{boltz::CreateSubmarineRequest, ChainClient, SwapScript, SwapTransactionParams},
+    swaps::{
+        boltz::CreateSubmarineRequest, ChainClient, SwapScript, SwapTransactionParams,
+        TransactionOptions,
+    },
     util::{setup_logger, sleep},
 };
 use std::sync::Arc;
@@ -103,18 +106,38 @@ async fn v2_submarine(chain_client: &ChainClient, underpay: bool, chain: Chain) 
             .unwrap();
 
         sleep(WAIT_TIME).await;
+
+        // Refund through the wrapper with an extra fixed-amount output. The
+        // refund stays cooperative (a script-path refund would need the
+        // timelock matured), so Boltz partial-signs the multi-output refund.
+        let additional_outputs = vec![(utils::generate_address(chain).await.unwrap(), 700)];
+        let absolute_fee = 1000;
         let tx = swap_script
             .construct_refund(SwapTransactionParams {
                 keys: our_keys,
-                output_address: refund_address,
-                fee: Fee::Absolute(1000),
+                output_address: refund_address.clone(),
+                fee: Fee::Absolute(absolute_fee),
                 swap_id: swap_id.clone(),
                 chain_client,
                 boltz_client: &boltz_api_v2,
-                options: None,
+                options: Some(
+                    TransactionOptions::default()
+                        .with_additional_outputs(additional_outputs.clone()),
+                ),
             })
             .await
             .unwrap();
+
+        assert_multi_output_tx(
+            &tx,
+            chain,
+            false,
+            &refund_address,
+            &additional_outputs,
+            amount,
+            absolute_fee,
+        )
+        .await;
 
         let txid = chain_client.broadcast_tx(&tx).await.unwrap();
         log::info!("Cooperative Refund Successfully broadcasted: {txid}");

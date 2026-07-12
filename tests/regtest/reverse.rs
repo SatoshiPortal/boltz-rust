@@ -24,7 +24,7 @@ use crate::utils;
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-async fn swap(chain: Chain, chain_client: &ChainClient) {
+async fn swap(chain: Chain, chain_client: &ChainClient, multi_output: bool) {
     let secp = Secp256k1::new();
     let preimage = Preimage::random();
     let our_keys = Keypair::new(&secp, &mut thread_rng());
@@ -96,14 +96,34 @@ async fn swap(chain: Chain, chain_client: &ChainClient) {
 
     let claim_address = utils::generate_address(chain).await.unwrap();
 
+    // A multi-output claim pays two extra fixed-amount outputs and spends
+    // non-cooperatively, so the additional-outputs wrapper path is exercised
+    // without Boltz involvement.
+    let additional_outputs = if multi_output {
+        vec![
+            (utils::generate_address(chain).await.unwrap(), 800),
+            (utils::generate_address(chain).await.unwrap(), 1_200),
+        ]
+    } else {
+        Vec::new()
+    };
+    let absolute_fee = if multi_output { 1_000 } else { 200 };
+    let mut options = TransactionOptions::default().with_lockup_tx(lockup_tx);
+    if multi_output {
+        options = options
+            .with_cooperative(false)
+            .with_additional_outputs(additional_outputs.clone());
+    }
+
+    let onchain_amount = reverse_resp.onchain_amount;
     let params = SwapTransactionParams {
         swap_id: swap_id.clone(),
         keys: our_keys,
-        fee: Fee::Absolute(200),
-        output_address: claim_address,
+        fee: Fee::Absolute(absolute_fee),
+        output_address: claim_address.clone(),
         chain_client,
         boltz_client: &boltz_api_v2,
-        options: Some(TransactionOptions::default().with_lockup_tx(lockup_tx)),
+        options: Some(options),
     };
 
     reverse_resp.onchain_amount += 10;
@@ -119,6 +139,19 @@ async fn swap(chain: Chain, chain_client: &ChainClient) {
         .construct_claim(&preimage, params)
         .await
         .unwrap();
+
+    if multi_output {
+        assert_multi_output_tx(
+            &tx,
+            chain,
+            true,
+            &claim_address,
+            &additional_outputs,
+            onchain_amount,
+            absolute_fee,
+        )
+        .await;
+    }
 
     chain_client.broadcast_tx(&tx).await.unwrap();
 
@@ -222,8 +255,8 @@ async fn swap_mrh(chain: Chain, chain_client: &ChainClient) {
 async fn bitcoin_v2_reverse_electrum() {
     setup_logger();
     let chain_client = create_chain_client_electrum();
-    swap(BTC_CHAIN.into(), &chain_client).await;
-    swap(BTC_CHAIN.into(), &chain_client).await;
+    swap(BTC_CHAIN.into(), &chain_client, false).await;
+    swap(BTC_CHAIN.into(), &chain_client, true).await;
 }
 
 #[macros::async_test_all]
@@ -232,8 +265,8 @@ async fn bitcoin_v2_reverse_electrum() {
 async fn bitcoin_v2_reverse_esplora() {
     setup_logger();
     let chain_client = create_chain_client_esplora();
-    swap(BTC_CHAIN.into(), &chain_client).await;
-    swap(BTC_CHAIN.into(), &chain_client).await;
+    swap(BTC_CHAIN.into(), &chain_client, false).await;
+    swap(BTC_CHAIN.into(), &chain_client, true).await;
 }
 
 #[macros::async_test]
@@ -242,8 +275,8 @@ async fn bitcoin_v2_reverse_esplora() {
 async fn liquid_v2_reverse_electrum() {
     setup_logger();
     let chain_client = create_chain_client_electrum();
-    swap(LBTC_CHAIN.into(), &chain_client).await;
-    swap(LBTC_CHAIN.into(), &chain_client).await;
+    swap(LBTC_CHAIN.into(), &chain_client, false).await;
+    swap(LBTC_CHAIN.into(), &chain_client, true).await;
 }
 
 #[macros::async_test_all]
@@ -252,8 +285,8 @@ async fn liquid_v2_reverse_electrum() {
 async fn liquid_v2_reverse_esplora() {
     setup_logger();
     let chain_client = create_chain_client_esplora();
-    swap(LBTC_CHAIN.into(), &chain_client).await;
-    swap(LBTC_CHAIN.into(), &chain_client).await;
+    swap(LBTC_CHAIN.into(), &chain_client, false).await;
+    swap(LBTC_CHAIN.into(), &chain_client, true).await;
 }
 
 #[macros::async_test_all]

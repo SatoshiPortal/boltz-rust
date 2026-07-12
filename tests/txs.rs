@@ -778,3 +778,154 @@ async fn btc_reverse_claim_multi_output() {
         .unwrap();
     assert_eq!(scan_result.unspents.len(), 0);
 }
+
+#[tokio::test]
+async fn btc_reverse_claim_multi_output_relative_fee() {
+    let (test_framework, scan_request, swap_tx, preimage, recvr_keypair, utxos) =
+        prepare_btc_claim();
+
+    let secp = Secp256k1::new();
+    let extra_keypair = Keypair::new(&secp, &mut thread_rng());
+    let extra_address = bitcoin::Address::p2wpkh(
+        &bitcoin::CompressedPublicKey(extra_keypair.public_key()),
+        bitcoin::Network::Regtest,
+    );
+
+    let swap_tx = swap_tx.with_additional_outputs(vec![(extra_address.clone(), 1_500)]);
+
+    let relative_fee = 1.0;
+    let claim_tx = swap_tx
+        .sign_claim(&recvr_keypair, &preimage, Fee::Relative(relative_fee), None)
+        .await
+        .unwrap();
+
+    let claim_tx_fee = utxos
+        .iter()
+        .fold(0, |acc, (_, out)| acc + out.value.to_sat())
+        - claim_tx
+            .output
+            .iter()
+            .map(|out| out.value.to_sat())
+            .sum::<u64>();
+    assert_eq!(relative_fee, claim_tx_fee as f64 / claim_tx.vsize() as f64);
+    // The additional output must be part of the weight the relative fee pays
+    // for: the single-output non-cooperative claim is 141 vB.
+    assert_eq!(claim_tx.output.len(), 2);
+    assert!(claim_tx_fee > 141);
+    assert_eq!(claim_tx.output[1].value.to_sat(), 1_500);
+
+    test_framework
+        .as_ref()
+        .send_raw_transaction(&claim_tx)
+        .unwrap();
+    test_framework.generate_blocks(1);
+
+    let scan_result = test_framework
+        .as_ref()
+        .scan_tx_out_set_blocking(&[scan_request])
+        .unwrap();
+    assert_eq!(scan_result.unspents.len(), 0);
+}
+
+#[tokio::test]
+async fn btc_submarine_refund_multi_output() {
+    let (test_framework, scan_request, swap_tx, sender_keypair, utxos) = prepare_btc_refund();
+
+    let secp = Secp256k1::new();
+    let extra_keypair = Keypair::new(&secp, &mut thread_rng());
+    let extra_address = bitcoin::Address::p2wpkh(
+        &bitcoin::CompressedPublicKey(extra_keypair.public_key()),
+        bitcoin::Network::Regtest,
+    );
+
+    let swap_tx = swap_tx.with_additional_outputs(vec![(extra_address.clone(), 2_000)]);
+
+    let absolute_fee = 1_000;
+    let refund_tx = swap_tx
+        .sign_refund(&sender_keypair, Fee::Absolute(absolute_fee), None)
+        .await
+        .unwrap();
+
+    // primary at index 0 with the remainder, additional output after it
+    assert_eq!(refund_tx.output.len(), 2);
+    assert_eq!(
+        refund_tx.output[0].value.to_sat(),
+        utxos[0].1.value.to_sat() - absolute_fee - 2_000
+    );
+    assert_eq!(refund_tx.output[1].value.to_sat(), 2_000);
+    assert_eq!(
+        refund_tx.output[1].script_pubkey,
+        extra_address.script_pubkey()
+    );
+
+    // Make the timelock matured and broadcast the spend
+    test_framework.generate_blocks(100);
+    test_framework
+        .as_ref()
+        .send_raw_transaction(&refund_tx)
+        .unwrap();
+    test_framework.generate_blocks(1);
+
+    let scan_result = test_framework
+        .as_ref()
+        .scan_tx_out_set_blocking(&[scan_request])
+        .unwrap();
+    assert_eq!(scan_result.unspents.len(), 0);
+}
+
+#[tokio::test]
+async fn lbtc_submarine_refund_multi_output() {
+    let (test_framework, swap_tx, sender_keypair, blinding_keypair, swap_addrs, utxo) =
+        prepare_lbtc_refund();
+
+    let secp = Secp256k1::new();
+
+    // An extra confidential destination with a locally known blinder, so the
+    // broadcast output can be unblinded and checked exactly.
+    let extra_spend = Keypair::new(&secp, &mut thread_rng());
+    let extra_blinder = elements::secp256k1_zkp::Keypair::new(&secp, &mut thread_rng());
+    let extra_address = Address::p2wpkh(
+        &bitcoin::PublicKey {
+            compressed: true,
+            inner: extra_spend.public_key(),
+        },
+        Some(extra_blinder.public_key()),
+        &elements::AddressParams::ELEMENTS,
+    );
+
+    let swap_tx = swap_tx.with_additional_outputs(vec![(extra_address.clone(), 900)]);
+
+    let absolute_fee = 1_000;
+    let refund_tx = swap_tx
+        .sign_refund(&sender_keypair, Fee::Absolute(absolute_fee), None, false)
+        .await
+        .unwrap();
+
+    // fee first, then primary and additional (refund output order)
+    assert_eq!(refund_tx.output.len(), 3);
+    assert!(refund_tx.output[0].is_fee());
+
+    let funding_secrets = utxo
+        .1
+        .unblind(&secp, blinding_keypair.secret_key())
+        .unwrap();
+    assert_eq!(refund_tx.fee_in(funding_secrets.asset), absolute_fee);
+
+    assert_eq!(
+        refund_tx.output[2].script_pubkey,
+        extra_address.script_pubkey()
+    );
+    let extra_secrets = refund_tx.output[2]
+        .unblind(&secp, extra_blinder.secret_key())
+        .unwrap();
+    assert_eq!(extra_secrets.value, 900);
+    assert_eq!(extra_secrets.asset, funding_secrets.asset);
+
+    // The regtest node accepting the transaction proves the confidential
+    // proofs and the balance (primary = input - fee - 900) are valid.
+    test_framework.generate_blocks(100);
+    test_framework.send_tx(&refund_tx);
+    test_framework.generate_blocks(1);
+
+    assert!(test_framework.fetch_utxo(&swap_addrs).is_none());
+}
