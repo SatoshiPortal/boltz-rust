@@ -51,6 +51,7 @@ pub struct TransactionOptions {
     cooperative: bool,
     chain_claim: Option<ChainClaim>,
     lockup_tx: Option<BtcLikeTransaction>,
+    additional_outputs: Vec<(String, u64)>,
 }
 
 impl Default for TransactionOptions {
@@ -59,6 +60,7 @@ impl Default for TransactionOptions {
             cooperative: true,
             chain_claim: None,
             lockup_tx: None,
+            additional_outputs: Vec::new(),
         }
     }
 }
@@ -83,6 +85,15 @@ impl TransactionOptions {
 
     pub fn with_lockup_tx(mut self, lockup_tx: BtcLikeTransaction) -> Self {
         self.lockup_tx = Some(lockup_tx);
+        self
+    }
+
+    /// Extra fixed-amount outputs paid in addition to the primary output address.
+    /// The primary output receives the remainder (input - fee - sum of these) and
+    /// remains the first payment output. On Liquid all addresses must be
+    /// confidential.
+    pub fn with_additional_outputs(mut self, additional_outputs: Vec<(String, u64)>) -> Self {
+        self.additional_outputs = additional_outputs;
         self
     }
 }
@@ -572,11 +583,39 @@ impl SwapScript {
         Ok(())
     }
 
+    fn additional_outputs_bitcoin(
+        additional_outputs: &[(String, u64)],
+    ) -> Result<Vec<(bitcoin::Address, u64)>, Error> {
+        additional_outputs
+            .iter()
+            .map(|(address, amount)| {
+                Ok((
+                    bitcoin::Address::from_str(address)?.assume_checked(),
+                    *amount,
+                ))
+            })
+            .collect()
+    }
+
+    fn additional_outputs_liquid(
+        additional_outputs: &[(String, u64)],
+    ) -> Result<Vec<(elements::Address, u64)>, Error> {
+        additional_outputs
+            .iter()
+            .map(|(address, amount)| Ok((elements::Address::from_str(address)?, *amount)))
+            .collect()
+    }
+
     pub async fn construct_claim(
         &self,
         preimage: &Preimage,
         params: SwapTransactionParams<'_>,
     ) -> Result<BtcLikeTransaction, Error> {
+        let additional_outputs = params
+            .options
+            .as_ref()
+            .map(|options| options.additional_outputs.clone())
+            .unwrap_or_default();
         let cooperative = self
             .get_cooperative(
                 SwapTxKind::Claim,
@@ -617,7 +656,8 @@ impl SwapScript {
                     params.output_address.clone(),
                     chain_client,
                     utxo,
-                )?;
+                )?
+                .with_additional_outputs(Self::additional_outputs_bitcoin(&additional_outputs)?);
 
                 tx.sign_claim(&params.keys, preimage, params.fee, cooperative)
                     .await
@@ -658,7 +698,8 @@ impl SwapScript {
                     chain_client,
                     utxo,
                 )
-                .await?;
+                .await?
+                .with_additional_outputs(Self::additional_outputs_liquid(&additional_outputs)?);
 
                 tx.sign_claim(&params.keys, preimage, params.fee, cooperative, true)
                     .await
@@ -671,6 +712,11 @@ impl SwapScript {
         &self,
         params: SwapTransactionParams<'_>,
     ) -> Result<BtcLikeTransaction, Error> {
+        let additional_outputs = params
+            .options
+            .as_ref()
+            .map(|options| options.additional_outputs.clone())
+            .unwrap_or_default();
         let cooperative = self
             .get_cooperative(
                 SwapTxKind::Refund,
@@ -689,7 +735,8 @@ impl SwapScript {
                     params.boltz_client,
                     params.swap_id.clone(),
                 )
-                .await?;
+                .await?
+                .with_additional_outputs(Self::additional_outputs_bitcoin(&additional_outputs)?);
                 tx.sign_refund(&params.keys, params.fee, cooperative)
                     .await
                     .map(BtcLikeTransaction::bitcoin)
@@ -702,7 +749,8 @@ impl SwapScript {
                     params.boltz_client,
                     params.swap_id.clone(),
                 )
-                .await?;
+                .await?
+                .with_additional_outputs(Self::additional_outputs_liquid(&additional_outputs)?);
                 tx.sign_refund(&params.keys, params.fee, cooperative, true)
                     .await
                     .map(BtcLikeTransaction::liquid)
