@@ -133,15 +133,16 @@ impl BoltzApiClientV2 {
         &self,
         swap_request: CreateChainRequest,
     ) -> Result<CreateChainResponse, Error> {
+        let preimage_hash = swap_request
+            .preimage_hash
+            .parse::<sha256::Hash>()
+            .map_err(|e| Error::Generic(e.to_string()))?;
         let response = self
             .inner
             .post_chain_req(boltz::CreateChainRequest {
                 from: swap_request.from.to_string(),
                 to: swap_request.to.to_string(),
-                preimage_hash: swap_request
-                    .preimage_hash
-                    .parse::<sha256::Hash>()
-                    .map_err(|e| Error::Generic(e.to_string()))?,
+                preimage_hash,
                 claim_public_key: Some(swap_request.claim_public_key),
                 refund_public_key: Some(swap_request.refund_public_key),
                 user_lock_amount: swap_request.user_lock_amount,
@@ -156,6 +157,7 @@ impl BoltzApiClientV2 {
             &swap_request.refund_public_key,
             swap_request.from,
             swap_request.to,
+            &preimage_hash,
         )?;
         Ok(response)
     }
