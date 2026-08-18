@@ -20,9 +20,12 @@ to the release PR.
   Cooperative signing commits to every output.
 
 ### Changed
-- Bitcoin transaction construction no longer rejects zero-valued outputs:
-  construction enforces balance (overflow, overspend) but not dust or relay
-  policy, which belongs to the broadcaster.
+- Bitcoin transaction construction rejects zero-valued and below-dust
+  outputs up front, including a below-dust primary remainder: a swap
+  transaction that cannot be relayed cannot confirm before the swap timeout,
+  so construction enforces relayability in addition to balance (overflow,
+  overspend). The threshold is Bitcoin Core's default dust limit for the
+  output's script type.
 - Liquid transaction construction now rejects a zero-valued primary output
   up front with a clear protocol error (previously it failed deep inside
   blinding); confidential outputs cannot carry less than 1 satoshi.

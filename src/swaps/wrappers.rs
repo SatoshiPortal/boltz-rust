@@ -97,8 +97,9 @@ impl TransactionOptions {
     ///
     /// Calling this again replaces the previously set list. Addresses must be
     /// valid for the chain client's network. On Liquid all addresses must be
-    /// confidential and all amounts positive; on Bitcoin zero-valued outputs
-    /// are accepted and dust/relay policy is the broadcaster's responsibility.
+    /// confidential and all amounts positive; on Bitcoin every output,
+    /// including the primary remainder, must meet the dust threshold for its
+    /// script type (zero-valued and below-dust outputs are rejected).
     /// Cooperative signing commits to every output, including the additional
     /// ones.
     pub fn with_additional_outputs(mut self, additional_outputs: Vec<(String, u64)>) -> Self {
