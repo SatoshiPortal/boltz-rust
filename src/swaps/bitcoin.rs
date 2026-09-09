@@ -1741,6 +1741,7 @@ mod tests {
         );
         let tx = BtcSwapTx {
             kind: SwapTxKind::Claim,
+            additional_outputs: Vec::new(),
             swap_script: BtcSwapScript {
                 swap_type: SwapType::ReverseSubmarine,
                 side: None,
@@ -1767,6 +1768,7 @@ mod tests {
         let sender_keys = Keypair::new(&secp, &mut thread_rng());
         let tx = BtcSwapTx {
             kind: SwapTxKind::Claim,
+            additional_outputs: Vec::new(),
             swap_script: BtcSwapScript {
                 swap_type: SwapType::ReverseSubmarine,
                 side: None,
