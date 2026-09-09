@@ -543,6 +543,10 @@ pub struct BtcSwapTx {
     pub kind: SwapTxKind, // These fields needs to be public to do manual creation in IT.
     pub swap_script: BtcSwapScript,
     pub output_address: Address,
+    /// Extra fixed-amount outputs paid in addition to `output_address`.
+    /// `output_address` receives the remainder (input - fee - sum of these)
+    /// and always stays at output index 0.
+    pub additional_outputs: Vec<(Address, u64)>,
     /// All utxos for the script_pubkey of this swap, at this point in time:
     /// - the initial lockup utxo, if not yet spent (claimed or refunded)
     /// - any further utxos, if not yet spent
@@ -607,8 +611,25 @@ impl BtcSwapTx {
             kind: SwapTxKind::Claim,
             swap_script,
             output_address: address,
+            additional_outputs: Vec::new(),
             utxos: vec![utxo], // When claiming, we only consider the first utxo
         })
+    }
+
+    /// Add fixed-amount outputs (in satoshis) paid in addition to the primary
+    /// output address. The primary output receives the remainder
+    /// (input - fee - sum of additional outputs) and stays at output index 0,
+    /// with the additional outputs following in the given order.
+    ///
+    /// Calling this again replaces the previously set list. Construction
+    /// enforces balance (no overflow, no overspend) and rejects any output —
+    /// including the computed primary remainder — below the dust threshold
+    /// for its script type: a transaction that cannot be relayed cannot
+    /// confirm before the swap timeout. Cooperative signing commits to every
+    /// output, including the additional ones.
+    pub fn with_additional_outputs(mut self, additional_outputs: Vec<(Address, u64)>) -> Self {
+        self.additional_outputs = additional_outputs;
+        self
     }
 
     /// Construct a RefundTX corresponding to the swap_script. Only works for Submarine and Chain Swaps.
@@ -655,6 +676,7 @@ impl BtcSwapTx {
                 kind: SwapTxKind::Refund,
                 swap_script,
                 output_address: address,
+                additional_outputs: Vec::new(),
                 utxos,
             }),
         }
@@ -850,6 +872,67 @@ impl BtcSwapTx {
         Ok(claim_tx)
     }
 
+    /// Build the payment outputs: the primary output (which receives the
+    /// remainder) at index 0, followed by any additional fixed-amount outputs.
+    ///
+    /// Zero-valued outputs are consensus-valid and accepted here; construction
+    /// rejects any output, including the computed primary remainder, below
+    /// the dust threshold for its script type.
+    fn create_payment_outputs(
+        &self,
+        input_value: Amount,
+        absolute_fees: u64,
+    ) -> Result<Vec<TxOut>, Error> {
+        let total_additional =
+            self.additional_outputs
+                .iter()
+                .try_fold(0u64, |sum, (_, amount)| {
+                    sum.checked_add(*amount).ok_or(Error::Protocol(
+                        "Additional output amounts overflow.".to_string(),
+                    ))
+                })?;
+
+        let primary_value = input_value
+            .checked_sub(Amount::from_sat(absolute_fees))
+            .and_then(|value| value.checked_sub(Amount::from_sat(total_additional)))
+            .ok_or(Error::Protocol(format!(
+                "Output value {} is less than fees {absolute_fees} plus additional outputs {total_additional}",
+                input_value.to_sat()
+            )))?;
+
+        let mut outputs = Vec::with_capacity(1 + self.additional_outputs.len());
+        let primary_spk = self.output_address.script_pubkey();
+        let primary_dust = primary_spk.minimal_non_dust();
+        if primary_value < primary_dust {
+            return Err(Error::Protocol(format!(
+                "Primary output of {} sat is below the {} sat dust threshold; a dust output cannot be relayed and a swap transaction that cannot confirm risks the timeout",
+                primary_value.to_sat(),
+                primary_dust.to_sat()
+            )));
+        }
+        outputs.push(TxOut {
+            script_pubkey: primary_spk,
+            value: primary_value,
+        });
+        for (address, amount) in &self.additional_outputs {
+            let script_pubkey = address.script_pubkey();
+            let dust = script_pubkey.minimal_non_dust();
+            let value = Amount::from_sat(*amount);
+            if value < dust {
+                return Err(Error::Protocol(format!(
+                    "Additional output of {amount} sat to {address} is below the {} sat dust threshold",
+                    dust.to_sat()
+                )));
+            }
+            outputs.push(TxOut {
+                script_pubkey,
+                value,
+            });
+        }
+
+        Ok(outputs)
+    }
+
     fn create_claim(
         &self,
         keys: &Keypair,
@@ -873,27 +956,13 @@ impl BtcSwapTx {
             witness: Witness::new(),
         };
 
-        let destination_spk = self.output_address.script_pubkey();
-
-        let output_value = utxo
-            .1
-            .value
-            .checked_sub(Amount::from_sat(absolute_fees))
-            .ok_or(Error::Protocol(format!(
-                "Claim output value {} is less than fees {}",
-                utxo.1.value, absolute_fees
-            )))?;
-
-        let txout = TxOut {
-            script_pubkey: destination_spk,
-            value: output_value,
-        };
+        let output = self.create_payment_outputs(utxo.1.value, absolute_fees)?;
 
         let mut claim_tx = Transaction {
             version: Version::TWO,
             lock_time: LockTime::ZERO,
             input: vec![txin],
-            output: vec![txout],
+            output,
         };
 
         if is_cooperative {
@@ -1109,17 +1178,7 @@ impl BtcSwapTx {
             .utxos
             .iter()
             .fold(Amount::ZERO, |acc, (_, txo)| acc + txo.value);
-        let absolute_fees_amount = Amount::from_sat(absolute_fees);
-        let output_amount =
-            utxos_amount
-                .checked_sub(absolute_fees_amount)
-                .ok_or(Error::Protocol(format!(
-                    "Refund output value {utxos_amount} is less than fees {absolute_fees_amount}"
-                )))?;
-        let output: TxOut = TxOut {
-            script_pubkey: self.output_address.script_pubkey(),
-            value: output_amount,
-        };
+        let output = self.create_payment_outputs(utxos_amount, absolute_fees)?;
 
         let unsigned_inputs = self
             .utxos
@@ -1136,7 +1195,7 @@ impl BtcSwapTx {
             version: Version::TWO,
             lock_time: self.swap_script.locktime,
             input: unsigned_inputs,
-            output: vec![output],
+            output,
         };
 
         let tx_outs: Vec<&TxOut> = self.utxos.iter().map(|(_, out)| out).collect();
@@ -1312,9 +1371,217 @@ fn convert_schnorr_signature(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::secrets::Preimage;
+    use bitcoin::key::rand::thread_rng;
+    use bitcoin::{CompressedPublicKey, Network, TxOut};
+
+    const FUNDING_SAT: u64 = 100_000;
+    const FEE_SAT: u64 = 500;
+
+    fn p2wpkh_address(secp: &Secp256k1<bitcoin::secp256k1::All>) -> Address {
+        let keypair = Keypair::new(secp, &mut thread_rng());
+        Address::p2wpkh(&CompressedPublicKey(keypair.public_key()), Network::Bitcoin)
+    }
+
+    fn swap_tx_fixture(swap_type: SwapType, kind: SwapTxKind) -> (BtcSwapTx, Keypair, Preimage) {
+        let secp = Secp256k1::new();
+        let preimage = Preimage::random();
+        let recvr_keypair = Keypair::new(&secp, &mut thread_rng());
+        let sender_keypair = Keypair::new(&secp, &mut thread_rng());
+
+        let swap_script = BtcSwapScript {
+            swap_type,
+            side: None,
+            funding_addrs: None,
+            hashlock: preimage.hash160,
+            receiver_pubkey: PublicKey {
+                compressed: true,
+                inner: recvr_keypair.public_key(),
+            },
+            locktime: LockTime::from_height(200).unwrap(),
+            sender_pubkey: PublicKey {
+                compressed: true,
+                inner: sender_keypair.public_key(),
+            },
+        };
+
+        let utxo = (
+            OutPoint::default(),
+            TxOut {
+                value: Amount::from_sat(FUNDING_SAT),
+                script_pubkey: ScriptBuf::new(),
+            },
+        );
+
+        let signing_keys = match kind {
+            SwapTxKind::Claim => recvr_keypair,
+            SwapTxKind::Refund => sender_keypair,
+        };
+
+        let swap_tx = BtcSwapTx {
+            kind,
+            swap_script,
+            output_address: p2wpkh_address(&secp),
+            additional_outputs: Vec::new(),
+            utxos: vec![utxo],
+        };
+
+        (swap_tx, signing_keys, preimage)
+    }
+
+    #[macros::test_all]
+    fn test_claim_single_output() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+
+        let tx = swap_tx
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap();
+
+        assert_eq!(tx.output.len(), 1);
+        assert_eq!(tx.output[0].value.to_sat(), FUNDING_SAT - FEE_SAT);
+        assert_eq!(
+            tx.output[0].script_pubkey,
+            swap_tx.output_address.script_pubkey()
+        );
+    }
+
+    #[macros::test_all]
+    fn test_claim_with_additional_outputs() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
+        let extra_address_1 = p2wpkh_address(&secp);
+        let extra_address_2 = p2wpkh_address(&secp);
+
+        let swap_tx = swap_tx.with_additional_outputs(vec![
+            (extra_address_1.clone(), 800),
+            (extra_address_2.clone(), 1_200),
+        ]);
+
+        let tx = swap_tx
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap();
+
+        assert_eq!(tx.output.len(), 3);
+
+        // Primary output keeps index 0 and receives the remainder.
+        assert_eq!(
+            tx.output[0].value.to_sat(),
+            FUNDING_SAT - FEE_SAT - 800 - 1_200
+        );
+        assert_eq!(
+            tx.output[0].script_pubkey,
+            swap_tx.output_address.script_pubkey()
+        );
+
+        assert_eq!(tx.output[1].value.to_sat(), 800);
+        assert_eq!(tx.output[1].script_pubkey, extra_address_1.script_pubkey());
+        assert_eq!(tx.output[2].value.to_sat(), 1_200);
+        assert_eq!(tx.output[2].script_pubkey, extra_address_2.script_pubkey());
+    }
+
+    #[macros::test_all]
+    fn test_refund_with_additional_outputs() {
+        let (swap_tx, keys, _) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let secp = Secp256k1::new();
+
+        let extra_address = p2wpkh_address(&secp);
+        let swap_tx = swap_tx.with_additional_outputs(vec![(extra_address.clone(), 700)]);
+
+        let tx = swap_tx.create_refund(&keys, FEE_SAT, false).unwrap();
+
+        assert_eq!(tx.output.len(), 2);
+        assert_eq!(tx.output[0].value.to_sat(), FUNDING_SAT - FEE_SAT - 700);
+        assert_eq!(
+            tx.output[0].script_pubkey,
+            swap_tx.output_address.script_pubkey()
+        );
+        assert_eq!(tx.output[1].value.to_sat(), 700);
+        assert_eq!(tx.output[1].script_pubkey, extra_address.script_pubkey());
+    }
+
+    #[macros::test_all]
+    fn test_claim_additional_outputs_exceed_input() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
+        let extra_address = p2wpkh_address(&secp);
+        let swap_tx = swap_tx.with_additional_outputs(vec![(extra_address, FUNDING_SAT)]);
+
+        let err = swap_tx
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap_err();
+        assert!(err.message().contains("less than fees"));
+    }
+
+    #[macros::test_all]
+    fn test_additional_output_below_dust_rejected() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
+        for amount in [0, 1] {
+            let err = swap_tx
+                .clone()
+                .with_additional_outputs(vec![(p2wpkh_address(&secp), amount)])
+                .create_claim(&keys, &preimage, FEE_SAT, false)
+                .unwrap_err();
+            assert!(err.message().contains("dust"));
+        }
+    }
+
+    #[macros::test_all]
+    fn test_additional_output_at_dust_threshold_allowed() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
+        let extra_address = p2wpkh_address(&secp);
+        let dust = extra_address.script_pubkey().minimal_non_dust().to_sat();
+        let tx = swap_tx
+            .with_additional_outputs(vec![(extra_address.clone(), dust)])
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap();
+
+        assert_eq!(tx.output.len(), 2);
+        assert_eq!(tx.output[0].value.to_sat(), FUNDING_SAT - FEE_SAT - dust);
+        assert_eq!(tx.output[1].value.to_sat(), dust);
+    }
+
+    #[macros::test_all]
+    fn test_dust_primary_remainder_rejected() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
+        let err = swap_tx
+            .with_additional_outputs(vec![(p2wpkh_address(&secp), FUNDING_SAT - FEE_SAT)])
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap_err();
+        assert!(err.message().contains("dust"));
+    }
+
+    #[macros::test_all]
+    fn test_additional_outputs_overflow() {
+        let (swap_tx, keys, preimage) =
+            swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let secp = Secp256k1::new();
+
+        let err = swap_tx
+            .with_additional_outputs(vec![
+                (p2wpkh_address(&secp), u64::MAX),
+                (p2wpkh_address(&secp), 1),
+            ])
+            .create_claim(&keys, &preimage, FEE_SAT, false)
+            .unwrap_err();
+        assert!(err.message().contains("overflow"));
+    }
+
     use crate::network::Chain;
     use crate::swaps::boltz::{ChainSwapDetails, CreateChainResponse, Leaf, SwapTree};
-    use bitcoin::key::rand::thread_rng;
 
     fn public_key(keypair: &Keypair) -> PublicKey {
         PublicKey {
@@ -1485,6 +1752,7 @@ mod tests {
         );
         let tx = BtcSwapTx {
             kind: SwapTxKind::Claim,
+            additional_outputs: Vec::new(),
             swap_script: BtcSwapScript {
                 swap_type: SwapType::ReverseSubmarine,
                 side: None,
@@ -1511,6 +1779,7 @@ mod tests {
         let sender_keys = Keypair::new(&secp, &mut thread_rng());
         let tx = BtcSwapTx {
             kind: SwapTxKind::Claim,
+            additional_outputs: Vec::new(),
             swap_script: BtcSwapScript {
                 swap_type: SwapType::ReverseSubmarine,
                 side: None,

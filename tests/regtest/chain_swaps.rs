@@ -179,15 +179,22 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
 
         log::info!("Claiming!");
 
+        // Pay an extra fixed-amount output from the cooperative chain claim,
+        // so Boltz partial-signs a multi-output claim transaction.
+        let additional_outputs = vec![(utils::generate_address(to).await.unwrap(), 600)];
+        let absolute_fee = 1000;
+        let server_lock_amount = claim_details.amount;
+
         let swap_params = SwapTransactionParams {
             keys: our_claim_keys,
             output_address: claim_address.clone(),
-            fee: Fee::Absolute(1000),
+            fee: Fee::Absolute(absolute_fee),
             swap_id: swap_id.clone(),
             options: Some(
                 TransactionOptions::default()
                     .with_chain_claim(our_refund_keys, lockup_script.clone())
-                    .with_lockup_tx(lockup_tx),
+                    .with_lockup_tx(lockup_tx)
+                    .with_additional_outputs(additional_outputs.clone()),
             ),
             chain_client,
             boltz_client: &boltz_api_v2,
@@ -211,6 +218,17 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
             .construct_claim(&preimage, swap_params.clone())
             .await
             .unwrap();
+
+        assert_multi_output_tx(
+            &tx,
+            to,
+            true,
+            &claim_address,
+            &additional_outputs,
+            server_lock_amount,
+            absolute_fee,
+        )
+        .await;
 
         chain_client.broadcast_tx(&tx).await.unwrap();
         log::info!("Successfully broadcasted claim tx!");
