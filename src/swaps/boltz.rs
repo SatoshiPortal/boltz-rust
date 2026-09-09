@@ -1928,6 +1928,7 @@ mod tests {
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_get_fee_estimation() {
         let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_fee_estimation().await;
@@ -1935,6 +1936,7 @@ mod tests {
     }
 
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_get_height() {
         let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_height().await;
@@ -1945,6 +1947,7 @@ mod tests {
     // derived from a known wallet mnemonic, and prints what boltz returns.
     // Run: cargo test test_swap_restore_endpoint_print -- --nocapture
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_swap_restore_endpoint_print() {
         let wallet_mnemonic =
             "slogan prevent affair connect autumn crop together earn track ribbon horn copy";
@@ -1974,6 +1977,7 @@ mod tests {
     // boltz matches the just-registered leaf pubkeys.
     // Run: cargo test test_create_chain_then_restore -- --nocapture
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_create_chain_then_restore() {
         use crate::util::secrets::{Preimage, SwapMasterKey};
         let wallet_mnemonic =
@@ -2051,6 +2055,7 @@ mod tests {
     }
 
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_get_submarine_pairs() {
         let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_submarine_pairs().await;
@@ -2058,6 +2063,7 @@ mod tests {
     }
 
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_get_reverse_pairs() {
         let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_reverse_pairs().await;
@@ -2065,6 +2071,7 @@ mod tests {
     }
 
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_get_chain_pairs() {
         let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let result = client.get_chain_pairs().await;
@@ -2114,6 +2121,7 @@ mod tests {
     }
 
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_get_chain_txs() {
         let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let id = "G6c6GJJY8eXz";
@@ -2122,6 +2130,7 @@ mod tests {
     }
 
     #[macros::async_test_all]
+    #[ignore = "hits the public Boltz API; run with --ignored"]
     async fn test_get_swap() {
         let client = BoltzApiClientV2::new(BOLTZ_MAINNET_URL_V2.to_string(), None);
         let id = "G6c6GJJY8eXz";
