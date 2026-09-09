@@ -62,4 +62,7 @@ jobs:
           echo -e '\n[workspace]\n\n[patch.crates-io]\nsecp256k1-zkp = { git = "https://github.com/danielgranhao/rust-secp256k1-zkp.git", rev = "eac2e479255a6e32b5588bc25ee53c642fdd8395" }' >> Cargo.toml
           # In this test, we reference the checked out repo (e.g. this PR branch)
           cargo add --path ../ boltz-client
+          # Seed the resolver with the repo lockfile: the yanked secp256k1
+          # 0.32 betas stay fetchable only through a lock entry.
+          cp ../Cargo.lock Cargo.lock
           wasm-pack build --target web
