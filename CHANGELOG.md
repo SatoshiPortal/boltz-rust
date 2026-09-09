@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2026-09-09
 
 Must ship as `0.5.0`: this release is source-breaking and must not be
 published on the `0.4.x` compatibility line. The version bump itself is left

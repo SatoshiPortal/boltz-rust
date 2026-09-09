@@ -2,7 +2,7 @@
 name = "boltz-client"
 description = "a boltz exchange client for swaps between BTC/LBTC & LN"
 authors = ["i5hi <ishi@satoshiportal.com>", "Rajarshi Maitra <raj@bitshala.org>"]
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 
