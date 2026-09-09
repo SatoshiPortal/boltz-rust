@@ -31,8 +31,11 @@ async def swap(to_chain: boltz_client.Chain):
     asyncio.create_task(ws_client.run_ws_loop())
 
     # Monitor the swap status via WebSocket
-    await ws_client.subscribe_swap(swap_id)
+    # The receiver must exist BEFORE subscribing: the broadcast channel only
+    # delivers events sent after the receiver was created, and boltz pushes
+    # swap.created immediately on subscription.
     updates = ws_client.updates()
+    await ws_client.subscribe_swap(swap_id)
 
     # Wait for initial status
     await next_status(updates, "swap.created")
