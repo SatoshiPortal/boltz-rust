@@ -279,6 +279,20 @@ impl SwapScript {
         }
     }
 
+    /// Build from an already-reconstructed Bitcoin swap script (a swap
+    /// restored from storage rather than freshly created), so the validated
+    /// helpers — notably `submarine_cooperative_claim`, which verifies the
+    /// preimage against the invoice before partial-signing — are reachable
+    /// without the original swap response.
+    pub fn from_bitcoin(script: BtcSwapScript) -> Self {
+        Self::new(SwapScriptImpl::bitcoin(script), None, None)
+    }
+
+    /// Liquid counterpart of [`SwapScript::from_bitcoin`].
+    pub fn from_liquid(script: LBtcSwapScript) -> Self {
+        Self::new(SwapScriptImpl::liquid(script), None, None)
+    }
+
     pub fn submarine_from_swap_resp(
         chain: Chain,
         create_swap_response: &CreateSubmarineResponse,
@@ -377,16 +391,8 @@ impl SwapScript {
 
         log::debug!("Received claim tx details : {claim_tx_response:?}");
 
-        let preimage = Vec::from_hex(&claim_tx_response.preimage)?;
-
         // Verify preimage matches invoice payment hash
-        let preimage_hash = sha256::Hash::hash(&preimage);
-        let invoice = LightningInvoice::from_str(invoice)?;
-        if invoice.payment_hash() != preimage_hash.to_string() {
-            return Err(Error::Protocol(
-                "Preimage does not match invoice payment hash".to_string(),
-            ));
-        }
+        verify_submarine_preimage(invoice, &claim_tx_response.preimage)?;
 
         // Generate partial signature
         let (partial_sig, pub_nonce) = self.script.common().partial_sign(
@@ -711,6 +717,22 @@ impl SwapScript {
     }
 }
 
+/// Proof-of-payment gate for cooperative submarine claims: the preimage the
+/// server returns must hash to the payment hash committed in the invoice.
+/// Partial-signing without this check would let the server key-path-sweep
+/// the lockup without ever paying the invoice.
+pub fn verify_submarine_preimage(invoice: &str, preimage_hex: &str) -> Result<(), Error> {
+    let preimage = Vec::from_hex(preimage_hex)?;
+    let preimage_hash = sha256::Hash::hash(&preimage);
+    let invoice = LightningInvoice::from_str(invoice)?;
+    if invoice.payment_hash() != preimage_hash.to_string() {
+        return Err(Error::Protocol(
+            "Preimage does not match invoice payment hash".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -961,5 +983,56 @@ mod tests {
         );
 
         assert!(result.is_ok());
+    }
+
+    fn signed_test_invoice(payment_hash: sha256::Hash) -> String {
+        use lightning_invoice::{Currency, InvoiceBuilder, PaymentSecret};
+
+        let secp = Secp256k1::new();
+        let key = bitcoin::secp256k1::SecretKey::from_slice(&[41u8; 32]).unwrap();
+        InvoiceBuilder::new(Currency::Bitcoin)
+            .description("verify_submarine_preimage test".to_string())
+            .payment_hash(payment_hash)
+            .payment_secret(PaymentSecret([7u8; 32]))
+            .duration_since_epoch(std::time::Duration::from_secs(1_726_000_000))
+            .min_final_cltv_expiry_delta(144)
+            .build_signed(|hash| secp.sign_ecdsa_recoverable(hash, &key))
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn submarine_preimage_matching_invoice_is_accepted() {
+        let preimage = [42u8; 32];
+        let invoice = signed_test_invoice(sha256::Hash::hash(&preimage));
+        let preimage_hex = preimage
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+
+        assert!(verify_submarine_preimage(&invoice, &preimage_hex).is_ok());
+    }
+
+    #[test]
+    fn submarine_preimage_mismatch_is_rejected() {
+        let preimage = [42u8; 32];
+        let invoice = signed_test_invoice(sha256::Hash::hash(&preimage));
+        let wrong = [43u8; 32]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+
+        assert!(matches!(
+            verify_submarine_preimage(&invoice, &wrong),
+            Err(Error::Protocol(_))
+        ));
+    }
+
+    #[test]
+    fn submarine_preimage_bad_hex_is_rejected() {
+        let preimage = [42u8; 32];
+        let invoice = signed_test_invoice(sha256::Hash::hash(&preimage));
+
+        assert!(verify_submarine_preimage(&invoice, "not-hex").is_err());
     }
 }
