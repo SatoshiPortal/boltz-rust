@@ -529,8 +529,7 @@ impl BtcSwapScript {
         let actual_txid = tx.compute_txid();
         if actual_txid != expected_txid {
             return Err(Error::Protocol(format!(
-                "Lockup transaction ID mismatch: {},{}",
-                actual_txid, expected_txid
+                "Lockup transaction ID mismatch: {actual_txid},{expected_txid}"
             )));
         }
         self.find_utxo(&tx, network)

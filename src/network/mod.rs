@@ -136,31 +136,6 @@ impl From<Chain> for Network {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn chain_preserves_network() {
-        assert_eq!(
-            Network::from(Chain::Bitcoin(BitcoinChain::BitcoinTestnet)),
-            Network::Testnet
-        );
-        assert_eq!(
-            Network::from(Chain::Bitcoin(BitcoinChain::BitcoinRegtest)),
-            Network::Regtest
-        );
-        assert_eq!(
-            Network::from(Chain::Liquid(LiquidChain::LiquidTestnet)),
-            Network::Testnet
-        );
-        assert_eq!(
-            Network::from(Chain::Liquid(LiquidChain::LiquidRegtest)),
-            Network::Regtest
-        );
-    }
-}
-
 #[macros::async_trait]
 pub trait BitcoinClient: Send + Sync {
     async fn get_address_balance(&self, address: &bitcoin::Address) -> Result<(u64, i64), Error>;
@@ -191,4 +166,29 @@ pub trait LiquidClient: Send + Sync {
     async fn broadcast_tx(&self, signed_tx: &elements::Transaction) -> Result<String, Error>;
 
     fn network(&self) -> LiquidChain;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chain_preserves_network() {
+        assert_eq!(
+            Network::from(Chain::Bitcoin(BitcoinChain::BitcoinTestnet)),
+            Network::Testnet
+        );
+        assert_eq!(
+            Network::from(Chain::Bitcoin(BitcoinChain::BitcoinRegtest)),
+            Network::Regtest
+        );
+        assert_eq!(
+            Network::from(Chain::Liquid(LiquidChain::LiquidTestnet)),
+            Network::Testnet
+        );
+        assert_eq!(
+            Network::from(Chain::Liquid(LiquidChain::LiquidRegtest)),
+            Network::Regtest
+        );
+    }
 }
