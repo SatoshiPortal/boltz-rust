@@ -218,8 +218,14 @@ async fn main() {
                 })
                 .await
                 .unwrap();
-            resp.validate(&claim_public_key, &refund_public_key, from, to)
-                .unwrap();
+            resp.validate(
+                &claim_public_key,
+                &refund_public_key,
+                from,
+                to,
+                &preimage.sha256,
+            )
+            .unwrap();
             assert!(
                 extra_amount + claim_fee < resp.claim_details.amount,
                 "extra amount + fee must leave a primary remainder from the {} sat server lockup",
