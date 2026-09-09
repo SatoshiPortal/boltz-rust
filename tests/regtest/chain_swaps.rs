@@ -45,7 +45,6 @@ async fn bitcoin_liquid_v2_chain_esplora() {
 async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: Chain) {
     let secp = Secp256k1::new();
     let preimage = Preimage::random();
-    log::info!("{preimage:#?}");
     let our_claim_keys = Keypair::new(&secp, &mut thread_rng());
     let claim_public_key = PublicKey {
         compressed: true,
@@ -53,8 +52,6 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
     };
 
     let our_refund_keys = Keypair::new(&secp, &mut thread_rng());
-    log::info!("Refund: {:#?}", our_refund_keys.display_secret());
-
     let refund_public_key = PublicKey {
         inner: our_refund_keys.public_key(),
         compressed: true,
@@ -77,7 +74,13 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
 
     let create_chain_response = boltz_api_v2.post_chain_req(create_chain_req).await.unwrap();
     create_chain_response
-        .validate(&claim_public_key, &refund_public_key, from, to)
+        .validate(
+            &claim_public_key,
+            &refund_public_key,
+            from,
+            to,
+            &preimage.sha256,
+        )
         .unwrap();
     let swap_id = create_chain_response.clone().id;
     let lockup_details = create_chain_response.clone().lockup_details;

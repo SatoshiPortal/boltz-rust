@@ -1,8 +1,7 @@
+use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use bitcoin::hashes::{sha256, Hash};
-use bitcoin::hex::FromHex;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::Keypair;
 use bitcoin::{consensus, Amount, Transaction as BtcTransaction};
@@ -24,15 +23,23 @@ use crate::util::fees::Fee;
 use crate::util::invoice::LightningInvoice;
 use crate::util::secrets::Preimage;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ChainClaim {
     refund_keys: Keypair,
     lockup_script: SwapScript,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct DirectTxOptions {
     blinding_key: Option<bitcoin::secp256k1::SecretKey>,
+}
+
+impl fmt::Debug for DirectTxOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DirectTxOptions")
+            .field("has_blinding_key", &self.blinding_key.is_some())
+            .finish()
+    }
 }
 
 impl DirectTxOptions {
@@ -46,12 +53,22 @@ impl DirectTxOptions {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct TransactionOptions {
     cooperative: bool,
     chain_claim: Option<ChainClaim>,
     lockup_tx: Option<BtcLikeTransaction>,
     additional_outputs: Vec<(String, u64)>,
+}
+
+impl fmt::Debug for TransactionOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransactionOptions")
+            .field("cooperative", &self.cooperative)
+            .field("has_chain_claim", &self.chain_claim.is_some())
+            .field("lockup_tx", &self.lockup_tx)
+            .finish()
+    }
 }
 
 impl Default for TransactionOptions {
@@ -236,6 +253,8 @@ impl ChainClient {
 pub trait SwapScriptCommon {
     fn swap_type(&self) -> SwapType;
 
+    fn receiver_pubkey(&self) -> bitcoin::PublicKey;
+
     fn partial_sign(
         &self,
         keys: &Keypair,
@@ -395,18 +414,17 @@ impl SwapScript {
         // Get claim tx details from Boltz
         let claim_tx_response = boltz_api.get_submarine_claim_tx_details(swap_id).await?;
 
-        log::debug!("Received claim tx details : {claim_tx_response:?}");
-
-        let preimage = Vec::from_hex(&claim_tx_response.preimage)?;
+        let preimage = Preimage::from_str(&claim_tx_response.preimage)?;
 
         // Verify preimage matches invoice payment hash
-        let preimage_hash = sha256::Hash::hash(&preimage);
         let invoice = LightningInvoice::from_str(invoice)?;
-        if invoice.payment_hash() != preimage_hash.to_string() {
+        if invoice.payment_hash() != preimage.sha256.to_string() {
             return Err(Error::Protocol(
                 "Preimage does not match invoice payment hash".to_string(),
             ));
         }
+
+        self.validate_cooperative_counterparty(&claim_tx_response.public_key)?;
 
         // Generate partial signature
         let (partial_sig, pub_nonce) = self.script.common().partial_sign(
@@ -437,6 +455,7 @@ impl SwapScript {
         {
             Ok(claim_tx_response) => {
                 if let Some(claim_tx_response) = claim_tx_response {
+                    self.validate_cooperative_counterparty(&claim_tx_response.public_key)?;
                     Some(self.script.common().partial_sign(
                         our_refund_keys,
                         &claim_tx_response.pub_nonce,
@@ -460,6 +479,19 @@ impl SwapScript {
             swap_id: swap_id.clone(),
             signature,
         })
+    }
+
+    fn validate_cooperative_counterparty(
+        &self,
+        public_key: &bitcoin::PublicKey,
+    ) -> Result<(), Error> {
+        let expected = self.script.common().receiver_pubkey();
+        if *public_key != expected {
+            return Err(Error::Protocol(format!(
+                "Cooperative counterparty public key mismatch: {public_key},{expected}"
+            )));
+        }
+        Ok(())
     }
 
     async fn get_cooperative<'a>(
@@ -796,6 +828,11 @@ impl SwapScript {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bitcoin::{
+        absolute::LockTime,
+        hashes::{hash160, Hash},
+        PublicKey,
+    };
     use elements::{
         confidential::Value, OutPoint, Script, Sequence, Transaction, TxIn, TxInWitness, TxOut,
         TxOutWitness,
@@ -859,6 +896,37 @@ mod tests {
         };
 
         BtcLikeTransaction::Liquid(tx)
+    }
+
+    #[test]
+    fn cooperative_counterparty_rejects_unexpected_key() {
+        use bitcoin::key::rand::thread_rng;
+
+        let secp = Secp256k1::new();
+        let receiver_keys = Keypair::new(&secp, &mut thread_rng());
+        let sender_keys = Keypair::new(&secp, &mut thread_rng());
+        let unexpected_keys = Keypair::new(&secp, &mut thread_rng());
+        let public_key = |keys: &Keypair| PublicKey {
+            compressed: true,
+            inner: keys.public_key(),
+        };
+        let script = SwapScript::new(
+            SwapScriptImpl::bitcoin(BtcSwapScript {
+                swap_type: SwapType::Submarine,
+                side: None,
+                funding_addrs: None,
+                hashlock: hash160::Hash::hash(&[0; 32]),
+                receiver_pubkey: public_key(&receiver_keys),
+                locktime: LockTime::from_consensus(200),
+                sender_pubkey: public_key(&sender_keys),
+            }),
+            None,
+            None,
+        );
+
+        assert!(script
+            .validate_cooperative_counterparty(&public_key(&unexpected_keys))
+            .is_err());
     }
 
     #[test]

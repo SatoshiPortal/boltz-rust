@@ -15,13 +15,13 @@ use elements::{
     Sequence, Transaction, TxIn, TxInWitness, TxOut, TxOutSecrets, TxOutWitness,
 };
 use secp256k1_musig::{musig, Scalar};
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use elements::encode::serialize;
 use elements::secp256k1_zkp::Message;
 
 use crate::util::{
-    hex_to_bytes32,
+    hex_to_bytes32, script_num_to_u32,
     secrets::{rng_32b, Preimage},
 };
 
@@ -54,6 +54,10 @@ pub(crate) fn find_utxo(tx: &Transaction, script_pubkey: &Script) -> Option<(Out
     None
 }
 
+fn parse_output_address(address: &str, network: LiquidChain) -> Result<Address, Error> {
+    Ok(Address::parse_with_params(address, network.into())?)
+}
+
 pub(crate) fn unblind_utxo(
     network: LiquidChain,
     utxo: TxOut,
@@ -71,7 +75,7 @@ pub(crate) fn unblind_utxo(
 }
 
 /// Liquid v2 swap script helper.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct LBtcSwapScript {
     pub swap_type: SwapType,
     pub side: Option<Side>,
@@ -81,6 +85,21 @@ pub struct LBtcSwapScript {
     pub locktime: LockTime,
     pub sender_pubkey: PublicKey,
     pub blinding_key: ZKKeyPair,
+}
+
+impl fmt::Debug for LBtcSwapScript {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LBtcSwapScript")
+            .field("swap_type", &self.swap_type)
+            .field("side", &self.side)
+            .field("funding_addrs", &self.funding_addrs)
+            .field("hashlock", &self.hashlock)
+            .field("receiver_pubkey", &self.receiver_pubkey)
+            .field("locktime", &self.locktime)
+            .field("sender_pubkey", &self.sender_pubkey)
+            .field("blinding_key", &"[REDACTED]")
+            .finish()
+    }
 }
 
 impl LBtcSwapScript {
@@ -117,8 +136,7 @@ impl LBtcSwapScript {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_CHECKSIGVERIFY {
-                        locktime =
-                            Some(LockTime::from_consensus(bytes_to_u32_little_endian(bytes)));
+                        locktime = Some(LockTime::from_height(script_num_to_u32(bytes)?)?);
                     } else {
                         continue;
                     }
@@ -132,6 +150,13 @@ impl LBtcSwapScript {
 
         let locktime =
             locktime.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+        if u64::from(locktime.to_consensus_u32()) != create_swap_response.timeout_block_height {
+            return Err(Error::Protocol(format!(
+                "Timelock mismatch: {},{}",
+                locktime.to_consensus_u32(),
+                create_swap_response.timeout_block_height
+            )));
+        }
 
         let funding_addrs = Address::from_str(&create_swap_response.address)?;
 
@@ -188,8 +213,7 @@ impl LBtcSwapScript {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_CHECKSIGVERIFY {
-                        locktime =
-                            Some(LockTime::from_consensus(bytes_to_u32_little_endian(bytes)));
+                        locktime = Some(LockTime::from_height(script_num_to_u32(bytes)?)?);
                     } else {
                         continue;
                     }
@@ -203,6 +227,13 @@ impl LBtcSwapScript {
 
         let locktime =
             locktime.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+        if locktime.to_consensus_u32() != reverse_response.timeout_block_height {
+            return Err(Error::Protocol(format!(
+                "Timelock mismatch: {},{}",
+                locktime.to_consensus_u32(),
+                reverse_response.timeout_block_height
+            )));
+        }
 
         let funding_addrs = Address::from_str(&reverse_response.lockup_address)?;
 
@@ -260,8 +291,7 @@ impl LBtcSwapScript {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_CHECKSIGVERIFY {
-                        locktime =
-                            Some(LockTime::from_consensus(bytes_to_u32_little_endian(bytes)));
+                        locktime = Some(LockTime::from_height(script_num_to_u32(bytes)?)?);
                     } else {
                         continue;
                     }
@@ -275,6 +305,13 @@ impl LBtcSwapScript {
 
         let locktime =
             locktime.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+        if locktime.to_consensus_u32() != chain_swap_details.timeout_block_height {
+            return Err(Error::Protocol(format!(
+                "Timelock mismatch: {},{}",
+                locktime.to_consensus_u32(),
+                chain_swap_details.timeout_block_height
+            )));
+        }
 
         let funding_addrs = Address::from_str(&chain_swap_details.lockup_address)?;
 
@@ -481,40 +518,52 @@ impl LBtcSwapScript {
         swap_id: &str,
         tx_kind: SwapTxKind,
     ) -> Result<(OutPoint, TxOut), Error> {
-        let hex = match self.swap_type {
+        let (expected_txid, hex) = match self.swap_type {
             SwapType::Chain => match tx_kind {
                 SwapTxKind::Claim => {
-                    boltz_client
+                    let transaction = boltz_client
                         .get_chain_txs(swap_id)
                         .await?
                         .server_lock
                         .ok_or(Error::Protocol(
                             "No server_lock transaction for Chain Swap available".to_string(),
                         ))?
-                        .transaction
-                        .hex
+                        .transaction;
+                    (transaction.id, transaction.hex)
                 }
                 SwapTxKind::Refund => {
-                    boltz_client
+                    let transaction = boltz_client
                         .get_chain_txs(swap_id)
                         .await?
                         .user_lock
                         .ok_or(Error::Protocol(
                             "No user_lock transaction for Chain Swap available".to_string(),
                         ))?
-                        .transaction
-                        .hex
+                        .transaction;
+                    (transaction.id, transaction.hex)
                 }
             },
-            SwapType::ReverseSubmarine => boltz_client.get_reverse_tx(swap_id).await?.hex,
-            SwapType::Submarine => boltz_client.get_submarine_tx(swap_id).await?.hex,
+            SwapType::ReverseSubmarine => {
+                let transaction = boltz_client.get_reverse_tx(swap_id).await?;
+                (transaction.id, transaction.hex)
+            }
+            SwapType::Submarine => {
+                let transaction = boltz_client.get_submarine_tx(swap_id).await?;
+                (transaction.id, transaction.hex)
+            }
         };
-        if hex.is_none() {
-            return Err(Error::Hex(
-                "No transaction hex found in boltz response".to_string(),
-            ));
+        let hex = hex.ok_or(Error::Hex(
+            "No transaction hex found in boltz response".to_string(),
+        ))?;
+        let expected_txid = elements::Txid::from_str(&expected_txid)
+            .map_err(|e| Error::Protocol(format!("Invalid lockup transaction ID: {e}")))?;
+        let tx: Transaction = elements::encode::deserialize(&hex::decode(hex)?)?;
+        let actual_txid = tx.txid();
+        if actual_txid != expected_txid {
+            return Err(Error::Protocol(format!(
+                "Lockup transaction ID mismatch: {actual_txid},{expected_txid}"
+            )));
         }
-        let tx: Transaction = elements::encode::deserialize(&hex::decode(hex.unwrap())?)?;
         self.find_utxo(&tx, network).await
     }
 
@@ -525,14 +574,6 @@ impl LBtcSwapScript {
     ) -> Result<BlockHash, Error> {
         liquid_client.get_genesis_hash().await
     }
-}
-
-fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
-    let mut result = 0u32;
-    for (i, &byte) in bytes.iter().enumerate() {
-        result |= (byte as u32) << (8 * i);
-    }
-    result
 }
 
 /// Liquid swap transaction helper.
@@ -551,6 +592,26 @@ pub struct LBtcSwapTx {
 }
 
 impl LBtcSwapTx {
+    pub fn validate_lockup_amount(
+        &self,
+        network: LiquidChain,
+        expected_amount: u64,
+    ) -> Result<(), Error> {
+        let secrets = unblind_utxo(
+            network,
+            self.funding_utxo.clone(),
+            self.swap_script.blinding_key.secret_key(),
+        )?;
+        if secrets.value != expected_amount {
+            return Err(Error::Protocol(format!(
+                "Lockup amount mismatch: {} BTC != {} BTC",
+                Amount::from_sat(secrets.value),
+                Amount::from_sat(expected_amount)
+            )));
+        }
+        Ok(())
+    }
+
     pub(crate) async fn new_claim_with_utxo<LC: LiquidClient + ?Sized>(
         swap_script: LBtcSwapScript,
         output_address: String,
@@ -563,12 +624,13 @@ impl LBtcSwapTx {
             ));
         }
 
+        let output_address = parse_output_address(&output_address, liquid_client.network())?;
         let genesis_hash = liquid_client.get_genesis_hash().await?;
 
         Ok(LBtcSwapTx {
             kind: SwapTxKind::Claim,
             swap_script,
-            output_address: Address::from_str(&output_address)?,
+            output_address,
             additional_outputs: Vec::new(),
             funding_outpoint: utxo.0,
             funding_utxo: utxo.1,
@@ -628,7 +690,7 @@ impl LBtcSwapTx {
             ));
         }
 
-        let address = Address::from_str(output_address)?;
+        let address = parse_output_address(output_address, liquid_client.network())?;
         let (funding_outpoint, funding_utxo) = swap_script
             .fetch_swap_utxo(
                 None,
@@ -686,6 +748,17 @@ impl LBtcSwapTx {
             return Err(Error::Protocol(
                 "Cannot sign claim with refund-type LBtcSwapTx".to_string(),
             ));
+        }
+
+        let preimage_bytes = preimage
+            .bytes
+            .ok_or(Error::Protocol("No preimage provided".to_string()))?;
+        let actual_hashlock = hash160::Hash::hash(&preimage_bytes);
+        if actual_hashlock != self.swap_script.hashlock {
+            return Err(Error::Protocol(format!(
+                "Preimage hashlock mismatch: {},{}",
+                actual_hashlock, self.swap_script.hashlock
+            )));
         }
 
         let mut claim_tx = create_tx_with_fee(
@@ -958,9 +1031,9 @@ impl LBtcSwapTx {
         absolute_fees: u64,
         is_cooperative: bool,
     ) -> Result<Transaction, Error> {
-        if preimage.bytes.is_none() {
-            return Err(Error::Protocol("No preimage provided".to_string()));
-        }
+        let preimage_bytes = preimage
+            .bytes
+            .ok_or(Error::Protocol("No preimage provided".to_string()))?;
 
         let claim_txin = TxIn {
             sequence: Sequence::MAX,
@@ -1024,9 +1097,7 @@ impl LBtcSwapTx {
 
             let mut script_witness = Witness::new();
             script_witness.push(final_sig.to_vec());
-            script_witness.push(preimage.bytes.ok_or(Error::Protocol(
-                "Preimage bytes not available - cannot claim without actual preimage".to_string(),
-            ))?);
+            script_witness.push(preimage_bytes);
             script_witness.push(claim_script.as_bytes());
             script_witness.push(control_block.serialize());
 
@@ -1216,33 +1287,9 @@ impl LBtcSwapTx {
 
         let refund_script = self.swap_script.refund_script();
 
-        let lock_time = match refund_script
-            .instructions()
-            .filter_map(|i| {
-                let ins = i.ok()?;
-                if let Instruction::PushBytes(bytes) = ins {
-                    if bytes.len() < 5_usize {
-                        Some(LockTime::from_consensus(bytes_to_u32_little_endian(bytes)))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .next()
-        {
-            Some(r) => r,
-            None => {
-                return Err(Error::Protocol(
-                    "Error getting timelock from refund script".to_string(),
-                ))
-            }
-        };
-
         let mut refund_tx = Transaction {
             version: 2,
-            lock_time,
+            lock_time: self.swap_script.locktime,
             input: vec![refund_txin],
             output,
         };
@@ -1369,6 +1416,10 @@ fn convert_public_key(key: elements::secp256k1_zkp::PublicKey) -> secp256k1_musi
 impl SwapScriptCommon for LBtcSwapScript {
     fn swap_type(&self) -> SwapType {
         self.swap_type
+    }
+
+    fn receiver_pubkey(&self) -> PublicKey {
+        self.receiver_pubkey
     }
 
     /// Compute the Musig partial signature.
@@ -1788,5 +1839,38 @@ mod tests {
             .create_claim(&keys, &preimage, FEE_SAT, false)
             .unwrap_err();
         assert!(err.message().contains("overflow"));
+    }
+
+    #[test]
+    fn output_address_rejects_wrong_network() {
+        let secp = Secp256k1::new();
+        let keypair = ZKKeyPair::new(&secp, &mut OsRng);
+        let address = Address::p2wpkh(
+            &PublicKey::new(keypair.public_key()),
+            None,
+            &elements::AddressParams::LIQUID,
+        );
+
+        assert!(parse_output_address(&address.to_string(), LiquidChain::LiquidRegtest).is_err());
+    }
+
+    #[test]
+    fn swap_script_debug_redacts_blinding_key() {
+        let secp = Secp256k1::new();
+        let receiver_keys = ZKKeyPair::new(&secp, &mut OsRng);
+        let sender_keys = ZKKeyPair::new(&secp, &mut OsRng);
+        let blinding_key = ZKKeyPair::new(&secp, &mut OsRng);
+        let script = LBtcSwapScript {
+            swap_type: SwapType::ReverseSubmarine,
+            side: None,
+            funding_addrs: None,
+            hashlock: hash160::Hash::hash(&[0; 32]),
+            receiver_pubkey: PublicKey::new(receiver_keys.public_key()),
+            locktime: LockTime::from_height(200).unwrap(),
+            sender_pubkey: PublicKey::new(sender_keys.public_key()),
+            blinding_key,
+        };
+
+        assert!(!format!("{script:?}").contains(&blinding_key.display_secret().to_string()));
     }
 }
