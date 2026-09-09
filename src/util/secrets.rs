@@ -20,7 +20,7 @@
 //! # Ok::<(), boltz_client::error::Error>(())
 //! ```
 
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use bip39::Mnemonic;
 use bip85_extended;
@@ -49,7 +49,7 @@ const SWAP_KEY_DERIVATION_PATH: &str = "m/44/0/0/0";
 /// on: https://boltz.exchange/rescue/external?mode=rescue-key
 ///
 /// Can also be used to get the root xpubs that can be used with the swap/restore API.
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct SwapMasterKey {
     /// The BIP85-derived swap mnemonic
     pub mnemonic: Mnemonic,
@@ -59,6 +59,15 @@ pub struct SwapMasterKey {
     pub fingerprint: Fingerprint,
     /// The network this key is for
     pub network: Network,
+}
+
+impl fmt::Debug for SwapMasterKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SwapMasterKey")
+            .field("fingerprint", &self.fingerprint)
+            .field("network", &self.network)
+            .finish_non_exhaustive()
+    }
 }
 
 impl SwapMasterKey {
@@ -151,7 +160,7 @@ impl SwapMasterKey {
     pub fn derive_liquid_swapkey(&self, index: u64) -> Result<ZKKeyPair, Error> {
         let keypair = self.derive_swapkey(index)?;
         let secp = ZKSecp256k1::new();
-        let zk_keypair = ZKKeyPair::from_seckey_str(&secp, &keypair.display_secret().to_string())?;
+        let zk_keypair = ZKKeyPair::from_seckey_slice(&secp, &keypair.secret_bytes())?;
         Ok(zk_keypair)
     }
 
@@ -181,7 +190,7 @@ impl SwapMasterKey {
 /// For Liquid keys, first create a KeyPair from SwapMasterKey and then convert it to ZKKeyPair
 /// let swap_master_key = SwapMasterKey::new(wallet_mnemonic, None, Network::Mainnet)?;
 /// let keypair = swap_master_key.derive_swapkey(1)?;
-/// let zk_keypair = ZKKeyPair::from_seckey_str(&ZKSecp256k1::new(), &keypair.display_secret().to_string())?;
+/// let zk_keypair = ZKKeyPair::from_seckey_slice(&ZKSecp256k1::new(), &keypair.secret_bytes())?;
 /// Internally used rng to generate secure 32 byte preimages
 pub(crate) fn rng_32b() -> [u8; 32] {
     let mut bytes = [0u8; 32];
@@ -190,11 +199,21 @@ pub(crate) fn rng_32b() -> [u8; 32] {
 }
 
 /// Helper to work with Preimage & Hashes required for swap scripts.
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct Preimage {
     pub bytes: Option<[u8; 32]>,
     pub sha256: sha256::Hash,
     pub hash160: hash160::Hash,
+}
+
+impl fmt::Debug for Preimage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Preimage")
+            .field("has_bytes", &self.bytes.is_some())
+            .field("sha256", &self.sha256)
+            .field("hash160", &self.hash160)
+            .finish()
+    }
 }
 
 impl FromStr for Preimage {
@@ -253,15 +272,22 @@ impl Preimage {
     /// Used only in submarine swaps where we do not know the preimage, only the hash
     pub fn from_sha256_vec(preimage_sha256: Vec<u8>) -> Result<Preimage, Error> {
         let sha256 = sha256::Hash::from_slice(preimage_sha256.as_slice())?;
-        let hash160 = hash160::Hash::from_slice(
-            ripemd160::Hash::hash(sha256.as_byte_array()).as_byte_array(),
-        )?;
+        let hash160 = Self::hash160_from_sha256(&sha256)?;
         // will never fail as long as sha256 is a valid sha256::Hash
         Ok(Preimage {
             sha256,
             hash160,
             bytes: None,
         })
+    }
+
+    /// Derives `RIPEMD160(SHA256(preimage))` from `SHA256(preimage)`.
+    /// This is the same computation used when only the preimage hash (and not the
+    /// preimage itself) is known, e.g. for chain and reverse swap validation.
+    pub fn hash160_from_sha256(sha256: &sha256::Hash) -> Result<hash160::Hash, Error> {
+        Ok(hash160::Hash::from_slice(
+            ripemd160::Hash::hash(sha256.as_byte_array()).as_byte_array(),
+        )?)
     }
 
     /// Extracts the preimage sha256 hash from a lightning invoice
@@ -307,8 +333,7 @@ mod tests {
             SwapMasterKey::from_mnemonic(mnemonic, None, Network::Mainnet).unwrap();
         let keypair = swap_master_key.derive_swapkey(index).unwrap();
         let secp = ZKSecp256k1::new();
-        let zk_keypair =
-            ZKKeyPair::from_seckey_str(&secp, &keypair.display_secret().to_string()).unwrap();
+        let zk_keypair = ZKKeyPair::from_seckey_slice(&secp, &keypair.secret_bytes()).unwrap();
         assert_eq!(keypair.public_key(), zk_keypair.public_key());
     }
 
@@ -341,6 +366,19 @@ mod tests {
                 .message(),
             "Decoded Preimage input is not 32 bytes".to_string()
         );
+    }
+
+    #[test]
+    fn secret_debug_output_is_redacted() {
+        let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
+        let swap_master_key =
+            SwapMasterKey::from_mnemonic(mnemonic, None, Network::Mainnet).unwrap();
+        let master_debug = format!("{swap_master_key:?}");
+        assert!(!master_debug.contains(&swap_master_key.mnemonic.to_string()));
+        assert!(!master_debug.contains(&swap_master_key.xprv.to_string()));
+
+        let preimage = Preimage::from_vec([7; 32].to_vec()).unwrap();
+        assert!(!format!("{preimage:?}").contains(&preimage.to_string().unwrap()));
     }
 
     #[macros::test_all]
@@ -415,33 +453,6 @@ mod tests {
             preimage.bytes.unwrap().to_lower_hex_string(),
             "f19d42c70bf00267b6c5dcfe6e1094386f8c72389f1ced91e0132d1502bbd244".to_string(),
         );
-
-        Ok(())
-    }
-
-    // Derives + prints the swap mnemonic / xpub / fingerprint for a known wallet
-    // mnemonic, to cross-check against the values shown in the mobile app.
-    // Run with: cargo test test_swap_master_key_derivation_print -- --nocapture
-    #[macros::test_all]
-    fn test_swap_master_key_derivation_print() -> Result<(), Error> {
-        let wallet_mnemonic =
-            "slogan prevent affair connect autumn crop together earn track ribbon horn copy";
-        let network = Network::Mainnet;
-
-        let swap_master_key = SwapMasterKey::new(wallet_mnemonic, None, network)?;
-        let master_xpub = swap_master_key.get_master_xpub();
-
-        println!("--- SWAP MASTER KEY (mainnet) ---");
-        println!("wallet mnemonic : {wallet_mnemonic}");
-        println!("swap mnemonic   : {}", swap_master_key.mnemonic);
-        println!("fingerprint     : {}", swap_master_key.fingerprint);
-        println!("master xprv     : {}", swap_master_key.xprv);
-        println!("master xpub     : {master_xpub}");
-        println!("--- swap keys at indexes 0..5 ---");
-        for i in 0..5u64 {
-            let kp = swap_master_key.derive_swapkey(i)?;
-            println!("index {i}: pubkey {}", kp.public_key());
-        }
 
         Ok(())
     }
