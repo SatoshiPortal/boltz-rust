@@ -621,11 +621,12 @@ impl BtcSwapTx {
     /// (input - fee - sum of additional outputs) and stays at output index 0,
     /// with the additional outputs following in the given order.
     ///
-    /// Calling this again replaces the previously set list. Construction only
-    /// enforces balance (no overflow, no overspend): zero-valued outputs are
-    /// accepted, so meeting dust and relay policy is the broadcaster's
-    /// responsibility. Cooperative signing commits to every output, including
-    /// the additional ones.
+    /// Calling this again replaces the previously set list. Construction
+    /// enforces balance (no overflow, no overspend) and rejects any output —
+    /// including the computed primary remainder — below the dust threshold
+    /// for its script type: a transaction that cannot be relayed cannot
+    /// confirm before the swap timeout. Cooperative signing commits to every
+    /// output, including the additional ones.
     pub fn with_additional_outputs(mut self, additional_outputs: Vec<(Address, u64)>) -> Self {
         self.additional_outputs = additional_outputs;
         self
@@ -875,8 +876,8 @@ impl BtcSwapTx {
     /// remainder) at index 0, followed by any additional fixed-amount outputs.
     ///
     /// Zero-valued outputs are consensus-valid and accepted here; construction
-    /// does not guarantee relayability. Meeting node dust and relay policy is
-    /// the broadcaster's responsibility.
+    /// rejects any output, including the computed primary remainder, below
+    /// the dust threshold for its script type.
     fn create_payment_outputs(
         &self,
         input_value: Amount,
@@ -900,14 +901,32 @@ impl BtcSwapTx {
             )))?;
 
         let mut outputs = Vec::with_capacity(1 + self.additional_outputs.len());
+        let primary_spk = self.output_address.script_pubkey();
+        let primary_dust = primary_spk.minimal_non_dust();
+        if primary_value < primary_dust {
+            return Err(Error::Protocol(format!(
+                "Primary output of {} sat is below the {} sat dust threshold; a dust output cannot be relayed and a swap transaction that cannot confirm risks the timeout",
+                primary_value.to_sat(),
+                primary_dust.to_sat()
+            )));
+        }
         outputs.push(TxOut {
-            script_pubkey: self.output_address.script_pubkey(),
+            script_pubkey: primary_spk,
             value: primary_value,
         });
         for (address, amount) in &self.additional_outputs {
+            let script_pubkey = address.script_pubkey();
+            let dust = script_pubkey.minimal_non_dust();
+            let value = Amount::from_sat(*amount);
+            if value < dust {
+                return Err(Error::Protocol(format!(
+                    "Additional output of {amount} sat to {address} is below the {} sat dust threshold",
+                    dust.to_sat()
+                )));
+            }
             outputs.push(TxOut {
-                script_pubkey: address.script_pubkey(),
-                value: Amount::from_sat(*amount),
+                script_pubkey,
+                value,
             });
         }
 
@@ -1499,58 +1518,50 @@ mod tests {
     }
 
     #[macros::test_all]
-    fn test_additional_output_zero_amount_allowed() {
+    fn test_additional_output_below_dust_rejected() {
         let (swap_tx, keys, preimage) =
             swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
         let secp = Secp256k1::new();
 
-        let extra_address = p2wpkh_address(&secp);
-        let tx = swap_tx
-            .with_additional_outputs(vec![(extra_address.clone(), 0)])
-            .create_claim(&keys, &preimage, FEE_SAT, false)
-            .unwrap();
-
-        assert_eq!(tx.output.len(), 2);
-        assert_eq!(tx.output[0].value.to_sat(), FUNDING_SAT - FEE_SAT);
-        assert_eq!(tx.output[1].value.to_sat(), 0);
-        assert_eq!(tx.output[1].script_pubkey, extra_address.script_pubkey());
+        for amount in [0, 1] {
+            let err = swap_tx
+                .clone()
+                .with_additional_outputs(vec![(p2wpkh_address(&secp), amount)])
+                .create_claim(&keys, &preimage, FEE_SAT, false)
+                .unwrap_err();
+            assert!(err.message().contains("dust"));
+        }
     }
 
     #[macros::test_all]
-    fn test_additional_output_one_satoshi_allowed() {
+    fn test_additional_output_at_dust_threshold_allowed() {
         let (swap_tx, keys, preimage) =
             swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
         let secp = Secp256k1::new();
 
         let extra_address = p2wpkh_address(&secp);
+        let dust = extra_address.script_pubkey().minimal_non_dust().to_sat();
         let tx = swap_tx
-            .with_additional_outputs(vec![(extra_address.clone(), 1)])
+            .with_additional_outputs(vec![(extra_address.clone(), dust)])
             .create_claim(&keys, &preimage, FEE_SAT, false)
             .unwrap();
 
         assert_eq!(tx.output.len(), 2);
-        assert_eq!(tx.output[0].value.to_sat(), FUNDING_SAT - FEE_SAT - 1);
-        assert_eq!(tx.output[1].value.to_sat(), 1);
+        assert_eq!(tx.output[0].value.to_sat(), FUNDING_SAT - FEE_SAT - dust);
+        assert_eq!(tx.output[1].value.to_sat(), dust);
     }
 
     #[macros::test_all]
-    fn test_zero_primary_remainder_allowed() {
+    fn test_dust_primary_remainder_rejected() {
         let (swap_tx, keys, preimage) =
             swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
         let secp = Secp256k1::new();
 
-        let extra_address = p2wpkh_address(&secp);
-        let primary_script = swap_tx.output_address.script_pubkey();
-        let tx = swap_tx
-            .with_additional_outputs(vec![(extra_address.clone(), FUNDING_SAT - FEE_SAT)])
+        let err = swap_tx
+            .with_additional_outputs(vec![(p2wpkh_address(&secp), FUNDING_SAT - FEE_SAT)])
             .create_claim(&keys, &preimage, FEE_SAT, false)
-            .unwrap();
-
-        assert_eq!(tx.output.len(), 2);
-        assert_eq!(tx.output[0].value.to_sat(), 0);
-        assert_eq!(tx.output[0].script_pubkey, primary_script);
-        assert_eq!(tx.output[1].value.to_sat(), FUNDING_SAT - FEE_SAT);
-        assert_eq!(tx.output[1].script_pubkey, extra_address.script_pubkey());
+            .unwrap_err();
+        assert!(err.message().contains("dust"));
     }
 
     #[macros::test_all]
