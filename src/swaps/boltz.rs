@@ -23,7 +23,11 @@ use crate::util::ensure_rustls_crypto_provider;
 use crate::{error::Error, network::Chain, util::secrets::Preimage};
 use crate::{BtcSwapScript, LBtcSwapScript};
 use bitcoin::secp256k1;
-use bitcoin::{hashes::sha256, hex::DisplayHex, PublicKey};
+use bitcoin::{
+    hashes::{hash160, sha256},
+    hex::DisplayHex,
+    PublicKey,
+};
 use lightning_invoice::Bolt11Invoice;
 use reqwest::Method;
 use secp256k1_musig::musig;
@@ -926,6 +930,13 @@ impl CreateSubmarineResponse {
         match chain {
             Chain::Bitcoin(bitcoin_chain) => {
                 let boltz_sub_script = BtcSwapScript::submarine_from_swap_resp(self, *our_pubkey)?;
+                if boltz_sub_script.hashlock != preimage.hash160 {
+                    return Err(Error::Protocol(format!(
+                        "Hash160 mismatch: {},{}",
+                        boltz_sub_script.hashlock, preimage.hash160
+                    )));
+                }
+
                 boltz_sub_script.validate_address(bitcoin_chain, self.address.clone())
             }
             Chain::Liquid(liquid_chain) => {
@@ -1250,10 +1261,24 @@ impl CreateReverseResponse {
         match chain {
             Chain::Bitcoin(bitcoin_chain) => {
                 let boltz_rev_script = BtcSwapScript::reverse_from_swap_resp(self, *our_pubkey)?;
+                if boltz_rev_script.hashlock != preimage.hash160 {
+                    return Err(Error::Protocol(format!(
+                        "Hash160 mismatch: {},{}",
+                        boltz_rev_script.hashlock, preimage.hash160
+                    )));
+                }
+
                 boltz_rev_script.validate_address(bitcoin_chain, self.lockup_address.clone())
             }
             Chain::Liquid(liquid_chain) => {
                 let boltz_rev_script = LBtcSwapScript::reverse_from_swap_resp(self, *our_pubkey)?;
+                if boltz_rev_script.hashlock != preimage.hash160 {
+                    return Err(Error::Protocol(format!(
+                        "Hash160 mismatch: {},{}",
+                        boltz_rev_script.hashlock, preimage.hash160
+                    )));
+                }
+
                 boltz_rev_script.validate_address(liquid_chain, self.lockup_address.clone())
             }
         }
@@ -1314,21 +1339,30 @@ pub struct CreateChainResponse {
     pub lockup_details: ChainSwapDetails,
 }
 impl CreateChainResponse {
-    /// Validate chain swap response
+    /// Validate both sides of a chain swap against the requested preimage hash.
     pub fn validate(
         &self,
         claim_pubkey: &PublicKey,
         refund_pubkey: &PublicKey,
         from_chain: Chain,
         to_chain: Chain,
+        preimage_hash: &sha256::Hash,
     ) -> Result<(), Error> {
+        let expected_hashlock = Preimage::hash160_from_sha256(preimage_hash)?;
         self.validate_side(
             Side::Lockup,
             from_chain,
             &self.lockup_details,
             refund_pubkey,
+            &expected_hashlock,
         )?;
-        self.validate_side(Side::Claim, to_chain, &self.claim_details, claim_pubkey)
+        self.validate_side(
+            Side::Claim,
+            to_chain,
+            &self.claim_details,
+            claim_pubkey,
+            &expected_hashlock,
+        )
     }
 
     fn validate_side(
@@ -1337,16 +1371,31 @@ impl CreateChainResponse {
         chain: Chain,
         details: &ChainSwapDetails,
         our_pubkey: &PublicKey,
+        expected_hashlock: &hash160::Hash,
     ) -> Result<(), Error> {
         match chain {
             Chain::Bitcoin(bitcoin_chain) => {
                 let boltz_chain_script =
                     BtcSwapScript::chain_from_swap_resp(side, details.clone(), *our_pubkey)?;
+                if boltz_chain_script.hashlock != *expected_hashlock {
+                    return Err(Error::Protocol(format!(
+                        "Hash160 mismatch: {},{}",
+                        boltz_chain_script.hashlock, expected_hashlock
+                    )));
+                }
+
                 boltz_chain_script.validate_address(bitcoin_chain, details.lockup_address.clone())
             }
             Chain::Liquid(liquid_chain) => {
                 let boltz_chain_script =
                     LBtcSwapScript::chain_from_swap_resp(side, details.clone(), *our_pubkey)?;
+                if boltz_chain_script.hashlock != *expected_hashlock {
+                    return Err(Error::Protocol(format!(
+                        "Hash160 mismatch: {},{}",
+                        boltz_chain_script.hashlock, expected_hashlock
+                    )));
+                }
+
                 boltz_chain_script.validate_address(liquid_chain, details.lockup_address.clone())
             }
         }

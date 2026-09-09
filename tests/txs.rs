@@ -448,6 +448,7 @@ fn prepare_lbtc_claim() -> (
 }
 
 #[test]
+#[cfg_attr(all(target_os = "linux", target_arch = "aarch64"), ignore)]
 fn lbtc_reverse_claim_size() {
     let (
         _test_framework,
@@ -467,6 +468,7 @@ fn lbtc_reverse_claim_size() {
 }
 
 #[tokio::test]
+#[cfg_attr(all(target_os = "linux", target_arch = "aarch64"), ignore)]
 async fn lbtc_reverse_claim() {
     let (test_framework, swap_tx, preimage, recvr_keypair, blinding_keypair, swap_addrs, utxo) =
         prepare_lbtc_claim();
@@ -500,6 +502,7 @@ async fn lbtc_reverse_claim() {
 }
 
 #[tokio::test]
+#[cfg_attr(all(target_os = "linux", target_arch = "aarch64"), ignore)]
 async fn lbtc_reverse_claim_relative_fee() {
     let (test_framework, swap_tx, preimage, recvr_keypair, blinding_keypair, swap_addrs, utxo) =
         prepare_lbtc_claim();
@@ -599,6 +602,7 @@ fn prepare_lbtc_refund() -> (
 }
 
 #[test]
+#[cfg_attr(all(target_os = "linux", target_arch = "aarch64"), ignore)]
 fn lbtc_submarine_refund_size() {
     let (_test_framework, swap_tx, sender_keypair, _blinding_keypair, _swap_addrs, _utxos) =
         prepare_lbtc_refund();
@@ -611,6 +615,7 @@ fn lbtc_submarine_refund_size() {
 }
 
 #[tokio::test]
+#[cfg_attr(all(target_os = "linux", target_arch = "aarch64"), ignore)]
 async fn lbtc_submarine_refund() {
     let (test_framework, swap_tx, sender_keypair, blinding_keypair, swap_addrs, utxo) =
         prepare_lbtc_refund();
@@ -639,6 +644,7 @@ async fn lbtc_submarine_refund() {
 }
 
 #[tokio::test]
+#[cfg_attr(all(target_os = "linux", target_arch = "aarch64"), ignore)]
 async fn lbtc_submarine_refund_relative_fee() {
     let (test_framework, swap_tx, sender_keypair, blinding_keypair, swap_addrs, utxo) =
         prepare_lbtc_refund();

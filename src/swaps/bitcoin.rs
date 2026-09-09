@@ -21,8 +21,8 @@ use secp256k1_musig::{
 };
 use std::str::FromStr;
 
-use crate::util::hex_to_bytes32;
 use crate::util::secrets::rng_32b;
+use crate::util::{hex_to_bytes32, script_num_to_u32};
 use crate::{error::Error, util::secrets::Preimage};
 
 use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160};
@@ -44,6 +44,14 @@ pub(crate) fn find_utxo(tx: &Transaction, script_pubkey: &Script) -> Option<(Out
         }
     }
     None
+}
+
+fn parse_output_address(address: &str, network: BitcoinChain) -> Result<Address, Error> {
+    let address = Address::from_str(address)?;
+    if !address.is_valid_for_network(network.into()) {
+        return Err(Error::Address("Address validation failed".to_string()));
+    }
+    Ok(address.assume_checked())
 }
 
 /// Bitcoin v2 swap script helper.
@@ -96,9 +104,8 @@ impl BtcSwapScript {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_CHECKSIGVERIFY {
-                        timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
-                            bytes.as_bytes(),
-                        )));
+                        timelock =
+                            Some(LockTime::from_height(script_num_to_u32(bytes.as_bytes())?)?);
                     } else {
                         continue;
                     }
@@ -112,6 +119,13 @@ impl BtcSwapScript {
 
         let timelock =
             timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+        if u64::from(timelock.to_consensus_u32()) != create_swap_response.timeout_block_height {
+            return Err(Error::Protocol(format!(
+                "Timelock mismatch: {},{}",
+                timelock.to_consensus_u32(),
+                create_swap_response.timeout_block_height
+            )));
+        }
 
         let funding_addrs = Address::from_str(&create_swap_response.address)?.assume_checked();
 
@@ -176,9 +190,8 @@ impl BtcSwapScript {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_CHECKSIGVERIFY {
-                        timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
-                            bytes.as_bytes(),
-                        )));
+                        timelock =
+                            Some(LockTime::from_height(script_num_to_u32(bytes.as_bytes())?)?);
                     } else {
                         continue;
                     }
@@ -192,6 +205,13 @@ impl BtcSwapScript {
 
         let timelock =
             timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+        if timelock.to_consensus_u32() != reverse_response.timeout_block_height {
+            return Err(Error::Protocol(format!(
+                "Timelock mismatch: {},{}",
+                timelock.to_consensus_u32(),
+                reverse_response.timeout_block_height
+            )));
+        }
 
         let funding_addrs = Address::from_str(&reverse_response.lockup_address)?.assume_checked();
 
@@ -241,9 +261,8 @@ impl BtcSwapScript {
                 Ok(Instruction::Op(opcode)) => last_op = opcode,
                 Ok(Instruction::PushBytes(bytes)) => {
                     if last_op == OP_CHECKSIGVERIFY {
-                        timelock = Some(LockTime::from_consensus(bytes_to_u32_little_endian(
-                            bytes.as_bytes(),
-                        )));
+                        timelock =
+                            Some(LockTime::from_height(script_num_to_u32(bytes.as_bytes())?)?);
                     } else {
                         continue;
                     }
@@ -257,6 +276,13 @@ impl BtcSwapScript {
 
         let timelock =
             timelock.ok_or_else(|| Error::Protocol("No timelock provided".to_string()))?;
+        if timelock.to_consensus_u32() != chain_swap_details.timeout_block_height {
+            return Err(Error::Protocol(format!(
+                "Timelock mismatch: {},{}",
+                timelock.to_consensus_u32(),
+                chain_swap_details.timeout_block_height
+            )));
+        }
 
         let funding_addrs = Address::from_str(&chain_swap_details.lockup_address)?.assume_checked();
 
@@ -462,48 +488,52 @@ impl BtcSwapScript {
         swap_id: &str,
         tx_kind: SwapTxKind,
     ) -> Result<Option<(OutPoint, TxOut)>, Error> {
-        let hex = match self.swap_type {
+        let (expected_txid, hex) = match self.swap_type {
             SwapType::Chain => match tx_kind {
                 SwapTxKind::Claim => {
                     let chain_txs = boltz_client.get_chain_txs(swap_id).await?;
-                    chain_txs
+                    let transaction = chain_txs
                         .server_lock
                         .ok_or(Error::Protocol(
                             "No server_lock transaction for Chain Swap available".to_string(),
                         ))?
-                        .transaction
-                        .hex
+                        .transaction;
+                    (transaction.id, transaction.hex)
                 }
                 SwapTxKind::Refund => {
                     let chain_txs = boltz_client.get_chain_txs(swap_id).await?;
-                    chain_txs
+                    let transaction = chain_txs
                         .user_lock
                         .ok_or(Error::Protocol(
                             "No user_lock transaction for Chain Swap available".to_string(),
                         ))?
-                        .transaction
-                        .hex
+                        .transaction;
+                    (transaction.id, transaction.hex)
                 }
             },
-            SwapType::ReverseSubmarine => boltz_client.get_reverse_tx(swap_id).await?.hex,
-            SwapType::Submarine => boltz_client.get_submarine_tx(swap_id).await?.hex,
+            SwapType::ReverseSubmarine => {
+                let transaction = boltz_client.get_reverse_tx(swap_id).await?;
+                (transaction.id, transaction.hex)
+            }
+            SwapType::Submarine => {
+                let transaction = boltz_client.get_submarine_tx(swap_id).await?;
+                (transaction.id, transaction.hex)
+            }
         };
-        if hex.is_none() {
-            return Err(Error::Hex(
-                "No transaction hex found in boltz response".to_string(),
-            ));
+        let hex = hex.ok_or(Error::Hex(
+            "No transaction hex found in boltz response".to_string(),
+        ))?;
+        let expected_txid = Txid::from_str(&expected_txid)
+            .map_err(|e| Error::Protocol(format!("Invalid lockup transaction ID: {e}")))?;
+        let tx: Transaction = deserialize(&hex::decode(hex)?)?;
+        let actual_txid = tx.compute_txid();
+        if actual_txid != expected_txid {
+            return Err(Error::Protocol(format!(
+                "Lockup transaction ID mismatch: {actual_txid},{expected_txid}"
+            )));
         }
-        let tx: Transaction = deserialize(&hex::decode(hex.unwrap())?)?;
         self.find_utxo(&tx, network)
     }
-}
-
-pub fn bytes_to_u32_little_endian(bytes: &[u8]) -> u32 {
-    let mut result = 0u32;
-    for (i, &byte) in bytes.iter().enumerate() {
-        result |= (byte as u32) << (8 * i);
-    }
-    result
 }
 
 /// A structure representing either a Claim or a Refund Tx.
@@ -520,6 +550,24 @@ pub struct BtcSwapTx {
 }
 
 impl BtcSwapTx {
+    pub fn validate_lockup_amount(&self, expected_amount: u64) -> Result<(), Error> {
+        let actual_amount = self
+            .utxos
+            .first()
+            .ok_or(Error::Protocol(
+                "No Bitcoin UTXO available for amount validation".to_string(),
+            ))?
+            .1
+            .value;
+        let expected_amount = Amount::from_sat(expected_amount);
+        if actual_amount != expected_amount {
+            return Err(Error::Protocol(format!(
+                "Lockup amount mismatch: {actual_amount} != {expected_amount}"
+            )));
+        }
+        Ok(())
+    }
+
     /// Craft a new ClaimTx. Only works for Reverse and Chain Swaps.
     /// Returns None, if the HTLC utxo doesn't exist for the swap.
     pub async fn new_claim<BC: BitcoinClient + ?Sized>(
@@ -553,14 +601,12 @@ impl BtcSwapTx {
             ));
         }
 
-        let address = Address::from_str(&claim_address)?;
-
-        address.is_valid_for_network(bitcoin_client.network().into());
+        let address = parse_output_address(&claim_address, bitcoin_client.network())?;
 
         Ok(BtcSwapTx {
             kind: SwapTxKind::Claim,
             swap_script,
-            output_address: address.assume_checked(),
+            output_address: address,
             utxos: vec![utxo], // When claiming, we only consider the first utxo
         })
     }
@@ -580,10 +626,7 @@ impl BtcSwapTx {
             ));
         }
 
-        let address = Address::from_str(refund_address)?;
-        if !address.is_valid_for_network(bitcoin_client.network().into()) {
-            return Err(Error::Address("Address validation failed".to_string()));
-        };
+        let address = parse_output_address(refund_address, bitcoin_client.network())?;
 
         let utxos = match swap_script.fetch_utxos(bitcoin_client).await {
             Ok(r) => r,
@@ -611,7 +654,7 @@ impl BtcSwapTx {
             false => Ok(BtcSwapTx {
                 kind: SwapTxKind::Refund,
                 swap_script,
-                output_address: address.assume_checked(),
+                output_address: address,
                 utxos,
             }),
         }
@@ -656,6 +699,17 @@ impl BtcSwapTx {
             return Err(Error::Protocol(
                 "No Bitcoin UTXO available for claim transaction".to_string(),
             ));
+        }
+
+        let preimage_bytes = preimage.bytes.ok_or(Error::Protocol(
+            "No preimage provided while signing.".to_string(),
+        ))?;
+        let actual_hashlock = hash160::Hash::hash(&preimage_bytes);
+        if actual_hashlock != self.swap_script.hashlock {
+            return Err(Error::Protocol(format!(
+                "Preimage hashlock mismatch: {},{}",
+                actual_hashlock, self.swap_script.hashlock
+            )));
         }
 
         let mut claim_tx = create_tx_with_fee(
@@ -803,11 +857,9 @@ impl BtcSwapTx {
         absolute_fees: u64,
         is_cooperative: bool,
     ) -> Result<Transaction, Error> {
-        if preimage.bytes.is_none() {
-            return Err(Error::Protocol(
-                "No preimage provided while signing.".to_string(),
-            ));
-        };
+        let preimage_bytes = preimage.bytes.ok_or(Error::Protocol(
+            "No preimage provided while signing.".to_string(),
+        ))?;
 
         // For claim, we only consider 1 utxo
         let utxo = self.utxos.first().ok_or(Error::Protocol(
@@ -882,9 +934,7 @@ impl BtcSwapTx {
             let mut witness = Witness::new();
 
             witness.push(final_sig.to_vec());
-            witness.push(preimage.bytes.ok_or(Error::Protocol(
-                "Preimage bytes not available - cannot claim without actual preimage".to_string(),
-            ))?);
+            witness.push(preimage_bytes);
             witness.push(self.swap_script.claim_script().as_bytes());
             witness.push(control_block.serialize());
 
@@ -1082,37 +1132,9 @@ impl BtcSwapTx {
             })
             .collect();
 
-        let lock_time = match self
-            .swap_script
-            .refund_script()
-            .instructions()
-            .filter_map(|i| {
-                let ins = i.ok()?;
-                if let Instruction::PushBytes(bytes) = ins {
-                    if bytes.len() < 5_usize {
-                        Some(LockTime::from_consensus(bytes_to_u32_little_endian(
-                            bytes.as_bytes(),
-                        )))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .next()
-        {
-            Some(r) => r,
-            None => {
-                return Err(Error::Protocol(
-                    "Error getting timelock from refund script".to_string(),
-                ))
-            }
-        };
-
         let mut refund_tx = Transaction {
             version: Version::TWO,
-            lock_time,
+            lock_time: self.swap_script.locktime,
             input: unsigned_inputs,
             output: vec![output],
         };
@@ -1210,6 +1232,10 @@ impl SwapScriptCommon for BtcSwapScript {
         self.swap_type
     }
 
+    fn receiver_pubkey(&self) -> PublicKey {
+        self.receiver_pubkey
+    }
+
     /// Compute the Musig partial signature.
     /// This is used to cooperatively settle a Submarine or Chain Swap.
     fn partial_sign(
@@ -1281,4 +1307,244 @@ fn convert_schnorr_signature(
 ) -> bitcoin::secp256k1::schnorr::Signature {
     bitcoin::secp256k1::schnorr::Signature::from_slice(schnorr_sig.as_byte_array())
         .expect("signature size matches")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::network::Chain;
+    use crate::swaps::boltz::{ChainSwapDetails, CreateChainResponse, Leaf, SwapTree};
+    use bitcoin::key::rand::thread_rng;
+
+    fn public_key(keypair: &Keypair) -> PublicKey {
+        PublicKey {
+            compressed: true,
+            inner: keypair.public_key(),
+        }
+    }
+
+    fn chain_details(
+        side: Side,
+        preimage: &Preimage,
+        our_keypair: &Keypair,
+        server_keypair: &Keypair,
+        timeout_block_height: u32,
+    ) -> ChainSwapDetails {
+        let (sender_pubkey, receiver_pubkey) = match side {
+            Side::Lockup => (public_key(our_keypair), public_key(server_keypair)),
+            Side::Claim => (public_key(server_keypair), public_key(our_keypair)),
+        };
+        let script = BtcSwapScript {
+            swap_type: SwapType::Chain,
+            side: Some(side),
+            funding_addrs: None,
+            hashlock: preimage.hash160,
+            receiver_pubkey,
+            locktime: LockTime::from_consensus(timeout_block_height),
+            sender_pubkey,
+        };
+
+        ChainSwapDetails {
+            swap_tree: SwapTree {
+                claim_leaf: Leaf {
+                    output: script.claim_script().as_bytes().to_lower_hex_string(),
+                    version: 0xc0,
+                },
+                refund_leaf: Leaf {
+                    output: script.refund_script().as_bytes().to_lower_hex_string(),
+                    version: 0xc0,
+                },
+            },
+            lockup_address: script
+                .to_address(BitcoinChain::BitcoinRegtest)
+                .unwrap()
+                .to_string(),
+            server_public_key: public_key(server_keypair),
+            timeout_block_height,
+            amount: 10_000,
+            blinding_key: None,
+            refund_address: None,
+            claim_address: None,
+            bip21: None,
+        }
+    }
+
+    #[test]
+    fn chain_response_rejects_hashlock_mismatch() {
+        let secp = Secp256k1::new();
+        let mut rng = thread_rng();
+        let refund_keys = Keypair::new(&secp, &mut rng);
+        let claim_keys = Keypair::new(&secp, &mut rng);
+        let lockup_server_keys = Keypair::new(&secp, &mut rng);
+        let claim_server_keys = Keypair::new(&secp, &mut rng);
+        let preimage = Preimage::random();
+        let response = CreateChainResponse {
+            id: "test".to_string(),
+            lockup_details: chain_details(
+                Side::Lockup,
+                &preimage,
+                &refund_keys,
+                &lockup_server_keys,
+                200,
+            ),
+            claim_details: chain_details(
+                Side::Claim,
+                &preimage,
+                &claim_keys,
+                &claim_server_keys,
+                300,
+            ),
+        };
+        let chain = Chain::Bitcoin(BitcoinChain::BitcoinRegtest);
+
+        response
+            .validate(
+                &public_key(&claim_keys),
+                &public_key(&refund_keys),
+                chain,
+                chain,
+                &preimage.sha256,
+            )
+            .unwrap();
+
+        let wrong_preimage = Preimage::random();
+        assert!(response
+            .validate(
+                &public_key(&claim_keys),
+                &public_key(&refund_keys),
+                chain,
+                chain,
+                &wrong_preimage.sha256,
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn chain_script_rejects_timeout_mismatch() {
+        let secp = Secp256k1::new();
+        let mut rng = thread_rng();
+        let our_keys = Keypair::new(&secp, &mut rng);
+        let server_keys = Keypair::new(&secp, &mut rng);
+        let mut details = chain_details(
+            Side::Claim,
+            &Preimage::random(),
+            &our_keys,
+            &server_keys,
+            200,
+        );
+        details.timeout_block_height += 1;
+
+        assert!(
+            BtcSwapScript::chain_from_swap_resp(Side::Claim, details, public_key(&our_keys))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn chain_script_rejects_timestamp_timelock() {
+        let secp = Secp256k1::new();
+        let mut rng = thread_rng();
+        let our_keys = Keypair::new(&secp, &mut rng);
+        let server_keys = Keypair::new(&secp, &mut rng);
+        let timestamp = 500_000_000;
+        let details = chain_details(
+            Side::Claim,
+            &Preimage::random(),
+            &our_keys,
+            &server_keys,
+            timestamp,
+        );
+
+        assert!(
+            BtcSwapScript::chain_from_swap_resp(Side::Claim, details, public_key(&our_keys))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn output_address_rejects_wrong_network() {
+        let secp = Secp256k1::new();
+        let keypair = Keypair::new(&secp, &mut thread_rng());
+        let address = Address::p2tr(&secp, keypair.x_only_public_key().0, None, Network::Bitcoin);
+
+        assert!(parse_output_address(&address.to_string(), BitcoinChain::BitcoinRegtest).is_err());
+    }
+
+    #[macros::async_test_all]
+    async fn claim_rejects_preimage_hashlock_mismatch() {
+        let secp = Secp256k1::new();
+        let receiver_keys = Keypair::new(&secp, &mut thread_rng());
+        let sender_keys = Keypair::new(&secp, &mut thread_rng());
+        let expected_preimage = Preimage::random();
+        let wrong_preimage = Preimage::random();
+        let output_address = Address::p2tr(
+            &secp,
+            receiver_keys.x_only_public_key().0,
+            None,
+            Network::Regtest,
+        );
+        let tx = BtcSwapTx {
+            kind: SwapTxKind::Claim,
+            swap_script: BtcSwapScript {
+                swap_type: SwapType::ReverseSubmarine,
+                side: None,
+                funding_addrs: None,
+                hashlock: expected_preimage.hash160,
+                receiver_pubkey: public_key(&receiver_keys),
+                locktime: LockTime::from_consensus(200),
+                sender_pubkey: public_key(&sender_keys),
+            },
+            output_address,
+            utxos: vec![(OutPoint::default(), TxOut::NULL)],
+        };
+
+        assert!(tx
+            .sign_claim(&receiver_keys, &wrong_preimage, Fee::Absolute(1), None,)
+            .await
+            .is_err());
+    }
+
+    #[test]
+    fn lockup_amount_validation_rejects_mismatch() {
+        let secp = Secp256k1::new();
+        let receiver_keys = Keypair::new(&secp, &mut thread_rng());
+        let sender_keys = Keypair::new(&secp, &mut thread_rng());
+        let tx = BtcSwapTx {
+            kind: SwapTxKind::Claim,
+            swap_script: BtcSwapScript {
+                swap_type: SwapType::ReverseSubmarine,
+                side: None,
+                funding_addrs: None,
+                hashlock: Preimage::random().hash160,
+                receiver_pubkey: public_key(&receiver_keys),
+                locktime: LockTime::from_height(200).unwrap(),
+                sender_pubkey: public_key(&sender_keys),
+            },
+            output_address: Address::p2tr(
+                &secp,
+                receiver_keys.x_only_public_key().0,
+                None,
+                Network::Regtest,
+            ),
+            utxos: vec![
+                (
+                    OutPoint::default(),
+                    TxOut {
+                        value: Amount::from_sat(10_000),
+                        script_pubkey: ScriptBuf::new(),
+                    },
+                ),
+                (
+                    OutPoint::default(),
+                    TxOut {
+                        value: Amount::from_sat(1),
+                        script_pubkey: ScriptBuf::new(),
+                    },
+                ),
+            ],
+        };
+
+        tx.validate_lockup_amount(10_000).unwrap();
+        assert!(tx.validate_lockup_amount(10_001).is_err());
+    }
 }
