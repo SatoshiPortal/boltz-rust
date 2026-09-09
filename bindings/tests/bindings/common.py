@@ -62,9 +62,12 @@ async def delay():
 
 
 async def next_status(updates: boltz_client.BoltzWsUpdates, status: str):
+    # 5s per event flakes on loaded CI runners (the first event regularly
+    # takes longer than that right after subscribing); 60s still fails fast
+    # when an event genuinely never comes.
     while True:
         try:
-            update = await asyncio.wait_for(updates.next(), timeout=5)
+            update = await asyncio.wait_for(updates.next(), timeout=60)
         except asyncio.TimeoutError:
             raise TimeoutError(f"Timeout waiting for status '{status}'")
         print("Waiting for status", update.status)
