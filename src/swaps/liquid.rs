@@ -612,7 +612,10 @@ impl LBtcSwapTx {
         Ok(())
     }
 
-    pub(crate) async fn new_claim_with_utxo<LC: LiquidClient + ?Sized>(
+    /// Craft a new ClaimTx from a caller-provided lockup UTXO, without any Boltz
+    /// API access. Obtain the UTXO from the Electrum-only [`Self::fetch_utxo`].
+    /// Only works for Reverse and Chain Swaps.
+    pub async fn new_claim_with_utxo<LC: LiquidClient + ?Sized>(
         swap_script: LBtcSwapScript,
         output_address: String,
         liquid_client: &LC,
@@ -710,6 +713,35 @@ impl LBtcSwapTx {
             additional_outputs: Vec::new(),
             funding_outpoint,
             funding_utxo,
+            genesis_hash,
+        })
+    }
+
+    /// Construct a RefundTx from a caller-provided lockup UTXO, without any Boltz
+    /// API access. Obtain the UTXO from the Electrum-only [`Self::fetch_utxo`].
+    /// Only works for Submarine and Chain Swaps.
+    pub async fn new_refund_with_utxo<LC: LiquidClient + ?Sized>(
+        swap_script: LBtcSwapScript,
+        output_address: &str,
+        liquid_client: &LC,
+        utxo: (OutPoint, TxOut),
+    ) -> Result<LBtcSwapTx, Error> {
+        if swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(Error::Protocol(
+                "Refund Txs cannot be constructed for Reverse Submarine Swaps.".to_string(),
+            ));
+        }
+
+        let address = parse_output_address(output_address, liquid_client.network())?;
+        let genesis_hash = liquid_client.get_genesis_hash().await?;
+
+        Ok(LBtcSwapTx {
+            kind: SwapTxKind::Refund,
+            swap_script,
+            output_address: address,
+            additional_outputs: Vec::new(),
+            funding_outpoint: utxo.0,
+            funding_utxo: utxo.1,
             genesis_hash,
         })
     }
