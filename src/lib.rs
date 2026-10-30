@@ -27,7 +27,7 @@ pub use bitcoin::{
 };
 pub use elements::{
     address::Address as ElementsAddress,
-    hex::ToHex,
+    hex::DisplayHex,
     locktime::LockTime as ElementsLockTime,
     pset::serialize::Serialize,
     secp256k1_zkp::{Keypair as ZKKeyPair, Secp256k1 as ZKSecp256k1},
