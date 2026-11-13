@@ -7,7 +7,6 @@ use bitcoin::{
 };
 use elements::{
     confidential::{Asset, AssetBlindingFactor, ValueBlindingFactor},
-    hex::FromHex,
     secp256k1_zkp::{Secp256k1, SecretKey},
     sighash::{Prevouts, SighashCache},
     taproot::{LeafVersion, TapLeafHash, TaprootBuilder, TaprootSpendInfo},
@@ -108,8 +107,10 @@ impl LBtcSwapScript {
         create_swap_response: &CreateSubmarineResponse,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
-        let claim_script = Script::from_hex(&create_swap_response.swap_tree.claim_leaf.output)?;
-        let refund_script = Script::from_hex(&create_swap_response.swap_tree.refund_leaf.output)?;
+        let claim_script =
+            Script::from_hex_no_prefix(&create_swap_response.swap_tree.claim_leaf.output)?;
+        let refund_script =
+            Script::from_hex_no_prefix(&create_swap_response.swap_tree.refund_leaf.output)?;
 
         let claim_instructions = claim_script.instructions();
         let refund_instructions = refund_script.instructions();
@@ -185,8 +186,10 @@ impl LBtcSwapScript {
         reverse_response: &CreateReverseResponse,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
-        let claim_script = Script::from_hex(&reverse_response.swap_tree.claim_leaf.output)?;
-        let refund_script = Script::from_hex(&reverse_response.swap_tree.refund_leaf.output)?;
+        let claim_script =
+            Script::from_hex_no_prefix(&reverse_response.swap_tree.claim_leaf.output)?;
+        let refund_script =
+            Script::from_hex_no_prefix(&reverse_response.swap_tree.refund_leaf.output)?;
 
         let claim_instructions = claim_script.instructions();
         let refund_instructions = refund_script.instructions();
@@ -263,8 +266,10 @@ impl LBtcSwapScript {
         chain_swap_details: ChainSwapDetails,
         our_pubkey: PublicKey,
     ) -> Result<Self, Error> {
-        let claim_script = Script::from_hex(&chain_swap_details.swap_tree.claim_leaf.output)?;
-        let refund_script = Script::from_hex(&chain_swap_details.swap_tree.refund_leaf.output)?;
+        let claim_script =
+            Script::from_hex_no_prefix(&chain_swap_details.swap_tree.claim_leaf.output)?;
+        let refund_script =
+            Script::from_hex_no_prefix(&chain_swap_details.swap_tree.refund_leaf.output)?;
 
         let claim_instructions = claim_script.instructions();
         let refund_instructions = refund_script.instructions();
@@ -887,10 +892,10 @@ impl LBtcSwapTx {
             script_witness.push(final_schnorr_sig.to_vec());
 
             let witness = TxInWitness {
-                amount_rangeproof: None,
-                inflation_keys_rangeproof: None,
-                script_witness: script_witness.to_vec(),
-                pegin_witness: vec![],
+                amount_rangeproof: elements::RangeProof::EMPTY,
+                inflation_keys_rangeproof: elements::RangeProof::EMPTY,
+                script_witness: script_witness.to_vec().into(),
+                pegin_witness: elements::PeginWitness::EMPTY,
             };
 
             claim_tx.input[0].witness = witness;
@@ -987,10 +992,7 @@ impl LBtcSwapTx {
             };
 
             let explicit_value = elements::confidential::Value::Explicit(value);
-            let msg = elements::RangeProofMessage {
-                asset: asset_id,
-                bf: out_abf,
-            };
+            let msg = elements::RangeProofMessage::new(asset_id, out_abf);
             let ephemeral_sk = SecretKey::new(&mut rng);
 
             let blinding_key = address
@@ -1015,8 +1017,8 @@ impl LBtcSwapTx {
                 asset: blinded_asset,
                 nonce,
                 witness: TxOutWitness {
-                    surjection_proof: Some(Box::new(asset_surjection_proof)), // from asset blinding
-                    rangeproof: Some(Box::new(rangeproof)),                   // from value blinding
+                    surjection_proof: asset_surjection_proof, // from asset blinding
+                    rangeproof,                               // from value blinding
                 },
             });
         }
@@ -1102,10 +1104,10 @@ impl LBtcSwapTx {
             script_witness.push(control_block.serialize());
 
             let witness = TxInWitness {
-                amount_rangeproof: None,
-                inflation_keys_rangeproof: None,
-                script_witness: script_witness.to_vec(),
-                pegin_witness: vec![],
+                amount_rangeproof: elements::RangeProof::EMPTY,
+                inflation_keys_rangeproof: elements::RangeProof::EMPTY,
+                script_witness: script_witness.to_vec().into(),
+                pegin_witness: elements::PeginWitness::EMPTY,
             };
 
             claim_tx.input[0].witness = witness;
@@ -1247,10 +1249,10 @@ impl LBtcSwapTx {
             script_witness.push(final_schnorr_sig.to_vec());
 
             let witness = TxInWitness {
-                amount_rangeproof: None,
-                inflation_keys_rangeproof: None,
-                script_witness: script_witness.to_vec(),
-                pegin_witness: vec![],
+                amount_rangeproof: elements::RangeProof::EMPTY,
+                inflation_keys_rangeproof: elements::RangeProof::EMPTY,
+                script_witness: script_witness.to_vec().into(),
+                pegin_witness: elements::PeginWitness::EMPTY,
             };
 
             refund_tx.input[0].witness = witness;
@@ -1333,10 +1335,10 @@ impl LBtcSwapTx {
             script_witness.push(control_block.serialize());
 
             let witness = TxInWitness {
-                amount_rangeproof: None,
-                inflation_keys_rangeproof: None,
-                script_witness: script_witness.to_vec(),
-                pegin_witness: vec![],
+                amount_rangeproof: elements::RangeProof::EMPTY,
+                inflation_keys_rangeproof: elements::RangeProof::EMPTY,
+                script_witness: script_witness.to_vec().into(),
+                pegin_witness: elements::PeginWitness::EMPTY,
             };
 
             refund_tx.input[0].witness = witness;
@@ -1352,10 +1354,10 @@ impl LBtcSwapTx {
         witness.push([0; 64]);
 
         TxInWitness {
-            amount_rangeproof: None,
-            inflation_keys_rangeproof: None,
-            script_witness: witness.to_vec(),
-            pegin_witness: vec![],
+            amount_rangeproof: elements::RangeProof::EMPTY,
+            inflation_keys_rangeproof: elements::RangeProof::EMPTY,
+            script_witness: witness.to_vec().into(),
+            pegin_witness: elements::PeginWitness::EMPTY,
         }
     }
 
@@ -1539,7 +1541,7 @@ mod tests {
 
         // Fabricate a blinded funding utxo paying the swap script, blinded to
         // the swap script's blinding key so create_claim can unblind it.
-        let asset_id = elements::AssetId::from_slice(&[0x11; 32]).unwrap();
+        let asset_id = elements::AssetId::from_byte_array([0x11; 32]);
         let in_abf = AssetBlindingFactor::new(&mut rng);
         let in_vbf = ValueBlindingFactor::new(&mut rng);
         let surjection_domain = TxOutSecrets {
@@ -1551,10 +1553,7 @@ mod tests {
         let (blinded_asset, surjection_proof) = Asset::Explicit(asset_id)
             .blind(&mut rng, &secp, in_abf, &[surjection_domain])
             .unwrap();
-        let rp_msg = elements::RangeProofMessage {
-            asset: asset_id,
-            bf: in_abf,
-        };
+        let rp_msg = elements::RangeProofMessage::new(asset_id, in_abf);
         let (blinded_value, nonce, rangeproof) =
             elements::confidential::Value::Explicit(FUNDING_SAT)
                 .blind(
@@ -1572,8 +1571,8 @@ mod tests {
             asset: blinded_asset,
             nonce,
             witness: TxOutWitness {
-                surjection_proof: Some(Box::new(surjection_proof)),
-                rangeproof: Some(Box::new(rangeproof)),
+                surjection_proof,
+                rangeproof,
             },
         };
 
@@ -1591,7 +1590,7 @@ mod tests {
             additional_outputs: Vec::new(),
             funding_outpoint: OutPoint::default(),
             funding_utxo,
-            genesis_hash: BlockHash::all_zeros(),
+            genesis_hash: BlockHash::from_byte_array([0; 32]),
         };
 
         (swap_tx, signing_keys, preimage, primary_blinder, asset_id)

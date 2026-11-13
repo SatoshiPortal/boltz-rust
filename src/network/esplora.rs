@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::network::{BitcoinChain, BitcoinClient, LiquidChain, LiquidClient};
 use bitcoin::ScriptBuf;
-use elements::hex::ToHex;
+use elements::hex::DisplayHex;
 use elements::pset::serialize::Serialize;
 use reqwest::Response;
 use serde::Deserialize;
@@ -160,7 +160,7 @@ impl BitcoinClient for EsploraBitcoinClient {
     }
 
     async fn broadcast_tx(&self, signed_tx: &bitcoin::Transaction) -> Result<bitcoin::Txid, Error> {
-        let tx_hex = signed_tx.serialize().to_hex();
+        let tx_hex = signed_tx.serialize().to_lower_hex_string();
         let response = self
             .client
             .post(format!("{}/tx", self.base_url))
@@ -274,7 +274,7 @@ impl LiquidClient for EsploraLiquidClient {
 
     async fn broadcast_tx(&self, signed_tx: &elements::Transaction) -> Result<String, Error> {
         let url = format!("{}/tx", self.base_url);
-        let tx_hex = signed_tx.serialize().to_hex();
+        let tx_hex = signed_tx.serialize().to_lower_hex_string();
         let response = self
             .client
             .post(url)
@@ -400,7 +400,6 @@ pub struct Utxo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elements::hex::ToHex;
     use std::str::FromStr;
 
     #[cfg(all(target_family = "wasm", target_os = "unknown"))]
@@ -420,7 +419,7 @@ mod tests {
 
         let esplora_client = EsploraLiquidClient::default(LiquidChain::Liquid, None);
         assert_eq!(
-            esplora_client.get_genesis_hash().await.unwrap().to_hex(),
+            esplora_client.get_genesis_hash().await.unwrap().to_string(),
             "1466275836220db2944ca059a3a10ef6fd2ea684b0688d2c379296888a206003"
         );
     }
