@@ -312,7 +312,7 @@ async fn get_with_retry(
         log::log!(
             level,
             "{} status_code:{} - body bytes:{:?}",
-            &url,
+            url,
             response.status(),
             response.content_length(),
         );

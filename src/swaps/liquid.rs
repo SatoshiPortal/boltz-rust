@@ -1630,7 +1630,7 @@ mod tests {
         assert!(tx.output[1].is_fee());
 
         // The whole confidential transaction must balance and verify.
-        tx.verify_tx_amt_proofs(&secp, &[swap_tx.funding_utxo.clone()])
+        tx.verify_tx_amt_proofs(&secp, std::slice::from_ref(&swap_tx.funding_utxo))
             .unwrap();
 
         let secrets = tx.output[0]
@@ -1663,7 +1663,7 @@ mod tests {
         assert_eq!(tx.output[3].value.explicit().unwrap(), FEE_SAT);
 
         // The whole confidential transaction must balance and verify.
-        tx.verify_tx_amt_proofs(&secp, &[swap_tx.funding_utxo.clone()])
+        tx.verify_tx_amt_proofs(&secp, std::slice::from_ref(&swap_tx.funding_utxo))
             .unwrap();
 
         // Primary output keeps index 0 and receives the remainder.
@@ -1709,7 +1709,7 @@ mod tests {
         assert!(tx.output[0].is_fee());
         assert_eq!(tx.output[0].value.explicit().unwrap(), FEE_SAT);
 
-        tx.verify_tx_amt_proofs(&secp, &[swap_tx.funding_utxo.clone()])
+        tx.verify_tx_amt_proofs(&secp, std::slice::from_ref(&swap_tx.funding_utxo))
             .unwrap();
 
         assert_eq!(
@@ -1810,7 +1810,7 @@ mod tests {
             .create_claim(&keys, &preimage, FEE_SAT, false)
             .unwrap();
 
-        tx.verify_tx_amt_proofs(&secp, &[swap_tx.funding_utxo.clone()])
+        tx.verify_tx_amt_proofs(&secp, std::slice::from_ref(&swap_tx.funding_utxo))
             .unwrap();
 
         assert_eq!(tx.output[1].script_pubkey, extra_address.script_pubkey());
