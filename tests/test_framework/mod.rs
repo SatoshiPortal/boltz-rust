@@ -198,20 +198,17 @@ impl LbtcTestFramework {
             )
             .unwrap();
 
-        let unspents = if let Some(value) = scan_result
+        let unspents = scan_result
             .as_object()
             .unwrap()
             .get("unspents")
             .unwrap()
             .as_array()
             .unwrap()
-            .first()
-        {
-            let value = value.as_object().unwrap().clone();
-            value
-        } else {
-            return None;
-        };
+            .first()?
+            .as_object()
+            .unwrap()
+            .clone();
 
         let txid = unspents.get("txid").unwrap();
 
