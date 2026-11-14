@@ -1253,7 +1253,7 @@ impl CreateReverseResponse {
             if invoice.payment_hash().to_string() != preimage.sha256.to_string() {
                 return Err(Error::Protocol(format!(
                     "Preimage hash mismatch : {},{}",
-                    &invoice.payment_hash().to_string(),
+                    invoice.payment_hash(),
                     preimage.sha256
                 )));
             }
