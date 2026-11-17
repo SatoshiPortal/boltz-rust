@@ -488,14 +488,18 @@ impl LBtcSwapScript {
     ) -> Result<(OutPoint, TxOut), Error> {
         let utxo = match lockup_tx {
             Some(tx) => self.find_utxo(tx, liquid_client.network()).await,
-            None => match self.fetch_utxo(liquid_client).await {
-                Ok(Some(r)) => Ok(r),
-                Ok(None) | Err(_) => {
+            None => match (self.fetch_utxo(liquid_client).await, tx_kind) {
+                (Ok(Some(r)), _) => Ok(r),
+                (Ok(None), SwapTxKind::Claim) => Err(Error::Protocol(
+                    "Lockup UTXO not yet visible to the chain client".to_string(),
+                )),
+                (Err(e), SwapTxKind::Claim) => Err(e),
+                (Ok(None) | Err(_), SwapTxKind::Refund) => {
                     self.fetch_lockup_utxo_boltz(
                         liquid_client.network(),
                         boltz_client,
                         swap_id,
-                        tx_kind,
+                        SwapTxKind::Refund,
                     )
                     .await
                 }
@@ -1903,5 +1907,78 @@ mod tests {
         };
 
         assert!(!format!("{script:?}").contains(&blinding_key.display_secret().to_string()));
+    }
+
+    struct StubLiquidClient {
+        utxo_error: Option<String>,
+    }
+
+    #[macros::async_trait]
+    impl LiquidClient for StubLiquidClient {
+        async fn get_address_utxo(
+            &self,
+            _address: &elements::Address,
+        ) -> Result<Option<(OutPoint, TxOut)>, Error> {
+            match &self.utxo_error {
+                Some(message) => Err(Error::Protocol(message.clone())),
+                None => Ok(None),
+            }
+        }
+
+        async fn get_genesis_hash(&self) -> Result<BlockHash, Error> {
+            Ok(BlockHash::from_byte_array([0; 32]))
+        }
+
+        async fn get_tx(&self, _txid: elements::Txid) -> Result<Transaction, Error> {
+            unreachable!()
+        }
+
+        async fn broadcast_tx(&self, _signed_tx: &Transaction) -> Result<String, Error> {
+            unreachable!()
+        }
+
+        fn network(&self) -> LiquidChain {
+            LiquidChain::Liquid
+        }
+    }
+
+    fn unreachable_boltz() -> BoltzApiClientV2 {
+        BoltzApiClientV2::new(
+            "http://127.0.0.1:9".to_string(),
+            Some(std::time::Duration::from_secs(1)),
+        )
+    }
+
+    #[macros::async_test_all]
+    async fn claim_without_visible_lockup_does_not_use_boltz_lockup() {
+        let (swap_tx, ..) = claim_fixture();
+        let client = StubLiquidClient { utxo_error: None };
+
+        let err = swap_tx
+            .swap_script
+            .fetch_swap_utxo(None, &client, &unreachable_boltz(), "id", SwapTxKind::Claim)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            err.message(),
+            "Lockup UTXO not yet visible to the chain client"
+        );
+    }
+
+    #[macros::async_test_all]
+    async fn claim_propagates_chain_client_error() {
+        let (swap_tx, ..) = claim_fixture();
+        let client = StubLiquidClient {
+            utxo_error: Some("electrum unavailable".to_string()),
+        };
+
+        let err = swap_tx
+            .swap_script
+            .fetch_swap_utxo(None, &client, &unreachable_boltz(), "id", SwapTxKind::Claim)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.message(), "electrum unavailable");
     }
 }

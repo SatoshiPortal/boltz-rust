@@ -452,14 +452,15 @@ impl BtcSwapScript {
     ) -> Result<(OutPoint, TxOut), Error> {
         let outpoint = match lockup_tx {
             Some(tx) => self.find_utxo(tx, bitcoin_client.network()),
-            None => match self.fetch_utxos(bitcoin_client).await {
-                Ok(v) => Ok(v.first().cloned()),
-                Err(_) => {
+            None => match (self.fetch_utxos(bitcoin_client).await, tx_kind) {
+                (Ok(v), _) => Ok(v.first().cloned()),
+                (Err(e), SwapTxKind::Claim) => Err(e),
+                (Err(_), SwapTxKind::Refund) => {
                     self.fetch_lockup_utxo_boltz(
                         bitcoin_client.network(),
                         boltz_client,
                         swap_id,
-                        tx_kind,
+                        SwapTxKind::Refund,
                     )
                     .await
                 }
@@ -1850,5 +1851,75 @@ mod tests {
 
         tx.validate_lockup_amount(10_000).unwrap();
         assert!(tx.validate_lockup_amount(10_001).is_err());
+    }
+
+    struct StubBitcoinClient {
+        utxos_error: Option<String>,
+    }
+
+    #[macros::async_trait]
+    impl BitcoinClient for StubBitcoinClient {
+        async fn get_address_balance(&self, _address: &Address) -> Result<(u64, i64), Error> {
+            unreachable!()
+        }
+
+        async fn get_address_utxos(
+            &self,
+            _address: &Address,
+        ) -> Result<Vec<(OutPoint, TxOut)>, Error> {
+            match &self.utxos_error {
+                Some(message) => Err(Error::Protocol(message.clone())),
+                None => Ok(Vec::new()),
+            }
+        }
+
+        async fn get_tx(&self, _txid: Txid) -> Result<Transaction, Error> {
+            unreachable!()
+        }
+
+        async fn broadcast_tx(&self, _signed_tx: &Transaction) -> Result<Txid, Error> {
+            unreachable!()
+        }
+
+        fn network(&self) -> BitcoinChain {
+            BitcoinChain::Bitcoin
+        }
+    }
+
+    fn unreachable_boltz() -> BoltzApiClientV2 {
+        BoltzApiClientV2::new(
+            "http://127.0.0.1:9".to_string(),
+            Some(std::time::Duration::from_secs(1)),
+        )
+    }
+
+    #[macros::async_test_all]
+    async fn claim_without_visible_lockup_does_not_use_boltz_lockup() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let client = StubBitcoinClient { utxos_error: None };
+
+        let err = swap_tx
+            .swap_script
+            .fetch_swap_utxo(None, &client, &unreachable_boltz(), "id", SwapTxKind::Claim)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.message(), "No Bitcoin UTXO detected for this script");
+    }
+
+    #[macros::async_test_all]
+    async fn claim_propagates_chain_client_error() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let client = StubBitcoinClient {
+            utxos_error: Some("electrum unavailable".to_string()),
+        };
+
+        let err = swap_tx
+            .swap_script
+            .fetch_swap_utxo(None, &client, &unreachable_boltz(), "id", SwapTxKind::Claim)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.message(), "electrum unavailable");
     }
 }
