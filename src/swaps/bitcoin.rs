@@ -593,7 +593,10 @@ impl BtcSwapTx {
         Self::new_claim_with_utxo(swap_script, claim_address, bitcoin_client, utxo)
     }
 
-    pub(crate) fn new_claim_with_utxo<BC: BitcoinClient + ?Sized>(
+    /// Craft a new ClaimTx from a caller-provided lockup UTXO, without any Boltz
+    /// API access. Obtain the UTXO from the Electrum-only [`Self::fetch_utxos`].
+    /// Only works for Reverse and Chain Swaps.
+    pub fn new_claim_with_utxo<BC: BitcoinClient + ?Sized>(
         swap_script: BtcSwapScript,
         claim_address: String,
         bitcoin_client: &BC,
@@ -680,6 +683,38 @@ impl BtcSwapTx {
                 utxos,
             }),
         }
+    }
+
+    /// Construct a RefundTx from caller-provided lockup UTXOs, without any Boltz
+    /// API access. Obtain the UTXOs from the Electrum-only [`Self::fetch_utxos`].
+    /// Only works for Submarine and Chain Swaps.
+    pub fn new_refund_with_utxo<BC: BitcoinClient + ?Sized>(
+        swap_script: BtcSwapScript,
+        refund_address: &str,
+        bitcoin_client: &BC,
+        utxos: Vec<(OutPoint, TxOut)>,
+    ) -> Result<BtcSwapTx, Error> {
+        if swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(Error::Protocol(
+                "Refund Txs cannot be constructed for Reverse Submarine Swaps.".to_string(),
+            ));
+        }
+
+        if utxos.is_empty() {
+            return Err(Error::Protocol(
+                "No Bitcoin UTXO detected for this script".to_string(),
+            ));
+        }
+
+        let address = parse_output_address(refund_address, bitcoin_client.network())?;
+
+        Ok(BtcSwapTx {
+            kind: SwapTxKind::Refund,
+            swap_script,
+            output_address: address,
+            additional_outputs: Vec::new(),
+            utxos,
+        })
     }
 
     /// Compute the Musig partial signature.
