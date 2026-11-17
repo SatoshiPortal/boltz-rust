@@ -455,15 +455,10 @@ impl BtcSwapScript {
             None => match (self.fetch_utxos(bitcoin_client).await, tx_kind) {
                 (Ok(v), _) => Ok(v.first().cloned()),
                 (Err(e), SwapTxKind::Claim) => Err(e),
-                (Err(_), SwapTxKind::Refund) => {
-                    self.fetch_lockup_utxo_boltz(
-                        bitcoin_client.network(),
-                        boltz_client,
-                        swap_id,
-                        SwapTxKind::Refund,
-                    )
+                (Err(_), SwapTxKind::Refund) => self
+                    .fetch_confirmed_lockup_utxo_boltz(bitcoin_client, boltz_client, swap_id)
                     .await
-                }
+                    .map(Some),
             },
         }?;
 
@@ -489,6 +484,48 @@ impl BtcSwapScript {
         swap_id: &str,
         tx_kind: SwapTxKind,
     ) -> Result<Option<(OutPoint, TxOut)>, Error> {
+        let tx = self
+            .fetch_lockup_tx_boltz(boltz_client, swap_id, tx_kind)
+            .await?;
+        self.find_utxo(&tx, network)
+    }
+
+    pub(crate) async fn fetch_confirmed_lockup_utxo_boltz<BC: BitcoinClient + ?Sized>(
+        &self,
+        bitcoin_client: &BC,
+        boltz_client: &BoltzApiClientV2,
+        swap_id: &str,
+    ) -> Result<(OutPoint, TxOut), Error> {
+        let boltz_tx = self
+            .fetch_lockup_tx_boltz(boltz_client, swap_id, SwapTxKind::Refund)
+            .await?;
+        self.confirm_lockup_tx(&boltz_tx, bitcoin_client).await
+    }
+
+    pub(crate) async fn confirm_lockup_tx<BC: BitcoinClient + ?Sized>(
+        &self,
+        boltz_tx: &Transaction,
+        bitcoin_client: &BC,
+    ) -> Result<(OutPoint, TxOut), Error> {
+        let txid = boltz_tx.compute_txid();
+        let tx = bitcoin_client.get_tx(txid).await?;
+        if tx.compute_txid() != txid {
+            return Err(Error::Protocol(format!(
+                "Chain client returned a different transaction for lockup {txid}"
+            )));
+        }
+        self.find_utxo(&tx, bitcoin_client.network())?
+            .ok_or(Error::Protocol(
+                "No Bitcoin UTXO detected for this script".to_string(),
+            ))
+    }
+
+    async fn fetch_lockup_tx_boltz(
+        &self,
+        boltz_client: &BoltzApiClientV2,
+        swap_id: &str,
+        tx_kind: SwapTxKind,
+    ) -> Result<Transaction, Error> {
         let (expected_txid, hex) = match self.swap_type {
             SwapType::Chain => match tx_kind {
                 SwapTxKind::Claim => {
@@ -533,7 +570,7 @@ impl BtcSwapScript {
                 "Lockup transaction ID mismatch: {actual_txid},{expected_txid}"
             )));
         }
-        self.find_utxo(&tx, network)
+        Ok(tx)
     }
 }
 
@@ -655,21 +692,11 @@ impl BtcSwapTx {
 
         let utxos = match swap_script.fetch_utxos(bitcoin_client).await {
             Ok(r) => r,
-            Err(_) => {
-                let lockup_utxo_info = swap_script
-                    .fetch_lockup_utxo_boltz(
-                        bitcoin_client.network(),
-                        boltz_client,
-                        &swap_id,
-                        SwapTxKind::Refund,
-                    )
-                    .await?;
-
-                match lockup_utxo_info {
-                    Some(r) => vec![r],
-                    None => vec![],
-                }
-            }
+            Err(_) => vec![
+                swap_script
+                    .fetch_confirmed_lockup_utxo_boltz(bitcoin_client, boltz_client, &swap_id)
+                    .await?,
+            ],
         };
 
         match utxos.is_empty() {
@@ -1855,6 +1882,7 @@ mod tests {
 
     struct StubBitcoinClient {
         utxos_error: Option<String>,
+        tx: Option<Transaction>,
     }
 
     #[macros::async_trait]
@@ -1874,7 +1902,9 @@ mod tests {
         }
 
         async fn get_tx(&self, _txid: Txid) -> Result<Transaction, Error> {
-            unreachable!()
+            self.tx
+                .clone()
+                .ok_or(Error::Protocol("transaction not found".to_string()))
         }
 
         async fn broadcast_tx(&self, _signed_tx: &Transaction) -> Result<Txid, Error> {
@@ -1896,7 +1926,10 @@ mod tests {
     #[macros::async_test_all]
     async fn claim_without_visible_lockup_does_not_use_boltz_lockup() {
         let (swap_tx, ..) = swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
-        let client = StubBitcoinClient { utxos_error: None };
+        let client = StubBitcoinClient {
+            utxos_error: None,
+            tx: None,
+        };
 
         let err = swap_tx
             .swap_script
@@ -1912,6 +1945,7 @@ mod tests {
         let (swap_tx, ..) = swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
         let client = StubBitcoinClient {
             utxos_error: Some("electrum unavailable".to_string()),
+            tx: None,
         };
 
         let err = swap_tx
@@ -1921,5 +1955,103 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(err.message(), "electrum unavailable");
+    }
+
+    fn lockup_tx_paying(script_pubkey: ScriptBuf) -> Transaction {
+        Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn::default()],
+            output: vec![TxOut {
+                value: Amount::from_sat(FUNDING_SAT),
+                script_pubkey,
+            }],
+        }
+    }
+
+    fn swap_lockup_tx(swap_script: &BtcSwapScript) -> Transaction {
+        lockup_tx_paying(
+            swap_script
+                .to_address(BitcoinChain::Bitcoin)
+                .unwrap()
+                .script_pubkey(),
+        )
+    }
+
+    #[macros::async_test_all]
+    async fn refund_accepts_boltz_lockup_confirmed_by_chain_client() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let boltz_tx = swap_lockup_tx(&swap_tx.swap_script);
+        let client = StubBitcoinClient {
+            utxos_error: None,
+            tx: Some(boltz_tx.clone()),
+        };
+
+        let (outpoint, txout) = swap_tx
+            .swap_script
+            .confirm_lockup_tx(&boltz_tx, &client)
+            .await
+            .unwrap();
+
+        assert_eq!(outpoint, OutPoint::new(boltz_tx.compute_txid(), 0));
+        assert_eq!(txout, boltz_tx.output[0]);
+    }
+
+    #[macros::async_test_all]
+    async fn refund_rejects_boltz_lockup_unknown_to_chain_client() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let boltz_tx = swap_lockup_tx(&swap_tx.swap_script);
+        let client = StubBitcoinClient {
+            utxos_error: None,
+            tx: None,
+        };
+
+        let err = swap_tx
+            .swap_script
+            .confirm_lockup_tx(&boltz_tx, &client)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.message(), "transaction not found");
+    }
+
+    #[macros::async_test_all]
+    async fn refund_rejects_boltz_lockup_differing_from_chain_client() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let boltz_tx = swap_lockup_tx(&swap_tx.swap_script);
+        let mut other_tx = boltz_tx.clone();
+        other_tx.output[0].value = Amount::from_sat(FUNDING_SAT + 1);
+        let client = StubBitcoinClient {
+            utxos_error: None,
+            tx: Some(other_tx),
+        };
+
+        let err = swap_tx
+            .swap_script
+            .confirm_lockup_tx(&boltz_tx, &client)
+            .await
+            .unwrap_err();
+
+        assert!(err
+            .message()
+            .starts_with("Chain client returned a different transaction for lockup"));
+    }
+
+    #[macros::async_test_all]
+    async fn refund_rejects_boltz_lockup_not_paying_swap_script() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let boltz_tx = lockup_tx_paying(ScriptBuf::new());
+        let client = StubBitcoinClient {
+            utxos_error: None,
+            tx: Some(boltz_tx.clone()),
+        };
+
+        let err = swap_tx
+            .swap_script
+            .confirm_lockup_tx(&boltz_tx, &client)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.message(), "No Bitcoin UTXO detected for this script");
     }
 }

@@ -495,13 +495,8 @@ impl LBtcSwapScript {
                 )),
                 (Err(e), SwapTxKind::Claim) => Err(e),
                 (Ok(None) | Err(_), SwapTxKind::Refund) => {
-                    self.fetch_lockup_utxo_boltz(
-                        liquid_client.network(),
-                        boltz_client,
-                        swap_id,
-                        SwapTxKind::Refund,
-                    )
-                    .await
+                    self.fetch_confirmed_lockup_utxo_boltz(liquid_client, boltz_client, swap_id)
+                        .await
                 }
             },
         }?;
@@ -527,6 +522,45 @@ impl LBtcSwapScript {
         swap_id: &str,
         tx_kind: SwapTxKind,
     ) -> Result<(OutPoint, TxOut), Error> {
+        let tx = self
+            .fetch_lockup_tx_boltz(boltz_client, swap_id, tx_kind)
+            .await?;
+        self.find_utxo(&tx, network).await
+    }
+
+    pub(crate) async fn fetch_confirmed_lockup_utxo_boltz<LC: LiquidClient + ?Sized>(
+        &self,
+        liquid_client: &LC,
+        boltz_client: &BoltzApiClientV2,
+        swap_id: &str,
+    ) -> Result<(OutPoint, TxOut), Error> {
+        let boltz_tx = self
+            .fetch_lockup_tx_boltz(boltz_client, swap_id, SwapTxKind::Refund)
+            .await?;
+        self.confirm_lockup_tx(&boltz_tx, liquid_client).await
+    }
+
+    pub(crate) async fn confirm_lockup_tx<LC: LiquidClient + ?Sized>(
+        &self,
+        boltz_tx: &Transaction,
+        liquid_client: &LC,
+    ) -> Result<(OutPoint, TxOut), Error> {
+        let txid = boltz_tx.txid();
+        let tx = liquid_client.get_tx(txid).await?;
+        if tx.txid() != txid {
+            return Err(Error::Protocol(format!(
+                "Chain client returned a different transaction for lockup {txid}"
+            )));
+        }
+        self.find_utxo(&tx, liquid_client.network()).await
+    }
+
+    async fn fetch_lockup_tx_boltz(
+        &self,
+        boltz_client: &BoltzApiClientV2,
+        swap_id: &str,
+        tx_kind: SwapTxKind,
+    ) -> Result<Transaction, Error> {
         let (expected_txid, hex) = match self.swap_type {
             SwapType::Chain => match tx_kind {
                 SwapTxKind::Claim => {
@@ -573,7 +607,7 @@ impl LBtcSwapScript {
                 "Lockup transaction ID mismatch: {actual_txid},{expected_txid}"
             )));
         }
-        self.find_utxo(&tx, network).await
+        Ok(tx)
     }
 
     // Get the chain genesis hash. Requires for sighash calculation
@@ -1911,6 +1945,7 @@ mod tests {
 
     struct StubLiquidClient {
         utxo_error: Option<String>,
+        tx: Option<Transaction>,
     }
 
     #[macros::async_trait]
@@ -1930,7 +1965,9 @@ mod tests {
         }
 
         async fn get_tx(&self, _txid: elements::Txid) -> Result<Transaction, Error> {
-            unreachable!()
+            self.tx
+                .clone()
+                .ok_or(Error::Protocol("transaction not found".to_string()))
         }
 
         async fn broadcast_tx(&self, _signed_tx: &Transaction) -> Result<String, Error> {
@@ -1952,7 +1989,10 @@ mod tests {
     #[macros::async_test_all]
     async fn claim_without_visible_lockup_does_not_use_boltz_lockup() {
         let (swap_tx, ..) = claim_fixture();
-        let client = StubLiquidClient { utxo_error: None };
+        let client = StubLiquidClient {
+            utxo_error: None,
+            tx: None,
+        };
 
         let err = swap_tx
             .swap_script
@@ -1971,6 +2011,7 @@ mod tests {
         let (swap_tx, ..) = claim_fixture();
         let client = StubLiquidClient {
             utxo_error: Some("electrum unavailable".to_string()),
+            tx: None,
         };
 
         let err = swap_tx
@@ -1980,5 +2021,93 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(err.message(), "electrum unavailable");
+    }
+
+    fn lockup_tx_paying(output: TxOut) -> Transaction {
+        Transaction {
+            version: 2,
+            lock_time: elements::LockTime::ZERO,
+            input: vec![],
+            output: vec![output],
+        }
+    }
+
+    #[macros::async_test_all]
+    async fn refund_accepts_boltz_lockup_confirmed_by_chain_client() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let boltz_tx = lockup_tx_paying(swap_tx.funding_utxo.clone());
+        let client = StubLiquidClient {
+            utxo_error: None,
+            tx: Some(boltz_tx.clone()),
+        };
+
+        let (outpoint, txout) = swap_tx
+            .swap_script
+            .confirm_lockup_tx(&boltz_tx, &client)
+            .await
+            .unwrap();
+
+        assert_eq!(outpoint, OutPoint::new(boltz_tx.txid(), 0));
+        assert_eq!(txout, swap_tx.funding_utxo);
+    }
+
+    #[macros::async_test_all]
+    async fn refund_rejects_boltz_lockup_unknown_to_chain_client() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let boltz_tx = lockup_tx_paying(swap_tx.funding_utxo.clone());
+        let client = StubLiquidClient {
+            utxo_error: None,
+            tx: None,
+        };
+
+        let err = swap_tx
+            .swap_script
+            .confirm_lockup_tx(&boltz_tx, &client)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.message(), "transaction not found");
+    }
+
+    #[macros::async_test_all]
+    async fn refund_rejects_boltz_lockup_differing_from_chain_client() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let boltz_tx = lockup_tx_paying(swap_tx.funding_utxo.clone());
+        let mut other_tx = boltz_tx.clone();
+        other_tx.lock_time = elements::LockTime::from_height(1).unwrap();
+        let client = StubLiquidClient {
+            utxo_error: None,
+            tx: Some(other_tx),
+        };
+
+        let err = swap_tx
+            .swap_script
+            .confirm_lockup_tx(&boltz_tx, &client)
+            .await
+            .unwrap_err();
+
+        assert!(err
+            .message()
+            .starts_with("Chain client returned a different transaction for lockup"));
+    }
+
+    #[macros::async_test_all]
+    async fn refund_rejects_boltz_lockup_not_paying_swap_script() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::Submarine, SwapTxKind::Refund);
+        let mut output = swap_tx.funding_utxo.clone();
+        output.script_pubkey = elements::Script::new();
+        let boltz_tx = lockup_tx_paying(output);
+        let client = StubLiquidClient {
+            utxo_error: None,
+            tx: Some(boltz_tx.clone()),
+        };
+
+        let err = swap_tx
+            .swap_script
+            .confirm_lockup_tx(&boltz_tx, &client)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.message(), "No Liquid UTXO detected for this script");
     }
 }
