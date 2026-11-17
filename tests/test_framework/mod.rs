@@ -10,10 +10,7 @@ use bitcoind::{
 
 use elementsd::{downloaded_exe_path, ElementsD};
 
-use elements::{
-    hex::{FromHex, ToHex},
-    Address as EAddress, BlockHash,
-};
+use elements::{hex::DisplayHex, Address as EAddress, BlockHash};
 
 use bitcoin::{network::Network, Address, Amount, Txid};
 use serde_json::Value;
@@ -201,20 +198,17 @@ impl LbtcTestFramework {
             )
             .unwrap();
 
-        let unspents = if let Some(value) = scan_result
+        let unspents = scan_result
             .as_object()
             .unwrap()
             .get("unspents")
             .unwrap()
             .as_array()
             .unwrap()
-            .first()
-        {
-            let value = value.as_object().unwrap().clone();
-            value
-        } else {
-            return None;
-        };
+            .first()?
+            .as_object()
+            .unwrap()
+            .clone();
 
         let txid = unspents.get("txid").unwrap();
 
@@ -224,9 +218,10 @@ impl LbtcTestFramework {
             .call::<Value>("getrawtransaction", std::slice::from_ref(txid))
             .unwrap();
 
-        let tx: elements::Transaction =
-            elements::encode::deserialize(&Vec::from_hex(get_raw_tx.as_str().unwrap()).unwrap())
-                .unwrap();
+        let tx: elements::Transaction = elements::encode::deserialize(
+            &elements::hex::decode_to_vec(get_raw_tx.as_str().unwrap()).unwrap(),
+        )
+        .unwrap();
 
         tx.output.iter().enumerate().find_map(|(vout, txout)| {
             if txout.script_pubkey == addrs.script_pubkey() {
@@ -239,7 +234,7 @@ impl LbtcTestFramework {
     }
 
     pub fn send_tx(&self, tx: &elements::Transaction) {
-        let tx_hex = elements::encode::serialize(tx).to_hex();
+        let tx_hex = elements::encode::serialize(tx).to_lower_hex_string();
         let _ = self
             .elementsd
             .client()

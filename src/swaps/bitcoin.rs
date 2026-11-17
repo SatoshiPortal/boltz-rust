@@ -593,7 +593,10 @@ impl BtcSwapTx {
         Self::new_claim_with_utxo(swap_script, claim_address, bitcoin_client, utxo)
     }
 
-    pub(crate) fn new_claim_with_utxo<BC: BitcoinClient + ?Sized>(
+    /// Craft a new ClaimTx from a caller-provided lockup UTXO, without any Boltz
+    /// API access. Obtain the UTXO from the Electrum-only [`Self::fetch_utxos`].
+    /// Only works for Reverse and Chain Swaps.
+    pub fn new_claim_with_utxo<BC: BitcoinClient + ?Sized>(
         swap_script: BtcSwapScript,
         claim_address: String,
         bitcoin_client: &BC,
@@ -680,6 +683,38 @@ impl BtcSwapTx {
                 utxos,
             }),
         }
+    }
+
+    /// Construct a RefundTx from caller-provided lockup UTXOs, without any Boltz
+    /// API access. Obtain the UTXOs from the Electrum-only [`Self::fetch_utxos`].
+    /// Only works for Submarine and Chain Swaps.
+    pub fn new_refund_with_utxo<BC: BitcoinClient + ?Sized>(
+        swap_script: BtcSwapScript,
+        refund_address: &str,
+        bitcoin_client: &BC,
+        utxos: Vec<(OutPoint, TxOut)>,
+    ) -> Result<BtcSwapTx, Error> {
+        if swap_script.swap_type == SwapType::ReverseSubmarine {
+            return Err(Error::Protocol(
+                "Refund Txs cannot be constructed for Reverse Submarine Swaps.".to_string(),
+            ));
+        }
+
+        if utxos.is_empty() {
+            return Err(Error::Protocol(
+                "No Bitcoin UTXO detected for this script".to_string(),
+            ));
+        }
+
+        let address = parse_output_address(refund_address, bitcoin_client.network())?;
+
+        Ok(BtcSwapTx {
+            kind: SwapTxKind::Refund,
+            swap_script,
+            output_address: address,
+            additional_outputs: Vec::new(),
+            utxos,
+        })
     }
 
     /// Compute the Musig partial signature.
@@ -773,16 +808,16 @@ impl BtcSwapTx {
 
             let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak)?;
 
-            let session_secret_rand =
-                musig::SessionSecretRand::assume_unique_per_nonce_gen(rng_32b());
-
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
 
-            let (claim_sec_nonce, claim_pub_nonce) = key_agg_cache.nonce_gen(
-                session_secret_rand,
+            let musig_keys = convert_keypair(keys);
+            let (claim_sec_nonce, claim_pub_nonce) = musig::new_nonce_pair(
+                musig::SessionSecretRand::assume_uniformly_random(rng_32b()),
+                Some(&key_agg_cache),
+                Some(musig_keys.secret_key()),
                 convert_public_key(keys.public_key()),
-                &msg,
+                Some(&msg),
                 Some(extra_rand),
             );
 
@@ -1073,16 +1108,16 @@ impl BtcSwapTx {
 
                 let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak)?;
 
-                let session_secret_rand =
-                    musig::SessionSecretRand::assume_unique_per_nonce_gen(rng_32b());
-
                 let mut extra_rand = [0u8; 32];
                 OsRng.fill_bytes(&mut extra_rand);
 
-                let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
-                    session_secret_rand,
+                let musig_keys = convert_keypair(keys);
+                let (sec_nonce, pub_nonce) = musig::new_nonce_pair(
+                    musig::SessionSecretRand::assume_uniformly_random(rng_32b()),
+                    Some(&key_agg_cache),
+                    Some(musig_keys.secret_key()),
                     convert_public_key(keys.public_key()),
-                    &msg,
+                    Some(&msg),
                     Some(extra_rand),
                 );
 
@@ -1311,18 +1346,19 @@ impl SwapScriptCommon for BtcSwapScript {
 
         let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak)?;
 
-        let session_secret_rand = musig::SessionSecretRand::assume_unique_per_nonce_gen(rng_32b());
-
         let msg = hex_to_bytes32(transaction_hash)?;
 
         // Step 4: Start the Musig2 Signing session
         let mut extra_rand = [0u8; 32];
         OsRng.fill_bytes(&mut extra_rand);
 
-        let (gen_sec_nonce, gen_pub_nonce) = key_agg_cache.nonce_gen(
-            session_secret_rand,
+        let musig_keys = convert_keypair(keys);
+        let (gen_sec_nonce, gen_pub_nonce) = musig::new_nonce_pair(
+            musig::SessionSecretRand::assume_uniformly_random(rng_32b()),
+            Some(&key_agg_cache),
+            Some(musig_keys.secret_key()),
             convert_public_key(keys.public_key()),
-            &msg,
+            Some(&msg),
             Some(extra_rand),
         );
 
@@ -1349,7 +1385,7 @@ fn convert_pubkeys_for_musig(
 }
 
 fn convert_xonly_key(key: secp256k1_musig::XOnlyPublicKey) -> bitcoin::XOnlyPublicKey {
-    bitcoin::XOnlyPublicKey::from_slice(&key.serialize()[..]).expect("xonly key size matches")
+    bitcoin::XOnlyPublicKey::from_slice(&key.to_byte_array()[..]).expect("xonly key size matches")
 }
 
 fn convert_public_key(key: bitcoin::secp256k1::PublicKey) -> secp256k1_musig::PublicKey {
@@ -1357,8 +1393,7 @@ fn convert_public_key(key: bitcoin::secp256k1::PublicKey) -> secp256k1_musig::Pu
 }
 
 fn convert_keypair(keys: &bitcoin::secp256k1::Keypair) -> secp256k1_musig::Keypair {
-    secp256k1_musig::Keypair::from_seckey_byte_array(keys.secret_bytes())
-        .expect("keypair size matches")
+    secp256k1_musig::Keypair::from_secret_bytes(keys.secret_bytes()).expect("keypair size matches")
 }
 
 fn convert_schnorr_signature(

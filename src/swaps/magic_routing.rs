@@ -100,20 +100,20 @@ pub async fn check_for_mrh(
         )?;
 
         match network {
-            Chain::Liquid(LiquidChain::LiquidTestnet) => {
-                if assetid != Some(LBTC_TESTNET_ASSET_HASH.to_string()) {
-                    return Err(Error::Protocol(
-                        "Asset Id missmatch in Magic Routing Hint".to_string(),
-                    ));
-                }
+            Chain::Liquid(LiquidChain::LiquidTestnet)
+                if assetid != Some(LBTC_TESTNET_ASSET_HASH.to_string()) =>
+            {
+                return Err(Error::Protocol(
+                    "Asset Id missmatch in Magic Routing Hint".to_string(),
+                ));
             }
 
-            Chain::Liquid(LiquidChain::Liquid) => {
-                if assetid != Some(LBTC_MAINNET_ASSET_HASH.to_string()) {
-                    return Err(Error::Protocol(
-                        "Asset Id missmatch in Magic Routing Hint".to_string(),
-                    ));
-                }
+            Chain::Liquid(LiquidChain::Liquid)
+                if assetid != Some(LBTC_MAINNET_ASSET_HASH.to_string()) =>
+            {
+                return Err(Error::Protocol(
+                    "Asset Id missmatch in Magic Routing Hint".to_string(),
+                ));
             }
             _ => (),
         }

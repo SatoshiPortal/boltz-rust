@@ -323,7 +323,6 @@ impl Preimage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elements::pset::serialize::Serialize;
 
     #[macros::test_all]
     fn test_derivation() {
@@ -394,7 +393,7 @@ mod tests {
     #[macros::test_all]
     fn test_preimage_from_sha256_vec() {
         let preimage = Preimage::random();
-        let compare = Preimage::from_sha256_vec(preimage.sha256.serialize()).unwrap();
+        let compare = Preimage::from_sha256_vec(preimage.sha256.to_byte_array().to_vec()).unwrap();
 
         assert_eq!(compare.bytes, None);
         assert_eq!(compare.sha256, preimage.sha256);

@@ -6,21 +6,19 @@ on:
 
 name: build
 
+env:
+  RUSTUP_TOOLCHAIN: 1.100.0
+
 jobs:
 
   build:
     name: Build
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-          - nightly
     steps:
       - name: checkout
         uses: actions/checkout@v3
       - name: Generate cache key
-        run: echo "${{ matrix.rust }}" | tee .cache_key
+        run: echo "${{ env.RUSTUP_TOOLCHAIN }}" | tee .cache_key
       - name: cache
         uses: actions/cache@v3
         with:
@@ -29,14 +27,12 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('.cache_key') }}-${{ hashFiles('**/Cargo.toml','**/Cargo.lock') }}
-      - name: Set default toolchain
-        run: rustup default ${{ matrix.rust }}
+      - name: Install toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
       - name: Add wasm target
         run: rustup target add wasm32-unknown-unknown
       - name: Set profile
         run: rustup set profile minimal
-      - name: Update toolchain
-        run: rustup update
       - name: Build
         run: make cargo-build
       - name: Build wasm
@@ -48,6 +44,8 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v3
+      - name: Install toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
       - name: Add wasm target
         run: rustup target add wasm32-unknown-unknown
       - name: Install wasm-pack

@@ -6,6 +6,9 @@ on:
 
 name: lint
 
+env:
+  RUSTUP_TOOLCHAIN: 1.100.0
+
 jobs:
   fmt:
     name: rust fmt
@@ -13,8 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Set default toolchain
-        run: rustup default nightly
+      - name: Install toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v6
         with:
@@ -27,8 +30,6 @@ jobs:
         run: rustup component add clippy
       - name: Add wasm target
         run: rustup target add wasm32-unknown-unknown
-      - name: Update toolchain
-        run: rustup update
       - name: Check fmt
         run: cargo fmt --all -- --check
       - name: Clippy

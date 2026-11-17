@@ -127,8 +127,14 @@ impl From<lightning_invoice::ParseOrSemanticError> for Error {
     }
 }
 
-impl From<elements::hex::Error> for Error {
-    fn from(value: elements::hex::Error) -> Self {
+impl From<elements::hex::DecodeVariableLengthBytesError> for Error {
+    fn from(value: elements::hex::DecodeVariableLengthBytesError) -> Self {
+        Self::Hex(value.to_string())
+    }
+}
+
+impl From<elements::hex::DecodeFixedLengthBytesError> for Error {
+    fn from(value: elements::hex::DecodeFixedLengthBytesError) -> Self {
         Self::Hex(value.to_string())
     }
 }
