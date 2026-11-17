@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Claims no longer take their lockup UTXO from the Boltz API. `new_claim`
+  on Bitcoin and Liquid used Boltz's copy of the lockup transaction when the
+  chain client errored (and, on Liquid, when it saw no UTXO), checked only
+  against Boltz's own txid; a cooperative claim then revealed the preimage
+  for a lockup that may never have existed. A claim now fails, for the
+  caller to retry, until its own chain client sees the lockup. Refunds keep
+  the fallback: refunding our own lockup reveals no secret.
+
 ## [0.5.0] - 2026-11-17
 
 Must ship as `0.5.0`: this release is source-breaking and must not be
