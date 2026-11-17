@@ -2,13 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2026-11-17
 
 Must ship as `0.5.0`: this release is source-breaking and must not be
-published on the `0.4.x` compatibility line. The version bump itself is left
-to the release PR.
+published on the `0.4.x` compatibility line.
 
 ### Added
+- Boltz-free claim and refund constructors. `BtcSwapTx::new_claim_with_utxo`
+  and `LBtcSwapTx::new_claim_with_utxo` are now public, and
+  `BtcSwapTx::new_refund_with_utxo` / `LBtcSwapTx::new_refund_with_utxo` are
+  new. They build the transaction from a caller-provided lockup UTXO with no
+  `BoltzApiClientV2` in scope, so a script-path claim or refund can run
+  without any Boltz API call; fetch the UTXO with
+  `BtcSwapScript::fetch_utxos` / `LBtcSwapScript::fetch_utxo`.
 - Multi-output claim and refund transactions. `BtcSwapTx` and `LBtcSwapTx`
   gained a `with_additional_outputs` builder taking `(address, satoshis)`
   pairs; `TransactionOptions::with_additional_outputs` forwards
@@ -33,11 +39,26 @@ to the release PR.
 - Fixed `BtcSwapTx::new_claim_with_utxo` silently discarding the result of
   its claim-address network check; an address for the wrong network is now
   rejected.
+- MuSig nonce generation and key conversions adapted to the `secp256k1`
+  0.33 API, and the code to the `elements` 0.27 API; no behaviour change.
+- Native, lint, test and WASM CI jobs are pinned to Rust 1.100.0, and the
+  library and tests pass its strict Clippy.
+
+### Dependencies
+- Replaced the yanked `secp256k1` `0.32.0-beta.0` (MuSig) with `0.33.1`.
+- Bumped `elements` from `0.26.2` to `0.27.0`, the version `lwk_wollet` 0.20
+  uses, so crates depending on both no longer carry two `elements` versions.
+- Bumped `electrum-client` from `0.25.0` to `0.25.2` (RUSTSEC-2026-0381);
+  this moves `webpki-roots` to 1.0.11, which drops the compromised
+  `emSign ECC Root CA - G3` from the bundled roots.
+- Refreshed the compatible entries of `Cargo.lock`.
 
 ### Breaking
 - `BtcSwapTx` and `LBtcSwapTx` gained a public `additional_outputs` field;
   struct-literal construction of these types must be updated (the
   constructors initialize it to an empty vector).
+- `elements` types in the public API are now from `elements` 0.27; callers
+  passing or receiving them must use `elements` 0.27.
 
 ## [0.4.1]
 
