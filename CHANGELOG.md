@@ -12,6 +12,12 @@ All notable changes to this project will be documented in this file.
   for a lockup that may never have existed. A claim now fails, for the
   caller to retry, until its own chain client sees the lockup. Refunds keep
   the fallback: refunding our own lockup reveals no secret.
+- Refunds no longer trust the Boltz API's copy of the lockup transaction.
+  When the chain client errored (and, on Liquid, saw no UTXO), `new_refund`
+  built the refund from the lockup transaction Boltz served. That
+  transaction is now accepted only once the chain client returns it by
+  txid, and the refunded output is read from the chain client's copy;
+  otherwise the refund fails for the caller to retry.
 
 ## [0.5.0] - 2026-11-17
 
