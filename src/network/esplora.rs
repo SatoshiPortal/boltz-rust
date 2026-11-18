@@ -62,10 +62,14 @@ impl EsploraBitcoinClient {
     fn extract_address_utxos(
         txs: &[Transaction],
         address: &str,
+        confirmed_only: bool,
     ) -> Result<Vec<(bitcoin::OutPoint, bitcoin::TxOut)>, Error> {
         let mut result = Vec::new();
 
         for tx in txs {
+            if confirmed_only && !tx.status.confirmed {
+                continue;
+            }
             for (vout, output) in tx.vout.iter().enumerate() {
                 // Check if this output belongs to our address
                 if output.scriptpubkey_address != address {
@@ -148,7 +152,23 @@ impl BitcoinClient for EsploraBitcoinClient {
 
         let txs: Vec<Transaction> = serde_json::from_str(&response.text().await?)?;
 
-        Self::extract_address_utxos(&txs, &address.to_string())
+        Self::extract_address_utxos(&txs, &address.to_string(), false)
+    }
+
+    async fn get_confirmed_address_utxos(
+        &self,
+        address: &bitcoin::Address,
+    ) -> Result<Vec<(bitcoin::OutPoint, bitcoin::TxOut)>, Error> {
+        let url = format!("{}/address/{}/txs", self.base_url, address);
+        let response = get_with_retry(&self.client, &url, self.timeout).await?;
+
+        let txs: Vec<Transaction> = serde_json::from_str(&response.text().await?)?;
+
+        Self::extract_address_utxos(&txs, &address.to_string(), true)
+    }
+
+    async fn get_tip_height(&self) -> Result<u32, Error> {
+        tip_height(&self.client, &self.base_url, self.timeout).await
     }
 
     async fn get_tx(&self, txid: bitcoin::Txid) -> Result<bitcoin::Transaction, Error> {
@@ -177,6 +197,19 @@ impl BitcoinClient for EsploraBitcoinClient {
     fn network(&self) -> BitcoinChain {
         self.network
     }
+}
+
+async fn tip_height(
+    client: &reqwest::Client,
+    base_url: &str,
+    timeout: Duration,
+) -> Result<u32, Error> {
+    let url = format!("{base_url}/blocks/tip/height");
+    let response = get_with_retry(client, &url, timeout).await?;
+    let text = response.text().await?;
+    text.trim()
+        .parse::<u32>()
+        .map_err(|e| Error::Esplora(format!("Failed to parse tip height {text}: {e}")))
 }
 
 pub struct EsploraLiquidClient {
@@ -255,6 +288,10 @@ impl LiquidClient for EsploraLiquidClient {
             }
         }
         Ok(None)
+    }
+
+    async fn get_tip_height(&self) -> Result<u32, Error> {
+        tip_height(&self.client, &self.base_url, self.timeout).await
     }
 
     async fn get_genesis_hash(&self) -> Result<elements::BlockHash, Error> {
@@ -541,10 +578,30 @@ mod tests {
                 pending_spending_tx.clone(),
             ],
             our_address,
+            false,
         )
         .unwrap();
 
         assert_eq!(utxo_pairs.len(), 3);
+
+        let confirmed_pairs = EsploraBitcoinClient::extract_address_utxos(
+            &[
+                tx1.clone(),
+                tx2.clone(),
+                tx3.clone(),
+                tx4.clone(),
+                spending_tx.clone(),
+                pending_spending_tx.clone(),
+            ],
+            our_address,
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(confirmed_pairs.len(), 2);
+        assert!(confirmed_pairs.iter().all(|(outpoint, _)| {
+            outpoint.txid.to_string() == tx2.txid || outpoint.txid.to_string() == tx3.txid
+        }));
 
         // Pending tx with unspent output
         assert!(utxo_pairs

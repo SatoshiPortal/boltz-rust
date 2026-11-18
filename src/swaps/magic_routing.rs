@@ -31,6 +31,21 @@ pub fn find_magic_routing_hint(invoice: &str) -> Result<Option<RouteHintHop>, Er
         .cloned())
 }
 
+/// Ensures the invoice carries the magic routing hint with `claim_pubkey`, the
+/// key the receiver signed its address with.
+pub fn validate_magic_routing_hint(invoice: &str, claim_pubkey: &PublicKey) -> Result<(), Error> {
+    let hint = find_magic_routing_hint(invoice)?.ok_or(Error::Protocol(
+        "Invoice is missing the magic routing hint".to_string(),
+    ))?;
+    if hint.src_node_id != claim_pubkey.inner {
+        return Err(Error::Protocol(format!(
+            "Magic routing hint key mismatch: {},{}",
+            hint.src_node_id, claim_pubkey.inner
+        )));
+    }
+    Ok(())
+}
+
 /// Parse a BIP21 String and get the network, address, asset_id if present
 pub fn parse_bip21(uri: &str) -> Result<Bip21Components, Error> {
     let parts: Vec<&str> = uri.split('?').collect();
@@ -153,8 +168,75 @@ pub fn sign_address(addr: &str, keys: &Keypair) -> Result<Signature, Error> {
 #[cfg(test)]
 mod tests {
     use crate::swaps::magic_routing::{
-        find_magic_routing_hint, parse_bip21, MAGIC_ROUTING_HINT_CONSTANT,
+        find_magic_routing_hint, parse_bip21, validate_magic_routing_hint,
+        MAGIC_ROUTING_HINT_CONSTANT,
     };
+    use bitcoin::hashes::{sha256, Hash};
+    use bitcoin::key::{Keypair, Secp256k1};
+    use bitcoin::PublicKey;
+    use lightning_invoice::{
+        Currency, InvoiceBuilder, PaymentSecret, RouteHint, RouteHintHop, RoutingFees,
+    };
+
+    fn invoice_with_hint(src_node_id: Option<bitcoin::secp256k1::PublicKey>) -> String {
+        let secp = Secp256k1::new();
+        let node_keys = Keypair::new(&secp, &mut bitcoin::secp256k1::rand::thread_rng());
+        let builder = InvoiceBuilder::new(Currency::Bitcoin)
+            .description("mrh".to_string())
+            .payment_hash(sha256::Hash::hash(&[1; 32]))
+            .payment_secret(PaymentSecret([2; 32]))
+            .duration_since_epoch(std::time::Duration::from_secs(1_700_000_000))
+            .min_final_cltv_expiry_delta(144);
+        let builder = match src_node_id {
+            Some(src_node_id) => builder.private_route(RouteHint(vec![RouteHintHop {
+                src_node_id,
+                short_channel_id: MAGIC_ROUTING_HINT_CONSTANT,
+                fees: RoutingFees {
+                    base_msat: 0,
+                    proportional_millionths: 0,
+                },
+                cltv_expiry_delta: 0,
+                htlc_minimum_msat: None,
+                htlc_maximum_msat: None,
+            }])),
+            None => builder,
+        };
+        builder
+            .build_signed(|hash| secp.sign_ecdsa_recoverable(hash, &node_keys.secret_key()))
+            .unwrap()
+            .to_string()
+    }
+
+    #[macros::test_all]
+    fn magic_routing_hint_must_carry_our_claim_key() {
+        let secp = Secp256k1::new();
+        let ours = Keypair::new(&secp, &mut bitcoin::secp256k1::rand::thread_rng());
+        let theirs = Keypair::new(&secp, &mut bitcoin::secp256k1::rand::thread_rng());
+        let claim_pubkey = PublicKey::new(ours.public_key());
+
+        assert!(validate_magic_routing_hint(
+            &invoice_with_hint(Some(ours.public_key())),
+            &claim_pubkey
+        )
+        .is_ok());
+        assert_eq!(
+            validate_magic_routing_hint(
+                &invoice_with_hint(Some(theirs.public_key())),
+                &claim_pubkey
+            )
+            .unwrap_err()
+            .message()
+            .split(':')
+            .next(),
+            Some("Magic routing hint key mismatch")
+        );
+        assert_eq!(
+            validate_magic_routing_hint(&invoice_with_hint(None), &claim_pubkey)
+                .unwrap_err()
+                .message(),
+            "Invoice is missing the magic routing hint"
+        );
+    }
 
     #[macros::test_all]
     fn test_bip21_parsing() {

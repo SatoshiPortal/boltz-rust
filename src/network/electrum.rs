@@ -86,10 +86,31 @@ impl ElectrumBitcoinClient {
         })
     }
 
+    fn address_utxos(
+        &self,
+        address: &Address,
+        confirmed_only: bool,
+    ) -> Result<Vec<(bitcoin::OutPoint, bitcoin::TxOut)>, Error> {
+        let spk = address.script_pubkey();
+        let history: Vec<_> = self.inner.script_get_history(spk.as_script())?;
+
+        let txs = self
+            .inner
+            .batch_transaction_get(&history.iter().map(|h| h.tx_hash).collect::<Vec<_>>())?;
+
+        Ok(Self::extract_address_utxos(
+            txs,
+            &history,
+            &spk,
+            confirmed_only,
+        ))
+    }
+
     fn extract_address_utxos(
         txs: Vec<Transaction>,
         history: &[GetHistoryRes],
         spk: &ScriptBuf,
+        confirmed_only: bool,
     ) -> Vec<(bitcoin::OutPoint, bitcoin::TxOut)> {
         let tx_is_confirmed_map: HashMap<_, _> =
             history.iter().map(|h| (h.tx_hash, h.height > 0)).collect();
@@ -114,6 +135,9 @@ impl ElectrumBitcoinClient {
         let mut result = Vec::new();
         for tx in txs.into_iter() {
             let txid = tx.compute_txid();
+            if confirmed_only && !tx_is_confirmed_map.get(&txid).copied().unwrap_or(false) {
+                continue;
+            }
             for (vout, output) in tx.output.into_iter().enumerate() {
                 if output.script_pubkey == *spk {
                     let outpoint = bitcoin::OutPoint::new(txid, vout as u32);
@@ -140,14 +164,18 @@ impl BitcoinClient for ElectrumBitcoinClient {
         &self,
         address: &Address,
     ) -> Result<Vec<(bitcoin::OutPoint, bitcoin::TxOut)>, Error> {
-        let spk = address.script_pubkey();
-        let history: Vec<_> = self.inner.script_get_history(spk.as_script())?;
+        self.address_utxos(address, false)
+    }
 
-        let txs = self
-            .inner
-            .batch_transaction_get(&history.iter().map(|h| h.tx_hash).collect::<Vec<_>>())?;
+    async fn get_confirmed_address_utxos(
+        &self,
+        address: &Address,
+    ) -> Result<Vec<(bitcoin::OutPoint, bitcoin::TxOut)>, Error> {
+        self.address_utxos(address, true)
+    }
 
-        Ok(Self::extract_address_utxos(txs, &history, &spk))
+    async fn get_tip_height(&self) -> Result<u32, Error> {
+        tip_height(&self.inner)
     }
 
     async fn get_tx(&self, txid: Txid) -> Result<Transaction, Error> {
@@ -162,6 +190,11 @@ impl BitcoinClient for ElectrumBitcoinClient {
     fn network(&self) -> BitcoinChain {
         self.network
     }
+}
+
+fn tip_height(client: &electrum_client::Client) -> Result<u32, Error> {
+    let height = client.block_headers_subscribe_raw()?.height;
+    u32::try_from(height).map_err(|_| Error::Protocol(format!("Tip height out of range: {height}")))
 }
 
 pub struct ElectrumLiquidClient {
@@ -243,6 +276,10 @@ impl LiquidClient for ElectrumLiquidClient {
             }
         }
         Ok(None)
+    }
+
+    async fn get_tip_height(&self) -> Result<u32, Error> {
+        tip_height(&self.inner)
     }
 
     async fn get_genesis_hash(&self) -> Result<elements::BlockHash, Error> {
@@ -433,11 +470,18 @@ mod tests {
             },
         ];
 
-        let utxo_pairs = ElectrumBitcoinClient::extract_address_utxos(
-            vec![tx1, tx2, tx3, tx4, spending_tx, pending_spending_tx],
-            &history,
-            &our_script,
-        );
+        let txs = vec![tx1, tx2, tx3, tx4, spending_tx, pending_spending_tx];
+
+        let confirmed_pairs =
+            ElectrumBitcoinClient::extract_address_utxos(txs.clone(), &history, &our_script, true);
+
+        assert_eq!(confirmed_pairs.len(), 2);
+        assert!(confirmed_pairs
+            .iter()
+            .all(|(outpoint, _)| outpoint.txid == tx2_id || outpoint.txid == tx3_id));
+
+        let utxo_pairs =
+            ElectrumBitcoinClient::extract_address_utxos(txs, &history, &our_script, false);
 
         assert_eq!(utxo_pairs.len(), 3);
 

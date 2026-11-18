@@ -66,6 +66,12 @@ async fn swap(chain: Chain, chain_client: &ChainClient, multi_output: bool) {
     reverse_resp
         .validate(&preimage, &claim_public_key, chain)
         .unwrap();
+    reverse_resp
+        .validate_magic_routing_hint(&claim_public_key)
+        .unwrap();
+    reverse_resp
+        .validate_timeout(chain, tip_height(chain_client, chain).await)
+        .unwrap();
 
     let _ = check_for_mrh(&boltz_api_v2, &invoice, chain)
         .await
@@ -202,6 +208,9 @@ async fn swap_mrh(chain: Chain, chain_client: &ChainClient) {
 
     reverse_resp
         .validate(&preimage, &claim_public_key, chain)
+        .unwrap();
+    reverse_resp
+        .validate_magic_routing_hint(&claim_public_key)
         .unwrap();
 
     let (address, amount) = check_for_mrh(&boltz_api_v2, &invoice, chain)
@@ -441,6 +450,111 @@ async fn claim_waits_for_own_lockup(chain: Chain) {
     };
 
     chain_client.broadcast_tx(&tx).await.unwrap();
+
+    next_status(&mut updates, "invoice.settled").await.unwrap();
+}
+
+/// A Bitcoin claim built with `new_claim_confirmed` is refused while Boltz's
+/// lockup sits in the mempool and goes through once it confirms.
+#[macros::async_test]
+#[serial]
+#[cfg(feature = "electrum")]
+async fn bitcoin_v2_reverse_claim_waits_for_confirmation() {
+    use boltz_client::network::electrum::ElectrumBitcoinClient;
+    use boltz_client::network::BitcoinClient;
+    use boltz_client::{BtcSwapScript, BtcSwapTx};
+
+    setup_logger();
+    let chain: Chain = BTC_CHAIN.into();
+    let bitcoin_client = ElectrumBitcoinClient::default(BTC_CHAIN, None).unwrap();
+
+    let secp = Secp256k1::new();
+    let preimage = Preimage::random();
+    let our_keys = Keypair::new(&secp, &mut thread_rng());
+    let claim_public_key = PublicKey {
+        compressed: true,
+        inner: our_keys.public_key(),
+    };
+    let create_reverse_req = CreateReverseRequest {
+        from: "BTC".to_string(),
+        to: chain.to_string(),
+        invoice: None,
+        invoice_amount: Some(100000),
+        preimage_hash: Some(preimage.sha256),
+        description: None,
+        description_hash: None,
+        address_signature: None,
+        address: None,
+        claim_public_key,
+        referral_id: None,
+        webhook: None,
+    };
+
+    let boltz_api_v2 = create_boltz_api();
+    let ws_api = Arc::new(boltz_api_v2.ws(BoltzWsConfig::default()));
+    utils::start_ws(ws_api.clone());
+
+    let reverse_resp = boltz_api_v2
+        .post_reverse_req(create_reverse_req)
+        .await
+        .unwrap();
+    reverse_resp
+        .validate(&preimage, &claim_public_key, chain)
+        .unwrap();
+    reverse_resp
+        .validate_timeout(chain, bitcoin_client.get_tip_height().await.unwrap())
+        .unwrap();
+
+    let swap_script =
+        BtcSwapScript::reverse_from_swap_resp(&reverse_resp, claim_public_key).unwrap();
+    ws_api.subscribe_swap(&reverse_resp.id).await.unwrap();
+    let mut updates = ws_api.updates();
+
+    next_status(&mut updates, "swap.created").await.unwrap();
+    utils::start_pay_invoice_lnd(reverse_resp.invoice.clone().unwrap());
+    next_status(&mut updates, "transaction.mempool")
+        .await
+        .unwrap();
+
+    let claim_address = utils::generate_address(chain).await.unwrap();
+    let err =
+        BtcSwapTx::new_claim_confirmed(swap_script.clone(), claim_address.clone(), &bitcoin_client)
+            .await
+            .expect_err("a lockup still in the mempool must not be claimed");
+    assert_eq!(
+        err.message(),
+        "Bitcoin lockup not yet confirmed for this script"
+    );
+
+    utils::mine_blocks(1).await.unwrap();
+    next_status(&mut updates, "transaction.confirmed")
+        .await
+        .unwrap();
+
+    let mut attempts = 0;
+    let claim_tx = loop {
+        match BtcSwapTx::new_claim_confirmed(
+            swap_script.clone(),
+            claim_address.clone(),
+            &bitcoin_client,
+        )
+        .await
+        {
+            Ok(tx) => break tx,
+            Err(e) if attempts < 10 => {
+                log::debug!("Confirmation not indexed yet: {e:?}");
+                attempts += 1;
+                boltz_client::util::sleep(super::WAIT_TIME).await;
+            }
+            Err(e) => panic!("claim failed once the lockup confirmed: {e:?}"),
+        }
+    };
+
+    let signed = claim_tx
+        .sign_claim(&our_keys, &preimage, Fee::Absolute(200), None)
+        .await
+        .unwrap();
+    claim_tx.broadcast(&signed, &bitcoin_client).await.unwrap();
 
     next_status(&mut updates, "invoice.settled").await.unwrap();
 }
