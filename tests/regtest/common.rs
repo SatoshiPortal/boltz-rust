@@ -34,6 +34,21 @@ pub fn create_chain_client_esplora() -> ChainClient {
         .with_liquid(EsploraLiquidClient::default(LBTC_CHAIN, None))
 }
 
+/// Tip height of `chain` as `chain_client` sees it.
+pub async fn tip_height(chain_client: &ChainClient, chain: Chain) -> u32 {
+    match chain {
+        Chain::Bitcoin(_) => {
+            chain_client
+                .bitcoin_client()
+                .unwrap()
+                .get_tip_height()
+                .await
+        }
+        Chain::Liquid(_) => chain_client.liquid_client().unwrap().get_tip_height().await,
+    }
+    .unwrap()
+}
+
 /// Assert the multi-output layout of a wrapper-built transaction: the primary
 /// output receives the remainder (input - fee - sum of additional outputs) and
 /// each additional output pays its fixed amount, in order. On Bitcoin the

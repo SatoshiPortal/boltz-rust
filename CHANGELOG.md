@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `BtcSwapTx::new_claim_confirmed` builds a claim from a confirmed lockup
+  only, so Boltz cannot double-spend its lockup after the claim reveals the
+  preimage. It fails, for the caller to retry, until the chain client sees
+  the lockup confirmed. Backed by the new
+  `BitcoinClient::get_confirmed_address_utxos`.
+- `CreateReverseResponse::validate_magic_routing_hint` checks that the
+  invoice carries the magic routing hint with our claim key, as the Boltz
+  docs require of a receiver that sent an address signature. Without it,
+  Boltz could put its own key in the hint and a payer would pay Boltz's
+  address directly.
+- Timeout bounds against the current tip:
+  `CreateSubmarineResponse::validate_timeout`,
+  `CreateReverseResponse::validate_timeout` and
+  `CreateChainResponse::validate_timeouts`. A lockup Boltz funds must leave
+  at least six hours to claim; a lockup the user funds must be refundable
+  within fourteen days and not already. Backed by the new
+  `BitcoinClient::get_tip_height` and `LiquidClient::get_tip_height`.
+- The new client methods have default bodies that return an error, so
+  existing client implementations keep compiling.
+
 ### Fixed
 - Claims no longer take their lockup UTXO from the Boltz API. `new_claim`
   on Bitcoin and Liquid used Boltz's copy of the lockup transaction when the

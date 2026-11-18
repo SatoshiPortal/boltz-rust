@@ -145,6 +145,24 @@ pub trait BitcoinClient: Send + Sync {
         address: &bitcoin::Address,
     ) -> Result<Vec<(bitcoin::OutPoint, bitcoin::TxOut)>, Error>;
 
+    /// Like [`Self::get_address_utxos`], but only outputs of confirmed
+    /// transactions.
+    async fn get_confirmed_address_utxos(
+        &self,
+        _address: &bitcoin::Address,
+    ) -> Result<Vec<(bitcoin::OutPoint, bitcoin::TxOut)>, Error> {
+        Err(Error::Protocol(
+            "This Bitcoin client cannot tell confirmed outputs".to_string(),
+        ))
+    }
+
+    /// Height of the chain tip.
+    async fn get_tip_height(&self) -> Result<u32, Error> {
+        Err(Error::Protocol(
+            "This Bitcoin client cannot tell the tip height".to_string(),
+        ))
+    }
+
     async fn get_tx(&self, txid: bitcoin::Txid) -> Result<bitcoin::Transaction, Error>;
 
     async fn broadcast_tx(&self, signed_tx: &bitcoin::Transaction) -> Result<bitcoin::Txid, Error>;
@@ -160,6 +178,13 @@ pub trait LiquidClient: Send + Sync {
     ) -> Result<Option<(elements::OutPoint, elements::TxOut)>, Error>;
 
     async fn get_genesis_hash(&self) -> Result<elements::BlockHash, Error>;
+
+    /// Height of the chain tip.
+    async fn get_tip_height(&self) -> Result<u32, Error> {
+        Err(Error::Protocol(
+            "This Liquid client cannot tell the tip height".to_string(),
+        ))
+    }
 
     async fn get_tx(&self, txid: elements::Txid) -> Result<elements::Transaction, Error>;
 

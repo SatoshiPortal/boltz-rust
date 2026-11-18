@@ -82,6 +82,14 @@ async fn v2_chain(chain_client: &ChainClient, underpay: bool, from: Chain, to: C
             &preimage.sha256,
         )
         .unwrap();
+    create_chain_response
+        .validate_timeouts(
+            from,
+            tip_height(chain_client, from).await,
+            to,
+            tip_height(chain_client, to).await,
+        )
+        .unwrap();
     let swap_id = create_chain_response.clone().id;
     let lockup_details = create_chain_response.clone().lockup_details;
 

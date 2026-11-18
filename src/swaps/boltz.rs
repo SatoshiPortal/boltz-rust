@@ -18,6 +18,8 @@
 //! );
 
 use crate::network::Network;
+use crate::swaps::magic_routing::validate_magic_routing_hint;
+use crate::swaps::timeout;
 #[cfg(feature = "ws")]
 use crate::util::ensure_rustls_crypto_provider;
 use crate::{error::Error, network::Chain, util::secrets::Preimage};
@@ -952,6 +954,18 @@ impl CreateSubmarineResponse {
             }
         }
     }
+
+    /// Ensure the user's lockup can be refunded neither already nor too late,
+    /// given the current tip of the lockup chain.
+    pub fn validate_timeout(&self, chain: Chain, tip: u32) -> Result<(), Error> {
+        let timeout = u32::try_from(self.timeout_block_height).map_err(|_| {
+            Error::Protocol(format!(
+                "Timeout out of range: {}",
+                self.timeout_block_height
+            ))
+        })?;
+        timeout::validate_refund_timeout(chain, timeout, tip)
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1284,6 +1298,23 @@ impl CreateReverseResponse {
             }
         }
     }
+
+    /// Ensure Boltz's lockup leaves time to claim before Boltz can refund it,
+    /// given the current tip of the lockup chain.
+    pub fn validate_timeout(&self, chain: Chain, tip: u32) -> Result<(), Error> {
+        timeout::validate_claim_timeout(chain, self.timeout_block_height, tip)
+    }
+
+    /// Ensure the invoice carries the magic routing hint with our claim key,
+    /// so a payer paying the hint's address directly pays an address only we
+    /// signed. Required whenever the swap was requested with an address
+    /// signature.
+    pub fn validate_magic_routing_hint(&self, our_pubkey: &PublicKey) -> Result<(), Error> {
+        let invoice = self.invoice.as_deref().ok_or(Error::Protocol(
+            "No invoice to check the magic routing hint in".to_string(),
+        ))?;
+        validate_magic_routing_hint(invoice, our_pubkey)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1364,6 +1395,23 @@ impl CreateChainResponse {
             claim_pubkey,
             &expected_hashlock,
         )
+    }
+
+    /// Ensure the user's lockup is refundable neither already nor too late,
+    /// and Boltz's lockup leaves time to claim, given each chain's tip.
+    pub fn validate_timeouts(
+        &self,
+        from_chain: Chain,
+        from_tip: u32,
+        to_chain: Chain,
+        to_tip: u32,
+    ) -> Result<(), Error> {
+        timeout::validate_refund_timeout(
+            from_chain,
+            self.lockup_details.timeout_block_height,
+            from_tip,
+        )?;
+        timeout::validate_claim_timeout(to_chain, self.claim_details.timeout_block_height, to_tip)
     }
 
     fn validate_side(
