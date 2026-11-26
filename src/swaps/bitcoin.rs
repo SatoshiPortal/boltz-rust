@@ -442,6 +442,17 @@ impl BtcSwapScript {
             .await
     }
 
+    /// Fetch (utxo,amount) pairs for the utxos of confirmed transactions of
+    /// the script_pubkey of this swap.
+    pub async fn fetch_confirmed_utxos<BC: BitcoinClient + ?Sized>(
+        &self,
+        bitcoin_client: &BC,
+    ) -> Result<Vec<(OutPoint, TxOut)>, Error> {
+        bitcoin_client
+            .get_confirmed_address_utxos(&self.to_address(bitcoin_client.network())?)
+            .await
+    }
+
     pub(crate) async fn fetch_swap_utxo<BC: BitcoinClient + ?Sized>(
         &self,
         lockup_tx: Option<&Transaction>,
@@ -628,6 +639,26 @@ impl BtcSwapTx {
                 SwapTxKind::Claim,
             )
             .await?;
+        Self::new_claim_with_utxo(swap_script, claim_address, bitcoin_client, utxo)
+    }
+
+    /// Craft a new ClaimTx from a confirmed lockup only, so Boltz cannot
+    /// double-spend the lockup after a claim reveals the preimage. Fails, for
+    /// the caller to retry, until the chain client sees the lockup confirmed.
+    /// Only works for Reverse and Chain Swaps.
+    pub async fn new_claim_confirmed<BC: BitcoinClient + ?Sized>(
+        swap_script: BtcSwapScript,
+        claim_address: String,
+        bitcoin_client: &BC,
+    ) -> Result<BtcSwapTx, Error> {
+        let utxo = swap_script
+            .fetch_confirmed_utxos(bitcoin_client)
+            .await?
+            .first()
+            .cloned()
+            .ok_or(Error::Protocol(
+                "Bitcoin lockup not yet confirmed for this script".to_string(),
+            ))?;
         Self::new_claim_with_utxo(swap_script, claim_address, bitcoin_client, utxo)
     }
 
@@ -1955,6 +1986,87 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(err.message(), "electrum unavailable");
+    }
+
+    struct ConfirmingBitcoinClient {
+        confirmed: bool,
+    }
+
+    #[macros::async_trait]
+    impl BitcoinClient for ConfirmingBitcoinClient {
+        async fn get_address_balance(&self, _address: &Address) -> Result<(u64, i64), Error> {
+            unreachable!()
+        }
+
+        async fn get_address_utxos(
+            &self,
+            address: &Address,
+        ) -> Result<Vec<(OutPoint, TxOut)>, Error> {
+            Ok(vec![lockup_utxo(address)])
+        }
+
+        async fn get_confirmed_address_utxos(
+            &self,
+            address: &Address,
+        ) -> Result<Vec<(OutPoint, TxOut)>, Error> {
+            Ok(match self.confirmed {
+                true => vec![lockup_utxo(address)],
+                false => Vec::new(),
+            })
+        }
+
+        async fn get_tx(&self, _txid: Txid) -> Result<Transaction, Error> {
+            unreachable!()
+        }
+
+        async fn broadcast_tx(&self, _signed_tx: &Transaction) -> Result<Txid, Error> {
+            unreachable!()
+        }
+
+        fn network(&self) -> BitcoinChain {
+            BitcoinChain::Bitcoin
+        }
+    }
+
+    fn lockup_utxo(address: &Address) -> (OutPoint, TxOut) {
+        (
+            OutPoint::default(),
+            TxOut {
+                value: Amount::from_sat(FUNDING_SAT),
+                script_pubkey: address.script_pubkey(),
+            },
+        )
+    }
+
+    #[macros::async_test_all]
+    async fn confirmed_claim_waits_for_a_confirmed_lockup() {
+        let (swap_tx, ..) = swap_tx_fixture(SwapType::ReverseSubmarine, SwapTxKind::Claim);
+        let claim_address = swap_tx
+            .swap_script
+            .to_address(BitcoinChain::Bitcoin)
+            .unwrap()
+            .to_string();
+
+        let err = BtcSwapTx::new_claim_confirmed(
+            swap_tx.swap_script.clone(),
+            claim_address.clone(),
+            &ConfirmingBitcoinClient { confirmed: false },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            err.message(),
+            "Bitcoin lockup not yet confirmed for this script"
+        );
+
+        let claim = BtcSwapTx::new_claim_confirmed(
+            swap_tx.swap_script,
+            claim_address,
+            &ConfirmingBitcoinClient { confirmed: true },
+        )
+        .await
+        .unwrap();
+        assert_eq!(claim.utxos.len(), 1);
     }
 
     fn lockup_tx_paying(script_pubkey: ScriptBuf) -> Transaction {

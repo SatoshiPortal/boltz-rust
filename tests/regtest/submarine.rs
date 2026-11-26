@@ -70,6 +70,9 @@ async fn v2_submarine(chain_client: &ChainClient, underpay: bool, chain: Chain) 
     create_swap_response
         .validate(&invoice, &refund_public_key, chain)
         .unwrap();
+    create_swap_response
+        .validate_timeout(chain, tip_height(chain_client, chain).await)
+        .unwrap();
     log::info!("VALIDATED RESPONSE!");
 
     log::debug!("Swap Response: {create_swap_response:?}");
